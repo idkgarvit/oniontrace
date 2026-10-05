@@ -370,9 +370,9 @@ collect/
   cli.py         command-line interface (`python -m collect ...`)
 tests/
   test_farm.py   65 tests; each locks in a property a reported metric depends on
-  test_eval.py   60 tests; each pins what a number in the report is allowed to mean
+  test_eval.py   61 tests; each pins what a number in the report is allowed to mean
   test_gates.py  86 tests; each asserts a refusal, or that the refusal is on the record
-  test_collect.py 42 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 43 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
 ```
 
@@ -429,28 +429,32 @@ derived and clearly non-operational. The generator never publishes anything.
 Implemented:
 
 - **Farm** (WP2.1) — flaw catalogue, persona corpora, decoys, hard negatives, abstention
-  cases, ground-truth export, CLI, 60-test suite.
+  cases, ground-truth export, CLI, 65-test suite.
 - **Acquisition** (WP2.2/WP2.3) — four collection paths (onion front pages, public index,
   certificate transparency, Telegram previews) behind signed permits, one run-wide budget,
   resumable cursors that advance only after an ingest, a seed-proposal queue an analyst
   decides on, WARC records for the raw exchanges, and an operator CLI with no default
   transport. Fixture-verified: every test runs against in-memory pages, and the live
-  transport is dark. 58-test suite across `tests/test_collect.py` and
+  transport is dark. 59-test suite across `tests/test_collect.py` and
   `tests/test_collect_cli.py`.
 - **Evaluation harness** (Part G item 4) — by-cluster splits, threshold freezing with a
-  safe-abstain fallback, five modules scored (M2 rules, M2 correlation, M3 entity
-  resolution, M5 attribution, E4 provenance), abstention scored both thresholded and
-  unthresholded, Markdown report, CLI, 65-test suite.
+  safe-abstain fallback, six modules scored (M1 collection integrity on the fixture seam,
+  M2 rules, M2 correlation, M3 entity resolution, M5 attribution, E4 provenance),
+  abstention scored both thresholded and unthresholded, Markdown report, CLI, 61-test
+  suite.
 - **Deployment gates** (Part E2) — cases with recorded authorisation and retention,
   signed collection permits, per-case seeds, purge with a kept tombstone, append-only
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
-  86-test suite. **269 tests pass in total.**
+  86-test suite. **271 tests pass in total.**
 
-Not yet implemented, in plan order: the M2 misconfig rules and cross-service correlator,
-then M3, M5 and M6-lite. **Live acquisition is deliberately unfinished**: the transport
+Not yet implemented, in plan order: the **production** M2 misconfig rules and
+cross-service correlator, then M3, M5 and M6-lite — the harness scores reference
+detectors in `eval/detectors/`, which is what makes the gap measurable rather than
+invisible. **Live acquisition is deliberately unfinished**: the transport
 exists and its five guards are tested, but no run in this repository has ever fetched a
-byte over a network, and any report citing acquisition has to say so.
+byte over a network, and any report citing acquisition has to say so. M1 is therefore
+scored as `fixture-verified` and never as `live-tested`.
 
 That the correlator is next is the plan's own ordering, not a preference: the farm (WP2.1)
 and the harness exist so the modules can be measured as they land, the gates exist so the
