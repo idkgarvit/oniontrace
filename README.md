@@ -203,6 +203,31 @@ words are drift-robust" would be indistinguishable from "function words are alwa
 weak" — which is why the pre-drift column is kept as a control and
 `test_drift_separates_content_words_from_function_words` asserts *both* directions.
 
+### Two measurement defects found by attacking the harness
+
+The measurement layer is the part a reader is asked to trust, so both of these were found
+by trying to make it report something flattering rather than by reading it. Both are fixed
+and pinned, and neither changed a number currently quoted — they made the numbers wrong the
+moment a variant abstained.
+
+**Abstention used to hide in the denominator.** `precision_at_1` skipped empty rankings
+(`if not ranked: continue`), so a query the system declined was dropped from `n` instead of
+counted as a miss. A system that abstained on four hard queries and answered one easy one
+reported **1.00 over n=1**. That is the opposite of what this project claims about restraint,
+and it made `n` depend on the system's own behaviour, so two variants were no longer
+comparable over the same queries. The metric now splits the two cases E1 distinguishes: a
+declined query *with* a right answer stays in the denominator as a miss (`abstained`), and a
+query with *no* right answer is skipped and counted separately (`skipped_no_answer`), because
+restraint there is what `score_abstention` measures.
+
+**The correlation baseline described a pool the run did not use.** The harness ranked against
+the full 13-candidate pool (singletons included) but reported the *restricted* baseline,
+2/11 = 0.1818. The correct figure for the pool actually ranked is 2/13 = **0.1538**, which is
+now what the table shows; the restricted value is carried as a separate named field and the
+baseline's own note says which pool it belongs to. A baseline computed over a pool the run
+did not use is worse than no baseline, because it looks like a control while describing a
+different experiment.
+
 ## Acquisition (WP2.2/WP2.3)
 
 Four paths, one gate, one throttle. Nothing here keeps what it fetches: bytes are fetched,
@@ -376,7 +401,7 @@ collect/
   cli.py         command-line interface (`python -m collect ...`)
 tests/
   test_farm.py   65 tests; each locks in a property a reported metric depends on
-  test_eval.py   61 tests; each pins what a number in the report is allowed to mean
+  test_eval.py   65 tests; each pins what a number in the report is allowed to mean
   test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
   test_collect.py 43 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
@@ -446,14 +471,14 @@ Implemented:
 - **Evaluation harness** (Part G item 4) — by-cluster splits, threshold freezing with a
   safe-abstain fallback, six modules scored (M1 collection integrity on the fixture seam,
   M2 rules, M2 correlation, M3 entity resolution, M5 attribution, E4 provenance),
-  abstention scored both thresholded and unthresholded, Markdown report, CLI, 61-test
+  abstention scored both thresholded and unthresholded, Markdown report, CLI, 65-test
   suite.
 - **Deployment gates** (Part E2) — cases with recorded authorisation and retention,
   signed collection permits, per-case seeds, purge with a kept tombstone, append-only
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **280 tests pass in total.**
+  **284 tests pass in total.**
 
 Not yet implemented, in plan order: the **production** M2 misconfig rules and
 cross-service correlator, then M3, M5 and M6-lite — the harness scores reference
