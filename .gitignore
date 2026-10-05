@@ -1,0 +1,13 @@
+# Generated farm output -- regenerate with `python -m farm generate`
+out/
+
+# Gate working directory -- case data, audit trail, permits. Never commit casework.
+casework/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
