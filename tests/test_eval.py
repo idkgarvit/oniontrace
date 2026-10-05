@@ -91,10 +91,47 @@ def test_mean_reciprocal_rank_rewards_higher_positions():
 
 
 def test_empty_queries_are_skipped_not_counted_as_failures():
-    """A query with no candidate returned is an abstention, not a wrong answer."""
-    result = precision_at_1([[], ["a"]], [{"z"}, {"a"}])
+    """A query with no candidate returned is an abstention, not a wrong answer.
+
+    Only when no right answer exists, though -- see the test below. Here `{"z"}` is
+    unreachable from an empty ranking, so this query is scored by `score_abstention`
+    rather than counted as a miss.
+    """
+    result = precision_at_1([[], ["a"]], [set(), {"a"}])
     assert result.total == 1
     assert result.successes == 1
+    assert result.skipped_no_answer == 1
+
+
+def test_abstaining_where_an_answer_exists_is_a_miss_not_a_dropped_query():
+    """Restraint is only correct when there was nothing to find.
+
+    Part E1's table defines abstention as correct for "services with no cluster-mate
+    present". A service that *does* have a cluster-mate and returns nothing has
+    missed it. The first version dropped every empty ranking from the denominator,
+    so a system that declined every hard query and answered one easy one reported
+    1.00 over n=1 -- an inflated score whose n depended on the system's own
+    behaviour, making two variants incomparable over the same queries.
+    """
+    # Four queries where a right answer existed and the system said nothing.
+    result = precision_at_1([[], [], [], [], ["a"]], [{"a"}, {"b"}, {"c"}, {"d"}, {"a"}])
+    assert result.total == 5, "every query with an answer must stay in the denominator"
+    assert result.successes == 1
+    assert result.abstained == 4
+    assert result.value == pytest.approx(0.2), "1 of 5, not 1 of 1"
+
+    # Overstating restraint must not look better than answering badly.
+    honest_miss = precision_at_1([["z"], ["z"], ["z"], ["z"], ["a"]],
+                                 [{"a"}, {"b"}, {"c"}, {"d"}, {"a"}])
+    assert honest_miss.value == pytest.approx(result.value)
+
+
+def test_a_system_that_abstains_on_everything_scores_zero_not_perfect():
+    """The degenerate strategy the old denominator made look flawless."""
+    result = precision_at_1([[], [], [], []], [{"a"}, {"b"}, {"c"}, {"d"}])
+    assert result.value == 0.0
+    assert result.total == 4
+    assert result.abstained == 4
 
 
 # --------------------------------------------------------------------------- #
@@ -706,3 +743,51 @@ def test_cli_writes_results_and_report(tmp_path):
     assert code == 0
     assert (tmp_path / "eval-results.json").exists()
     assert (tmp_path / "eval-report.md").exists()
+
+# --------------------------------------------------------------------------- #
+# The reported baseline must describe the pool that was actually ranked
+# --------------------------------------------------------------------------- #
+
+
+def test_correlation_baseline_describes_the_pool_actually_ranked(farm):
+    """The baseline next to a result must match the experiment that produced it.
+
+    The harness ranked against the full pool (singletons included) but reported the
+    *restricted* baseline, 2/11 = 0.1818. Part E1's rule is that a random baseline
+    sits next to every metric; a baseline computed over a pool the run did not use is
+    a number that describes a different experiment, which is worse than no baseline
+    because it looks like a control.
+    """
+    from eval.detectors import correlation
+
+    service = next(s for s in farm.services if s.cluster_id)
+    pool = farm.correlation_pool(service.service_id)
+    ranked = correlation.rank_services(farm, service.service_id, pool)
+
+    # The pool actually handed to the ranker is the full one.
+    assert len(pool) == len(farm.services) - 1 == 13
+    assert any("solo" in candidate for candidate in pool)
+
+    # So the baseline reported must be the full-pool one.
+    from eval.harness import correlation_experiment
+
+    scores = correlation_experiment(farm, max_artifact_frequency=None)
+    reported = scores["ranking"]["random_baseline_precision@1"]
+    assert reported == pytest.approx(2 / 13), (
+        "reported baseline must match the 13-candidate pool the ranker was given"
+    )
+    assert scores["ranking"]["random_baseline_precision@1_restricted"] == pytest.approx(2 / 11)
+    assert "pool actually ranked" in scores["ranking"]["baseline_note"]
+
+
+def test_the_reported_baseline_is_strictly_below_the_measured_score(farm):
+    """A baseline above the result would mean the system is worse than chance.
+
+    Cheaper as a live check than reading the table: if the two ever cross, either the
+    correlator regressed or the baseline is describing the wrong pool.
+    """
+    from eval.harness import correlation_experiment
+
+    scores = correlation_experiment(farm, max_artifact_frequency=3)
+    ranking = scores["ranking"]
+    assert ranking["precision@1"]["value"] > ranking["random_baseline_precision@1"]

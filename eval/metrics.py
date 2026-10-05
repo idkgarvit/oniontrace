@@ -38,6 +38,12 @@ class Proportion:
     value: float
     lower: float
     upper: float
+    #: Queries the system declined to answer, counted in `total` as misses rather than
+    #: dropped from it. Zero for metrics where abstention has no meaning.
+    abstained: int = 0
+    #: Queries with no right answer to find, excluded from `total` because restraint is
+    #: the correct behaviour there; scored by `score_abstention` instead.
+    skipped_no_answer: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +51,8 @@ class Proportion:
             "total": self.total,
             "value": round(self.value, 6),
             "ci95": [round(self.lower, 6), round(self.upper, 6)],
+            "abstained": self.abstained,
+            "skipped_no_answer": self.skipped_no_answer,
         }
 
 
@@ -66,11 +74,19 @@ def wilson_interval(successes: int, total: int, z: float = Z_95) -> tuple[float,
     return (max(0.0, center - margin), min(1.0, center + margin))
 
 
-def proportion(successes: int, total: int) -> Proportion:
+def proportion(
+    successes: int,
+    total: int,
+    *,
+    abstained: int = 0,
+    skipped_no_answer: int = 0,
+) -> Proportion:
     if total <= 0:
-        return Proportion(0, 0, 0.0, 0.0, 0.0)
+        return Proportion(0, 0, 0.0, 0.0, 0.0, abstained, skipped_no_answer)
     lower, upper = wilson_interval(successes, total)
-    return Proportion(successes, total, successes / total, lower, upper)
+    return Proportion(
+        successes, total, successes / total, lower, upper, abstained, skipped_no_answer
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -85,16 +101,41 @@ def precision_at_1(
 
     The headline ranking metric. Part E uses top-1 rather than top-10 precisely
     because a top-10 list over few candidates is satisfied by construction.
+
+    **Abstention is scored by whether an answer existed.** Part E1's own table says
+    abstention is the correct behaviour only for "services with no cluster-mate
+    present". So:
+
+      * `truth` is non-empty -- a right answer existed and the system returned
+        nothing -- that is a **miss**, and it stays in the denominator. The first
+        version dropped these with `if not ranked: continue`, so a system that
+        abstained on every hard query and answered one easy one reported 1.00 over
+        n=1. That is the opposite of what this project claims about restraint, and
+        it made n depend on the system's own behaviour, so two variants were not
+        comparable over the same query set.
+      * `truth` is empty -- no right answer exists -- abstaining is correct, and the
+        query belongs to `score_abstention` rather than here. It is skipped, with
+        the count reported, so the two are never conflated.
+
+    `abstained` is always reported, so a reader can see how many queries were
+    declined rather than answered.
     """
     hits = 0
     total = 0
+    abstained = 0
+    skipped_no_answer = 0
     for ranked, truth in zip(rankings, relevant):
-        if not ranked:
+        if not truth:
+            # No right answer to find: restraint, not failure. Scored elsewhere.
+            skipped_no_answer += 1
             continue
         total += 1
+        if not ranked:
+            abstained += 1
+            continue
         if ranked[0] in truth:
             hits += 1
-    return proportion(hits, total)
+    return proportion(hits, total, abstained=abstained, skipped_no_answer=skipped_no_answer)
 
 
 def hit_at_k(
@@ -107,13 +148,20 @@ def hit_at_k(
     """
     hits = 0
     total = 0
+    abstained = 0
+    skipped_no_answer = 0
     for ranked, truth in zip(rankings, relevant):
-        if not ranked:
+        if not truth:
+            # No right answer to find: restraint, not failure. Scored elsewhere.
+            skipped_no_answer += 1
             continue
         total += 1
+        if not ranked:
+            abstained += 1
+            continue
         if truth & set(ranked[:k]):
             hits += 1
-    return proportion(hits, total)
+    return proportion(hits, total, abstained=abstained, skipped_no_answer=skipped_no_answer)
 
 
 def recall_at_k(

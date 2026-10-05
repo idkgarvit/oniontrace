@@ -111,7 +111,18 @@ def correlation_experiment(
             "recall@3": round(recall_at_k(rankings, relevant, 3), 6),
             "hit@3": hit_at_k(rankings, relevant, 3).to_dict(),
             "random_baseline_precision@1": round(
-                farm.precision_at_1_baseline(), 6
+                farm.precision_at_1_baseline(restricted_to_clustered=False), 6
+            ),
+            "random_baseline_precision@1_restricted": round(
+                farm.precision_at_1_baseline(restricted_to_clustered=True), 6
+            ),
+            "baseline_note": (
+                "the baseline describes the pool actually ranked: "
+                f"{len(farm.correlation_pool(next(s.service_id for s in farm.services if s.cluster_id)))} "
+                "candidates, singletons included (2/13 = 0.1538). The restricted figure "
+                "(2/11 = 0.1818) applies only if singletons are excluded from the pool, "
+                "which is not what this run does -- reporting it here would put a number "
+                "next to a result that describes a different experiment."
             ),
         },
         "link_scoring": links.to_dict(),
