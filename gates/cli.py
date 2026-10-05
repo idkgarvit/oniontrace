@@ -270,6 +270,8 @@ def cmd_demo(args: argparse.Namespace) -> int:
     verification = gate.audit.verify()
     print(f"  audit verified: {verification['verified']} "
           f"({verification['entries_checked']} entries)")
+    print(f"  anchored: {verification['anchored']} "
+          f"(a chain alone cannot see a truncated trail; the anchor can)")
     print(f"  audit file still present: {gate.audit.path.exists()}")
     print(f"  case snapshots remaining: {len(gate.cases.snapshot_names('CASE-DEMO'))}")
 

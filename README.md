@@ -300,7 +300,7 @@ python -m gates demo
 | **Per-case seeds, no global list** (E2.2) | Seeds live under the case directory. There is no module-level seed list to inherit targets from. |
 | **Retention** (E2.2) | Expiry set at creation; an expired case refuses collection; `sweep_expired` purges and logs. Refusing an unlimited case is deliberate — it is a case nobody decided to end. |
 | **Purge-on-close** (E2.2) | Snapshots and derived data are deleted, the purge is logged, and a tombstone keeps the authorisation reference. Once the bytes are gone, that record is the only evidence the collection was authorised. |
-| **Append-only audit** (E2.3) | Hash-chained JSON Lines. Edits, removals and reorders all break verification from the break onwards. No public write method exists — the write path is underscore-private and only the gate calls it. |
+| **Append-only audit** (E2.3) | Hash-chained JSON Lines, **plus an anchor** (`audit.anchor.json`) recording the expected entry count and head hash. A chain alone proves the entries *present* are consistent and cannot see a removed suffix; the anchor makes completeness checkable, so an edit, a reorder, a mid-trail removal **or a truncation from the end** all break verification. A malformed line is *reported* as damage, never raised. No public write method exists — the write path is underscore-private, gate-only, and **fails closed**: it verifies the trail before extending it, so a damaged trail cannot be appended to and its anchor cannot be laundered by a later action. |
 | **Audit separate from case data** (E2.3) | Different directory tree. A purge cannot reach the record of the purge, which is what makes "deleted, and logged that we did" checkable. |
 | **Reversible merges** (E2.3) | Reversal deletes the decision, restores the unconfirmed state, and requires a reason. A refused reversal must not half-apply. |
 | **Roles** (E2.4) | Candidate links at analyst and above; export at case owner; purge at admin. Reading the audit is its own permission, because reading the trail is itself a disclosure. |
@@ -324,9 +324,14 @@ face value. It shows what the policy does and proves nothing about who is asking
 deployment, the principal comes from SSO or equivalent, and the gate's checks are only as
 good as that identity.
 
-Likewise the audit trail is tamper *evident*, not tamper *proof*: anyone who can rewrite the
-whole file can recompute the chain. Proving absence of tampering needs each head hash
-shipped somewhere the operator cannot write, which this tool does not have.
+Likewise the audit trail is tamper *evident*, not tamper *proof*. The anchor closes the
+cheap edit — deleting your own last few entries, or deleting the log outright, now fails
+verification instead of reading as clean — but it is a second file in the same tree, so
+anyone who can rewrite *both* the log and its anchor can still recompute a consistent pair.
+Proving absence of tampering needs each head hash shipped somewhere the operator cannot
+write, which this tool does not have. `verify` reports `anchored: False` rather than a clean
+bill when there is no anchor to check against, so a chain-only pass cannot be mistaken for a
+complete one.
 
 ## Layout
 
@@ -350,7 +355,8 @@ eval/
 gates/
   roles.py       roles, permissions, the authorisation decision (E2.4)
   cases.py       cases, per-case seeds, retention, purge, analyst decisions (E2.2)
-  audit.py       append-only hash-chained trail (E2.3)
+  audit.py       append-only hash-chained trail (E2.3), plus the anchor that makes
+                 a truncated trail detectable
   presentation.py candidate rendering, banned identity assertions, abstention (E2.5)
   exports.py     watermarked evidence packs (E2.4)
   acceptable_use.py the statement and its acknowledgement gate (E2.6)
@@ -371,7 +377,7 @@ collect/
 tests/
   test_farm.py   65 tests; each locks in a property a reported metric depends on
   test_eval.py   61 tests; each pins what a number in the report is allowed to mean
-  test_gates.py  86 tests; each asserts a refusal, or that the refusal is on the record
+  test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
   test_collect.py 43 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
 ```
@@ -446,7 +452,8 @@ Implemented:
   signed collection permits, per-case seeds, purge with a kept tombstone, append-only
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
-  86-test suite. **271 tests pass in total.**
+  95-test suite (nine of them pinning audit-trail truncation and damage reporting).
+  **280 tests pass in total.**
 
 Not yet implemented, in plan order: the **production** M2 misconfig rules and
 cross-service correlator, then M3, M5 and M6-lite — the harness scores reference
