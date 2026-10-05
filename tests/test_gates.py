@@ -433,7 +433,18 @@ def test_the_audit_offers_no_public_write_method():
         for name in dir(AuditLog)
         if not name.startswith("_") and callable(getattr(AuditLog, name))
     }
-    assert public == {"entries", "for_case", "read", "verify", "assert_untampered"}
+    # An exact set, so a new public method has to be a deliberate decision rather than a
+    # quiet addition. It is the *write* path that is being pinned here, so `read_anchor`
+    # joins the reads: it exposes the recorded count and head hash and nothing else, and
+    # the write path stays underscore-private and gate-only.
+    assert public == {
+        "entries",
+        "for_case",
+        "read",
+        "read_anchor",
+        "verify",
+        "assert_untampered",
+    }
 
 
 def test_an_analyst_cannot_read_the_audit_trail(acked, open_case):
@@ -987,3 +998,155 @@ def test_the_cli_reports_a_refusal_as_a_nonzero_exit(tmp_path, capsys):
     )
     assert code == 2
     assert "REFUSED" in capsys.readouterr().out
+
+# --------------------------------------------------------------------------- #
+# Audit integrity: removal from the END, and damage that must be reported
+# rather than raised. Both were live defects found by attacking the gate
+# rather than reading it -- see the module docstring in gates/audit.py.
+# --------------------------------------------------------------------------- #
+
+
+def _trail_of(acked, open_case, n=5):
+    """Write `n` entries and return the log's lines for surgery."""
+    for i in range(n):
+        acked.record_query(open_case, f"query {i}", OWNER)
+    return acked.audit.path.read_text(encoding="utf-8").splitlines()
+
+
+def _rewrite(acked, lines):
+    acked.audit.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_audit_detects_a_truncated_trail(acked, open_case):
+    """A predecessor chain alone reads a shortened trail as clean.
+
+    Deleting a suffix leaves a perfectly valid prefix, so a chain-only verification
+    cannot see it. This is the exact edit an operator covering their own steps makes --
+    remove the last few entries and keep the rest -- and before the anchor it verified
+    True. The anchor is what makes completeness checkable, not just consistency.
+    """
+    lines = _trail_of(acked, open_case)
+    assert acked.audit.verify()["verified"] is True
+
+    _rewrite(acked, lines[:-2])  # drop the two most recent entries
+
+    result = acked.audit.verify()
+    assert result["verified"] is False, "a shortened trail must not verify"
+    assert result["missing"] == 2
+    with pytest.raises(AuditTampered):
+        acked.audit.assert_untampered()
+
+
+def test_audit_detects_a_deleted_log(acked, open_case):
+    """Deleting the whole file is the crudest cover-up and must not read as clean."""
+    _trail_of(acked, open_case)
+    acked.audit.path.unlink()
+
+    result = acked.audit.verify()
+    assert result["verified"] is False
+    assert result["entries_checked"] == 0
+    with pytest.raises(AuditTampered):
+        acked.audit.assert_untampered()
+
+
+def test_audit_detects_an_emptied_log(acked, open_case):
+    """Truncating to zero bytes must not be indistinguishable from a fresh deployment."""
+    _trail_of(acked, open_case)
+    acked.audit.path.write_text("", encoding="utf-8")
+
+    assert acked.audit.verify()["verified"] is False
+
+
+def test_audit_reports_a_malformed_entry_instead_of_raising(acked, open_case):
+    """`verify` reports damage; it does not crash on it.
+
+    The first version indexed parsed JSON directly, so a line like `{"partial": true}`
+    -- which is what a careless tamper attempt produces -- raised KeyError inside the one
+    function whose job is to describe tampering. A caller catching only AuditTampered saw
+    an uncaught KeyError, and the CLI printed a bare directory-name-style error that
+    reads like a usage mistake rather than detected tampering.
+    """
+    _trail_of(acked, open_case)
+    with acked.audit.path.open("a", encoding="utf-8") as handle:
+        handle.write('{"partial": true}\n')
+
+    result = acked.audit.verify()  # must not raise
+    assert result["verified"] is False
+    assert "malformed" in result["failure"]
+    with pytest.raises(AuditTampered):
+        acked.audit.assert_untampered()
+
+
+def test_audit_reports_non_json_garbage_instead_of_raising(acked, open_case):
+    """Anything a corrupt write could leave behind is a finding, not an exception."""
+    _trail_of(acked, open_case)
+    with acked.audit.path.open("a", encoding="utf-8") as handle:
+        handle.write("this is not json\n")
+
+    result = acked.audit.verify()
+    assert result["verified"] is False
+    assert "not valid JSON" in result["failure"]
+
+
+def test_audit_reports_a_non_object_line_instead_of_raising(acked, open_case):
+    """Valid JSON that is not an object is still damage, and still reportable."""
+    _trail_of(acked, open_case)
+    with acked.audit.path.open("a", encoding="utf-8") as handle:
+        handle.write("[1, 2, 3]\n")
+
+    result = acked.audit.verify()
+    assert result["verified"] is False
+    assert "not a JSON object" in result["failure"]
+
+
+def test_audit_refuses_to_append_onto_a_damaged_trail(acked, open_case):
+    """Append fails closed, or the anchor could be laundered.
+
+    Without this, an operator truncates the log, performs one more action, and the new
+    entry chains cleanly onto the surviving prefix while the anchor is rewritten to match
+    -- converting a detected deletion into an undetectable one. Refusing to extend a trail
+    that does not verify removes that route.
+    """
+    lines = _trail_of(acked, open_case)
+    _rewrite(acked, lines[:-2])
+
+    with pytest.raises(AuditTampered):
+        acked.record_query(open_case, "one more", OWNER)
+
+
+def test_a_fresh_log_can_still_accept_its_first_entries(gate):
+    """The fail-closed check must not break a brand-new deployment.
+
+    There is no anchor and no trail to shorten at the start, so the guard is skipped for
+    an empty log rather than refusing the first write forever.
+    """
+    gate.acknowledge(OWNER)
+    gate.open_case(
+        OWNER,
+        case_id="CASE-FRESH",
+        title="fresh",
+        authorisation_ref="AUTH-1",
+        retention_days=30,
+    )
+    assert gate.audit.verify()["verified"] is True
+    assert len(gate.audit.entries()) > 0
+
+
+def test_a_clean_trail_reports_that_it_was_anchored(acked, open_case):
+    """A verified trail says whether the check was anchored.
+
+    A chain-only pass is a weaker statement than an anchored one, and the report must not
+    let the two read the same. `anchored: False` is the honest answer for a trail with no
+    anchor to compare against.
+    """
+    _trail_of(acked, open_case)
+    result = acked.audit.verify()
+    assert result["verified"] is True
+    assert result["anchored"] is True
+    assert result["anchored_count"] == result["entries_checked"]
+
+    acked.audit.anchor_path.unlink()  # simulate a trail written without an anchor
+    unanchored = acked.audit.verify()
+    assert unanchored["verified"] is True
+    assert unanchored["anchored"] is False
+    assert "cannot be ruled out" in unanchored["anchor_note"]
