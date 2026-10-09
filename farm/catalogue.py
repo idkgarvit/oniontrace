@@ -390,13 +390,28 @@ def get_spec(kind: str) -> FlawSpec:
 
 
 def rules_without_hard_negative() -> list[str]:
-    """Rules whose precision cannot be measured against a negative class.
+    """Single-scope rules with no *implemented* negative fixture.
 
-    The harness reports this list. A non-empty result is a finding, not a failure:
-    it documents exactly which precision numbers are measured against true positives
-    only and are therefore inflated.
+    This answers one question: is a rule's precision measured only against its own true
+    positives? A rule is protected only when a negative fixture is actually **served** for
+    it, not when a rationale for one is written down.
+
+    The first version of this function returned `[f.kind for f in ALL_FLAWS if not
+    f.hard_negative_why]`, which tests whether the *prose* field is populated. All 25
+    flaws carry that field, so the function returned an empty list and `farm validate`
+    printed "rules without a hard negative: none" -- while seven single-scope rules had no
+    fixture implemented at all. The effect was to report that every rule was protected when
+    seven were not, and those seven carried **inflated precision**, which is the exact
+    defect the two-function split exists to expose.
+
+    The authoritative list is `farm.services.rules_with_hard_negative_fixture()`, which
+    reports what the generator actually serves. This function is derived from it so the
+    two can no longer disagree.
     """
-    return [f.kind for f in ALL_FLAWS if not f.hard_negative_why]
+    from farm.services import rules_with_hard_negative_fixture
+
+    implemented = set(rules_with_hard_negative_fixture())
+    return [f.kind for f in SINGLE_FLAWS if f.kind not in implemented]
 
 
 def catalogue_summary() -> dict[str, object]:

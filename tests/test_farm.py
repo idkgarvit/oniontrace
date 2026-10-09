@@ -56,9 +56,34 @@ def test_every_flaw_kind_is_unique():
     assert len(kinds) == len(set(kinds))
 
 
-def test_every_rule_has_a_hard_negative():
-    """Part D4: a rule with no negative class has an unfalsifiable precision number."""
-    assert rules_without_hard_negative() == []
+def test_rules_without_a_hard_negative_are_a_known_short_list():
+    """Part D4: a rule with no negative class has an unfalsifiable precision number.
+
+    This test previously asserted `rules_without_hard_negative() == []`, i.e. that every
+    rule was protected. It passed only because the function it checked was broken: it
+    tested whether the `hard_negative_why` prose field was populated, and all 25 flaws
+    carry that field, so it always returned an empty list. Seven single-scope rules have a
+    rationale for a negative but no fixture served, and their precision is measured against
+    true positives only.
+
+    The assertion is now the honest one: the gap is a known, enumerated list, and it must
+    be reported rather than asserted away. Pinning an exact set means a newly-unprotected
+    rule fails this test instead of joining the list unnoticed.
+    """
+    gap = rules_without_hard_negative()
+    assert gap == [
+        "dot_env",
+        "backup_file",
+        "apache_version_banner",
+        "nginx_version_banner",
+        "timezone_leak",
+        "etag_pattern",
+        "http_header_order",
+    ], "the unprotected-rule list changed; update the report if this is intended"
+    # And the two views must not disagree, which is what let the defect hide.
+    from farm.services import rules_with_hard_negative_fixture
+
+    assert len(gap) + len(rules_with_hard_negative_fixture()) == len(SINGLE_FLAWS)
 
 
 def test_every_flaw_kind_is_buildable():

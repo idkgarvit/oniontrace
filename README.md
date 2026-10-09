@@ -131,6 +131,28 @@ Spurious C1: favicon_sha256=STOCK_DEFAULT              }  a rule keying on
                                                           }  these two, wrongly
 ```
 
+**Coverage is partial, and the gap is reported.** Twelve of the nineteen single-scope rules
+have a negative fixture served for them. Seven do not: `dot_env`, `backup_file`,
+`apache_version_banner`, `nginx_version_banner`, `timezone_leak`, `etag_pattern` and
+`http_header_order`. Each has a written rationale for the negative that *should* exist, but a
+rationale is not a fixture — so for those seven, precision is never tested against a fixture
+designed to trip the pattern without carrying the meaning.
+
+**This qualifies the careful rule set's headline.** All nineteen rules, including the seven
+unprotected ones, are scored in the careful table, so its `precision = 1.000` (19 TP / 0 FP)
+is partly *unmeasured* rather than earned: for seven of the nineteen, no negative fixture
+exists that could have produced a false positive. The honest reading is "no false positive was
+observed, and for seven rules none could have been." Closing that gap — implementing the seven
+negatives already described — is the first item of follow-up work, and until then the figure
+carries the caveat wherever it is quoted.
+
+This gap was hidden until it was attacked. `rules_without_hard_negative()` tested whether the
+`hard_negative_why` prose field was populated rather than whether a fixture was served; all 25
+flaws carry that field, so `farm validate` printed "rules without a hard negative: none" while
+seven rules had no negative at all — reporting that every rule was protected when seven were
+not. The function is now derived from the authoritative `rules_with_hard_negative_fixture()`,
+and a test pins the exact list so a newly-unprotected rule cannot join it quietly.
+
 Without the spurious half, correlation precision is measured only against services the
 correlator already got right, which inflates it.
 
