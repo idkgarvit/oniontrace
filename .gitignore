@@ -1,5 +1,10 @@
 # Generated farm output -- regenerate with `python -m farm generate`
-out/
+# `out/*` rather than `out/`, so the exclusion does not cover the directory itself and
+# the negation below can re-include a subdirectory. `out/` would make git skip the whole
+# tree and never see the rule underneath it.
+out/*
+# ...except the paper data drop, which is a citable artefact and must be durable.
+!out/paper-drop/
 
 # Gate working directory -- case data, audit trail, permits. Never commit casework.
 casework/
