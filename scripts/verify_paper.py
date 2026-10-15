@@ -195,6 +195,51 @@ def main() -> int:
     else:
         check("tex has \\maketitle so the author block can be checked", False)
 
+    # -- citations ----------------------------------------------------------- #
+    #
+    # Every bibitem must be cited inline. This caught a real defect: all 11 references were
+    # defined and the prose named every source in words, but no numbered marker appeared
+    # anywhere in the body. IEEE format requires inline numbered citations, and a reference
+    # list that the text never points at reads as padding and can fail a format check.
+    #
+    # The body/reference split is NOT found by searching for "REFERENCES": IEEEtran renders
+    # that heading in small caps, so pdftotext yields "R EFERENCES" with a space inside the
+    # word. Searching for the plain form returned -1, the split silently fell back to the
+    # whole document, and the check then counted the markers in the reference list itself,
+    # passing without ever testing the body. The heading is located by pattern instead, and
+    # a missing heading is a hard failure rather than a silent fallback.
+    print("\ncitations")
+    tex2 = (ROOT / "paper" / "ieee" / "oniontrace.tex").read_text()
+    bibitems = set(re.findall(r"\\bibitem\{([^}]*)\}", tex2))
+
+    head = re.search(r"R\s+EFERENCES", raw)
+    if not head:
+        check("reference-list heading located so the body can be isolated", False,
+              "no 'R EFERENCES'/'REFERENCES' heading found; cannot separate body from list")
+        body_only = ""
+    else:
+        check("reference-list heading located so the body can be isolated", True)
+        body_only = raw[: head.start()]
+
+    counts: dict[int, int] = {}
+    for tok in re.findall(r"\[(\d{1,2})\]", body_only):
+        counts[int(tok)] = counts.get(int(tok), 0) + 1
+
+    defined_nums = set(range(1, len(bibitems) + 1))
+    uncited = sorted(defined_nums - set(counts))
+    check(f"all {len(bibitems)} references are cited at least once inline",
+          bool(body_only) and not uncited,
+          f"never cited in the body: {uncited}" if body_only else "body not isolated")
+    check("every inline marker resolves to a reference",
+          not (set(counts) - defined_nums),
+          f"markers with no reference: {sorted(set(counts) - defined_nums)}")
+    # Counting, not presence: a marker that appears twice cannot hide the loss of one
+    # instance, which is exactly how the previous version of this check was defeated.
+    total_inline = sum(counts.values())
+    check(f"inline citation count is at least one per reference ({total_inline} markers)",
+          total_inline >= len(bibitems),
+          f"{total_inline} markers for {len(bibitems)} references")
+
     # -- freshness ----------------------------------------------------------- #
     print("\nfreshness")
     src = Path("/home/shiga0_0/.hermes/profiles/researcher/workspace/"
