@@ -33,6 +33,8 @@ network stack.
 """
 from __future__ import annotations
 
+import ipaddress
+import socket
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -41,6 +43,115 @@ from .transport import FetchResult
 
 #: The only clearnet hosts live collection may ever contact. Anything else is scope creep.
 CLEARNET_ALLOWANCE: tuple[str, ...] = ("t.me", "ahmia.fi", "crt.sh")
+
+#: Names that always resolve to the local host, whatever the resolver says.
+_LOCAL_NAMES = frozenset({
+    "localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback",
+})
+
+#: NAT64 prefixes that embed an IPv4 address in the low 32 bits (RFC 6052). On a
+#: dual-stack network with a DNS64 resolver, every IPv4-only hostname arrives as one of
+#: these, so they must be decoded rather than blanket-refused: the embedded address is
+#: what the transport would actually reach, and it is what must be judged.
+_NAT64_PREFIXES = (
+    ipaddress.ip_network("64:ff9b::/96"),        # well-known prefix
+    ipaddress.ip_network("64:ff9b:1::/48"),      # local-use prefix
+)
+
+
+def _nat64_embedded_ipv4(addr: ipaddress.IPv4Address | ipaddress.IPv6Address):
+    """The IPv4 address a NAT64 address maps to, or None if it is not one.
+
+    Without this, a DNS64 network produces two failures at once: legitimate IPv4-only
+    hosts (ahmia.fi resolves to 64:ff9b::2e13:263f here) are refused as reserved, and the
+    guard's real purpose is defeated in the other direction, because a check that treats
+    the whole range as reserved cannot distinguish a public host from
+    ``64:ff9b::7f00:1``, which is ``127.0.0.1``. Decoding the low 32 bits as an IPv4
+    address resolves both: the embedded address is judged, so a public host passes and a
+    tunnel to loopback or to cloud metadata is refused.
+    """
+    if not isinstance(addr, ipaddress.IPv6Address):
+        return None
+    for net in _NAT64_PREFIXES:
+        if addr in net:
+            return ipaddress.IPv4Address(int(addr) & 0xFFFF_FFFF)
+    return None
+
+
+def is_non_public_address(host: str) -> tuple[bool, str]:
+    """Is ``host`` an address the collector must never fetch, and why.
+
+    This is an SSRF guard, and it exists because every byte this collector parses comes
+    from a party that chose those bytes. A page cannot redirect us (redirects are off),
+    but an *operator* can slip an address into the allowance and, more importantly, a
+    hostname in that allowance can resolve to something private. Onion content is
+    attacker-controlled, so treat the address space as hostile.
+
+    Refused, with the reason:
+      - loopback (127/8, ::1, and names that always mean the local host)
+      - link-local (169.254/16, fe80::/10), which is where cloud instance metadata lives
+      - private ranges (RFC 1918, fc00::/7, and carrier-grade NAT 100.64/10)
+      - unspecified and multicast and reserved ranges
+      - anything that is not an IP literal and cannot be resolved at all
+
+    A name that fails to resolve is refused rather than passed through, because the
+    transport would otherwise resolve it later, at fetch time, outside this check.
+
+    Deliberately does not use ``is_global`` alone: that attribute's treatment of some
+    ranges has changed across Python versions, so the explicit categories are checked
+    as the primary test and ``is_global`` as a backstop.
+    """
+    name = host.strip().strip("[]").lower().rstrip(".")
+    if not name:
+        return True, "empty host"
+    if name in _LOCAL_NAMES or name.endswith(".localhost"):
+        return True, "loopback name"
+    if name.endswith(".internal") or name.endswith(".local"):
+        return True, "internal-only name suffix"
+
+    candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    try:
+        candidates.append(ipaddress.ip_address(name))
+    except ValueError:
+        # Not an IP literal: resolve it, so the decision is made on the address the
+        # transport would actually connect to rather than on the name.
+        try:
+            infos = socket.getaddrinfo(name, None, proto=socket.IPPROTO_TCP)
+        except (socket.gaierror, UnicodeError, OSError) as exc:
+            return True, f"unresolvable ({type(exc).__name__})"
+        for info in infos:
+            try:
+                candidates.append(ipaddress.ip_address(info[4][0]))
+            except ValueError:
+                continue
+        if not candidates:
+            return True, "no resolvable address"
+
+    for addr in candidates:
+        # A NAT64 address is judged by the IPv4 address it tunnels to, not by its own
+        # (reserved) range. See _nat64_embedded_ipv4 for why this matters both ways.
+        embedded = _nat64_embedded_ipv4(addr)
+        if embedded is not None:
+            if (embedded.is_loopback or embedded.is_link_local or embedded.is_private
+                    or embedded.is_multicast or embedded.is_unspecified
+                    or embedded.is_reserved or not embedded.is_global):
+                return True, f"NAT64 address {addr} tunnels to non-public {embedded}"
+            continue
+        if addr.is_loopback:
+            return True, f"loopback address {addr}"
+        if addr.is_link_local:
+            return True, f"link-local address {addr} (cloud metadata lives here)"
+        if addr.is_private:
+            return True, f"private address {addr}"
+        if addr.is_multicast:
+            return True, f"multicast address {addr}"
+        if addr.is_unspecified:
+            return True, f"unspecified address {addr}"
+        if addr.is_reserved:
+            return True, f"reserved address {addr}"
+        if not addr.is_global:
+            return True, f"non-global address {addr}"
+    return False, ""
 
 #: Headers that would turn an unauthenticated public fetch into an authenticated one.
 CREDENTIAL_HEADERS: tuple[str, ...] = (
@@ -123,6 +234,20 @@ class LiveTransport:
                     "collection is outside the scope of this module"
                 )
         host = (parts.hostname or "").lower()
+        if not host:
+            raise LiveCollectionRefused("refusing a URL with no host")
+        # SSRF guard. Onion content is attacker-controlled, so a host that resolves into
+        # loopback, link-local or a private range must be refused here rather than at
+        # connect time. Onion names have no DNS record and are exempt by construction,
+        # since SOCKS resolves them at the proxy and the name is not an address.
+        if not host.endswith(".onion"):
+            blocked, why = is_non_public_address(host)
+            if blocked:
+                raise LiveCollectionRefused(
+                    f"refusing {host!r}: {why}. Live collection is public, "
+                    "unauthenticated preview only, and must never reach localhost, "
+                    "link-local, or private address space."
+                )
         if not host.endswith(".onion") and host not in self._hosts:
             raise UnknownHost(
                 f"{host!r} is outside the declared allowance {self._hosts}. Widening "

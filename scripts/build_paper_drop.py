@@ -29,8 +29,21 @@ def sh(*cmd: str) -> str:
 
 
 def results_for(seed: str) -> dict:
-    p = (ROOT / "out" / "eval-results.json") if seed == SEEDS[0] else Path(f"/tmp/seed_{seed}") / "eval-results.json"
-    return json.loads(p.read_text())
+    """Results for a seed, rebuilding them if the run is not on disk.
+
+    The first version read fixed paths under /tmp and failed once those were cleaned,
+    which made the drop impossible to rebuild after a reboot. A seed run takes a few
+    seconds, so regenerate rather than depend on a stale temp file.
+    """
+    primary = ROOT / "out" / "eval-results.json"
+    if seed == SEEDS[0] and primary.exists():
+        return json.loads(primary.read_text())
+    cached = Path(f"/tmp/seed_{seed}") / "eval-results.json"
+    if not cached.exists():
+        out = Path(f"/tmp/seed_{seed}")
+        subprocess.run([sys.executable, "-m", "eval", "run", "--seed", seed,
+                        "--out", str(out)], cwd=ROOT, capture_output=True, timeout=900)
+    return json.loads(cached.read_text())
 
 
 def write(rel: str, text: str) -> None:
@@ -83,11 +96,24 @@ def main() -> int:
         ("claim", "json_path", "raw_fraction", "value", "ci95", "n", "baseline", "split", "threshold"),
     ]
     def add(claim, path, sc, ci="", base=""):
-        raw = f"{sc.get('tp','?')}/{sc.get('tp','?')+sc.get('fp','?')}" if "tp" in sc else \
-              f"{sc.get('successes','?')}/{sc.get('total','?')}"
+        if "tp" in sc:
+            tp, fp = sc.get("tp", 0), sc.get("fp", 0)
+            raw = f"{tp}/{tp + fp}"
+        elif "successes" in sc:
+            raw = f"{sc['successes']}/{sc['total']}"
+        elif "total" in sc and isinstance(sc.get("value"), float):
+            # A metric stored as a bare ratio over a known n (long recall@5). Derive the
+            # count rather than printing '?', which is what the first version emitted.
+            n = sc["total"]
+            raw = f"{round(sc['value'] * n)}/{n}"
+        elif "n_queries" in sc and isinstance(sc.get("value"), float):
+            n = sc["n_queries"]
+            raw = f"{round(sc['value'] * n)}/{n}"
+        else:
+            raw = "?"
         rows.append((claim, path, raw, pct(sc.get("precision", sc.get("value", 0.0))),
-                     str(ci), str(sc.get("total", sc.get("proposed", ""))), str(base), split,
-                     "frozen before scoring"))
+                     str(ci), str(sc.get("total", sc.get("n_queries", sc.get("proposed", "")))),
+                     str(base), split, "frozen before scoring"))
 
     add("naive link precision", "modules.M2_correlation.naive.link_scoring", c["naive"]["link_scoring"])
     add("naive at frozen threshold", "modules.M2_correlation.at_frozen_threshold.link_scoring", c["at_frozen_threshold"]["link_scoring"])

@@ -1084,3 +1084,117 @@ def test_a_live_guard_refuses_before_any_network_dependency():
 
     with pytest.raises(TransportUnavailable, match="clock"):
         transport.fetch("https://crt.sh/?q=example.com&output=json")
+
+
+# --------------------------------------------------------------------------- #
+# SSRF guard: a collector that parses attacker-chosen bytes must not be
+# steerable into localhost, link-local or private address space.
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "127.0.0.1", "127.1.2.3", "localhost", "localhost.localdomain",
+        "169.254.169.254",  # cloud instance metadata: the classic SSRF prize
+        "169.254.0.1", "10.0.0.5", "192.168.1.1", "172.16.0.1",
+        "100.64.0.1",  # carrier-grade NAT, is_private on modern Python
+        "0.0.0.0", "::1", "fd00::1", "fe80::1",
+        "metadata.google.internal", "anything.internal", "printer.local",
+        "this-name-does-not-resolve.invalid",
+    ],
+)
+def test_a_non_public_address_is_refused(host):
+    """Every category that must never be reachable is refused, with a reason."""
+    from collect.live import is_non_public_address
+
+    blocked, why = is_non_public_address(host)
+    assert blocked, f"{host} must be refused"
+    assert why, "a refusal must say why"
+
+
+@pytest.mark.parametrize("host", ["93.184.216.34", "crt.sh", "example.com", "ahmia.fi"])
+def test_a_public_address_is_allowed(host):
+    """The guard must not be a blanket block: real public hosts still pass."""
+    from collect.live import is_non_public_address
+
+    blocked, _ = is_non_public_address(host)
+    assert not blocked, f"{host} is public and must be allowed"
+
+
+def test_the_ssrf_guard_runs_before_the_allowance_check():
+    """A private address is refused even when it is inside the declared allowance.
+
+    This is the whole point of the guard. An operator widening ``extra_hosts`` is a
+    supported configuration, and it must not be possible to turn that into a reachable
+    localhost fetch by naming an address instead of a domain.
+    """
+    from collect.clock import FrozenClock
+    from collect.errors import LiveCollectionRefused
+    from collect.live import LiveSettings, LiveTransport
+
+    transport = LiveTransport(
+        authorised_mode=True,
+        settings=LiveSettings(socks_host="127.0.0.1"),
+        clock=FrozenClock(),
+        extra_hosts=("127.0.0.1", "169.254.169.254", "localhost"),
+    )
+    for url in ("http://127.0.0.1/admin",
+                "http://169.254.169.254/latest/meta-data/",
+                "http://localhost:9200/"):
+        with pytest.raises(LiveCollectionRefused, match="refus"):
+            transport.check(url)
+
+
+def test_an_onion_name_is_exempt_from_the_ssrf_guard():
+    """An onion name is not an address: SOCKS resolves it at the proxy.
+
+    Guarding it as if it were would refuse every onion target, which is the collector's
+    whole purpose. Unresolvable clearnet names are still refused, above.
+    """
+    from collect.clock import FrozenClock
+    from collect.live import LiveSettings, LiveTransport
+
+    transport = LiveTransport(
+        authorised_mode=True,
+        settings=LiveSettings(socks_host="127.0.0.1"),
+        clock=FrozenClock(),
+    )
+    # Must pass the guard and clear the proxy requirement without raising.
+    transport.check("http://" + "a" * 56 + ".onion/")
+
+
+def test_a_nat64_address_is_judged_by_the_ipv4_it_tunnels_to():
+    """On a DNS64 network every IPv4 host arrives as 64:ff9b::/96.
+
+    Two failure modes to prevent, and both were real here. Refusing the whole range
+    makes legitimate IPv4-only hosts (ahmia.fi resolves to 64:ff9b::2e13:263f on this
+    machine) unreachable. Allowing the whole range lets an attacker reach loopback and
+    cloud metadata through a NAT64 tunnel. So the embedded IPv4 is decoded and judged.
+    """
+    from collect.live import is_non_public_address
+
+    # A public IPv4-only host arrives as NAT64 and must be allowed.
+    allowed, _ = is_non_public_address("64:ff9b::2e13:263f")   # 46.19.38.63
+    assert not allowed, "a NAT64-tunnelled public address must be allowed"
+
+    # The same encoding pointed at loopback, metadata and a private range must not be.
+    for nat64, why in (
+        ("64:ff9b::7f00:1", "loopback"),
+        ("64:ff9b::a9fe:a9fe", "cloud metadata"),
+        ("64:ff9b::a00:5", "private"),
+    ):
+        blocked, reason = is_non_public_address(nat64)
+        assert blocked, f"{nat64} tunnels to {why} and must be refused"
+        assert "tunnels to non-public" in reason
+
+
+def test_ahmia_resolves_and_is_permitted_on_this_network():
+    """The collector's own allowance host must pass its own guard.
+
+    Guarded because a DNS64 network broke this: ahmia.fi has no AAAA record, so a
+    resolver synthesises 64:ff9b::2e13:263f, which a naive reserved-range check refuses.
+    """
+    from collect.live import is_non_public_address
+
+    blocked, why = is_non_public_address("ahmia.fi")
+    assert not blocked, f"ahmia.fi must be fetchable, got: {why}"
