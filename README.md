@@ -657,7 +657,8 @@ python -m dashboard &                                     # the console slide ne
 python scripts/capture_dashboard.py                       # photograph it
 python scripts/build_presentation.py --out deck.pptx      # assemble and audit the text
 python scripts/verify_deck.py deck.pptx                   # bounds and text fit
-python scripts/preview_deck.py deck.pptx out/preview --shots --pdf deck.pdf
+python scripts/analyse_slides.py out/preview/slides     # measure the rendered pixels
+python scripts/export_notes.py deck.pptx notes.md        # speaking notes, one per slide
 ```
 
 `build_presentation.py` **fails** rather than shipping a placeholder when a diagram or the
@@ -673,6 +674,15 @@ out, then measures clipping, overflow and image-over-text collisions in the DOM;
 writes the per-slide PNGs and the PDF from that same render. `capture_dashboard.py` refuses
 to run if something is already listening on the console port, since a stale server would be
 photographed instead of the one the script just built.
+
+`analyse_slides.py` reads the rendered PNGs for what geometry cannot see: a slide that is
+nearly blank because a figure failed to load, content running into an edge, and one slide
+sitting on a different left margin from the rest. It judges none of the taste, only the
+mistakes.
+
+`export_notes.py` writes the speaker notes beside the deck, titled by each slide's real
+heading. Taking the first text box would title four sections MODULE 2, VALIDATION,
+LIMITATIONS and IN ONE SLIDE, because that box is the small kicker above the title.
 
 Every number on the diagrams is read from `out/eval-results.json` at build time, so a figure
 on a slide cannot disagree with the file it came from. That path is gitignored scratch, so
