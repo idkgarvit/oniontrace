@@ -428,11 +428,30 @@ collect/
   warc.py        WARC 1.0 records for the raw exchanges, referenced from snapshots
   fixtures.py    deterministic fixture pages generated from the farm's seed
   cli.py         command-line interface (`python -m collect ...`)
+graph/
+  model.py       artefacts, edges, entities, evidence; the doctrine as types
+  extract.py     pull artefacts from a farm, each carrying its snapshot digest
+  resolve.py     deterministic and probabilistic links; defaults become cohorts, not edges
+  store.py       SQLite: proposals, findings, notes, reversible merges (before-state kept)
+  cli.py         build / show / export / confirm / merge / reverse / note
+dashboard/
+  app.py         FastAPI on loopback; case view, entity view, mutations, evidence PDF
+  render.py      HTML-to-PDF evidence pack, digest ledger, first-page limits
+  templates/     base, index, case, entity
+  static/        graph.js (dependency-free force-directed SVG), style.css
+oniontrace/
+  pipeline.py    the six stages, a manifest that records failure, no silent half-runs
+  report.py      generated Markdown that names the limit of each section
+  cli.py         `run` and `show`; exit code 1 when any stage failed
 tests/
+  test_pipeline.py 13 tests; pins stage failure recording, reproducibility, per-case run dirs
+  test_graph.py  25 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
+  test_dashboard.py 13 tests; pins route refusals, traversal rejection, evidence-pack limits
   test_farm.py   65 tests; each locks in a property a reported metric depends on
   test_eval.py   65 tests; each pins what a number in the report is allowed to mean
   test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
-  test_collect.py 43 tests; each asserts what a run stores, skips, proposes or refuses
+  test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
+  test_collect.py 69 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
 ```
 
@@ -495,7 +514,7 @@ Implemented:
   resumable cursors that advance only after an ingest, a seed-proposal queue an analyst
   decides on, WARC records for the raw exchanges, and an operator CLI with no default
   transport. Fixture-verified: every test runs against in-memory pages, and the live
-  transport is dark. 59-test suite across `tests/test_collect.py` and
+  transport is dark. 85-test suite across `tests/test_collect.py` and
   `tests/test_collect_cli.py`.
 - **Evaluation harness** (Part G item 4) — by-cluster splits, threshold freezing with a
   safe-abstain fallback, six modules scored (M1 collection integrity on the fixture seam,
