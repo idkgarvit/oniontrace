@@ -451,6 +451,8 @@ tests/
   test_eval.py   65 tests; each pins what a number in the report is allowed to mean
   test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
+  test_deck.py    6 tests; the deck carries notes on every slide, stays 16:9, and
+                  refuses to build without its diagrams or its console capture
   test_collect.py 69 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
 ```
@@ -526,8 +528,8 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (373 today, after `graph/`, `dashboard/`, the code-mix
-  block and the end-to-end pipeline landed.)
+  **284 tests pass in total.** (379 today, after `graph/`, `dashboard/`, the code-mix
+  block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
 the **M5 transformer upgrade** (the committed TF-IDF baseline lives in
@@ -646,15 +648,31 @@ the "No notes yet" placeholder as a note.
 
 ## Rebuilding the deck
 
-The presentation embeds a screenshot of the console. That capture is a script, not a manual
-step, because a hand-made screenshot is either stale or missing:
+The deck is twelve slides, one idea each, built around a drawn figure rather than a block of
+text. Three scripts produce it, and each one refuses to guess:
 
 ```bash
-python scripts/capture_dashboard.py          # build a demo case, serve it, photograph it
-python scripts/build_presentation.py --out deck.pptx
+python scripts/build_diagrams.py                          # five diagrams -> out/fig/*.png
+python -m dashboard &                                     # the console slide needs it
+python scripts/capture_dashboard.py                       # photograph it
+python scripts/build_presentation.py --out deck.pptx      # assemble and audit the text
+python scripts/verify_deck.py deck.pptx                   # bounds and text fit
+python scripts/preview_deck.py deck.pptx out/preview --shots --pdf deck.pdf
 ```
 
-The build **fails** rather than shipping a placeholder when the screenshot is missing. Use
-`--skip-screenshot` for an explicit text-only build. The capture refuses to run if something
-is already listening on the console port, since a stale server would be photographed instead
-of the one the script just built.
+`build_presentation.py` **fails** rather than shipping a placeholder when a diagram or the
+console capture is missing; `--skip-screenshot` is the explicit text-only opt-out. It also
+runs a text audit over its own output and returns non-zero on an em dash, a banned phrase or
+a sentence over 34 words, because those are the things that make a deck read as generated.
+
+There are three separate checks because they fail differently. `verify_deck.py` reads the
+pptx and flags shapes outside the slide and text needing more height than its box has,
+although it can only estimate text height. `preview_deck.py` rebuilds every shape as
+absolutely positioned HTML at the same inch coordinates and lets a real browser lay the text
+out, then measures clipping, overflow and image-over-text collisions in the DOM; it also
+writes the per-slide PNGs and the PDF from that same render. `capture_dashboard.py` refuses
+to run if something is already listening on the console port, since a stale server would be
+photographed instead of the one the script just built.
+
+Every number on the diagrams is read from `out/eval-results.json` at build time, so a figure
+on a slide cannot disagree with the file it came from.

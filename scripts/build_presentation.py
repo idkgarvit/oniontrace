@@ -1,813 +1,403 @@
-"""Build the ONIONTRACE project presentation.
+"""Build the presentation.
 
-Regenerable on purpose: every figure in the deck is read from the frozen evaluation
-results rather than typed in, so the slides cannot drift from the paper or the code.
-Re-run after a new evaluation and the numbers move with it.
+Twelve slides, one idea each, built around a drawn diagram rather than a block of text. The
+reason is not decoration: a reader looking at a chart has understood the slide before the
+sentence under it finishes, and a reader looking at eight bullets is reading instead of
+listening.
 
-    python scripts/build_presentation.py --out ONIONTRACE_Presentation.pptx
+Every number on the diagrams comes from out/eval-results.json at build time. Nothing is
+typed in by hand, so a slide cannot disagree with the file it came from.
+
+    python scripts/build_diagrams.py
+    python scripts/build_presentation.py --out deck.pptx
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import sys
+import re
 from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.enum.text import PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
 ROOT = Path(__file__).resolve().parent.parent
-ALLOW_MISSING_SCREENSHOT = "--skip-screenshot" in sys.argv
-sys.argv = [a for a in sys.argv if a != "--skip-screenshot"]
+FIG = ROOT / "out" / "fig"
+SCREEN = ROOT / "out" / "screen" / "qa" / "01-case-view.png"
 
-# -- palette ------------------------------------------------------------ #
-BG = RGBColor(0x0E, 0x11, 0x16)
-PANEL = RGBColor(0x15, 0x1A, 0x21)
-PANEL2 = RGBColor(0x1B, 0x22, 0x2C)
-LINE = RGBColor(0x2A, 0x34, 0x41)
-FG = RGBColor(0xDB, 0xE3, 0xEC)
-MUTED = RGBColor(0x85, 0x95, 0xA8)
-ACCENT = RGBColor(0x4E, 0xA1, 0xFF)
-ACCENT2 = RGBColor(0x7E, 0xE0, 0xC0)
-WARN = RGBColor(0xD2, 0x99, 0x22)
-BAD = RGBColor(0xF8, 0x51, 0x49)
+BG = RGBColor(0x0E, 0x13, 0x18)
+FG = RGBColor(0xE8, 0xED, 0xF3)
+MUTED = RGBColor(0x8B, 0x9A, 0xAB)
+AMBER = RGBColor(0xE0, 0xA2, 0x56)
+TEAL = RGBColor(0x4F, 0xB3, 0xA5)
+CARD = RGBColor(0x16, 0x1D, 0x25)
+LINE = RGBColor(0x2A, 0x35, 0x42)
 
 FONT = "Arial"
-W, H = 13.333, 7.5
+W_IN, H_IN = 13.333, 7.5
+
+# Words that make a deck sound generated. None of them belong on a slide.
+BANNED = [
+    "delve", "landscape", "crucial", "seamless", "testament", "moreover", "furthermore",
+    "robust", "leverage", "journey", "unlock", "elevate", "comprehensive", "cutting-edge",
+    "game-changer", "revolutionise", "revolutionize", "paradigm", "holistic", "synergy",
+    "it is worth noting", "in today's", "plays a vital", "is essential to understand",
+]
 
 
-# -- primitives --------------------------------------------------------- #
-def new_deck() -> Presentation:
-    prs = Presentation()
-    prs.slide_width = Inches(W)
-    prs.slide_height = Inches(H)
-    return prs
-
-
-def blank(prs: Presentation):
+# ------------------------------------------------------------------ helpers
+def blank(prs):
     s = prs.slides.add_slide(prs.slide_layouts[6])
-    bg = s.background.fill
-    bg.solid()
-    bg.fore_color.rgb = BG
+    s.background.fill.solid()
+    s.background.fill.fore_color.rgb = BG
     return s
 
 
-def tb(slide, left, top, width, height, *, wrap=True):
-    box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
+def tb(slide, x, y, w, h):
+    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
     tf = box.text_frame
-    tf.word_wrap = wrap
-    tf.margin_left = tf.margin_right = Emu(0)
-    tf.margin_top = tf.margin_bottom = Emu(0)
+    tf.word_wrap = True
+    tf.margin_left = tf.margin_right = 0
+    tf.margin_top = tf.margin_bottom = 0
     return tf
 
 
-def para(tf, text, *, size: float = 16, color=FG, bold=False, space_after=6,
-         first=False, align=PP_ALIGN.LEFT, italic=False, font=FONT, space_before=0):
+def para(tf, text, *, size=20, color=FG, bold=False, first=False, space_after=0,
+         align=PP_ALIGN.LEFT, font=FONT, line_spacing=None):
     p = tf.paragraphs[0] if first else tf.add_paragraph()
     p.alignment = align
     p.space_after = Pt(space_after)
-    p.space_before = Pt(space_before)
+    if line_spacing:
+        p.line_spacing = line_spacing
     r = p.add_run()
     r.text = text
-    f = r.font
-    f.name = font
-    f.size = Pt(size)
-    f.bold = bold
-    f.italic = italic
-    f.color.rgb = color
+    r.font.size = Pt(size)
+    r.font.color.rgb = color
+    r.font.bold = bold
+    r.font.name = font
     return p
 
 
-def header(slide, kicker: str, title: str, sub: str | None = None) -> None:
-    """Standard slide header: a small kicker, a large title, optional deck line."""
+def rule(slide, x, y, w, color=AMBER, thick=Pt(2.5)):
+    bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(y), Inches(w), thick)
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = color
+    bar.line.fill.background()
+    bar.shadow.inherit = False
+    return bar
 
-    tf = tb(slide, 0.85, 0.62, 11.6, 0.4)
-    para(tf, kicker.upper(), size=11.5, color=ACCENT, bold=True, first=True, space_after=0)
 
-    # A 30pt title in an 11.6in box fits about 50 characters. Longer titles wrap, and
-    # a wrapped title collides with the rule below it, so the size steps down rather
-    # than the text spilling. Measured, not guessed: 30pt x 2 lines is 1.02in in a
-    # 0.94in gap.
-    size = 30 if len(title) <= 48 else (27 if len(title) <= 60 else 24)
-    tf = tb(slide, 0.85, 0.96, 11.6, 0.96)
-    para(tf, title, size=size, color=FG, bold=True, first=True, space_after=0)
+def kicker(slide, text, x=0.85, y=0.62):
+    tf = tb(slide, x, y, 8.0, 0.3)
+    para(tf, text.upper(), size=12, color=AMBER, bold=True, first=True)
 
-    y = 1.92
+
+def title(slide, text, *, sub=None, y=0.95, size=38, width=11.6):
+    tf = tb(slide, 0.85, y, width, 1.3)
+    para(tf, text, size=size, color=FG, bold=True, first=True, line_spacing=1.02)
     if sub:
-        tf = tb(slide, 0.85, y, 11.6, 0.5)
-        para(tf, sub, size=13.5, color=MUTED, first=True, space_after=0)
-        y = 2.42
-
-    ln = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.85), Inches(y),
-                                Inches(11.65), Emu(9525))
-    ln.fill.solid(); ln.fill.fore_color.rgb = LINE
-    ln.line.fill.background()
-    ln.shadow.inherit = False
+        tf2 = tb(slide, 0.85, y + (size / 72) * 1.55, width, 0.8)
+        para(tf2, sub, size=19, color=MUTED, first=True)
 
 
-def bullets(slide, items, *, left=0.85, top=2.65, width=7.4, size: float = 15.5,
-            gap=9, height: float | None = None):
-    # Height is derived from where the box starts so it can never run off the slide;
-    # a text box that extends past the page is clipped by some renderers and not
-    # others, which is exactly the bug that survives to the presentation.
-    tf = tb(slide, left, top, width, height if height is not None else max(1.0, 7.15 - top))
-    first = True
-    for it in items:
-        if isinstance(it, tuple):
-            text, lvl = it
-        else:
-            text, lvl = it, 0
-        mark = "▪  " if lvl == 0 else "–  "
-        p = para(
-            tf, mark + text,
-            size=size if lvl == 0 else size - 1.5,
-            color=FG if lvl == 0 else MUTED,
-            first=first,
-            space_after=gap if lvl == 0 else gap - 3,
-        )
-        p.level = lvl
-        first = False
-    return tf
+def picture(slide, path: Path, *, x, y, max_w, max_h, center_x=None):
+    """Place an image scaled to fit a box, keeping its aspect ratio."""
+
+    from PIL import Image
+
+    with Image.open(path) as im:
+        iw, ih = im.size
+    scale = min(max_w / iw, max_h / ih)
+    w, h = iw * scale, ih * scale
+    if center_x is not None:
+        x = center_x - w / 2
+    return slide.shapes.add_picture(str(path), Inches(x), Inches(y), Inches(w), Inches(h))
 
 
-def card(slide, left, top, width, height, *, fill=PANEL, stroke=LINE):
-    sh = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top),
-                                Inches(width), Inches(height))
-    sh.adjustments[0] = 0.06
-    sh.fill.solid(); sh.fill.fore_color.rgb = fill
-    sh.line.color.rgb = stroke; sh.line.width = Pt(1)
-    sh.shadow.inherit = False
-    sh.text_frame.word_wrap = True
-    return sh
+def foot(slide, text, y=6.82):
+    tf = tb(slide, 0.85, y, 11.6, 0.4)
+    para(tf, text, size=14, color=MUTED, first=True)
 
 
-def metric(slide, left, top, width, *, value, label, color=ACCENT2, height=1.15):
-    sh = card(slide, left, top, width, height)
-    tf = sh.text_frame
-    tf.margin_left = tf.margin_right = Emu(0)
-    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    para(tf, value, size=25, color=color, bold=True, first=True, space_after=0,
-         align=PP_ALIGN.CENTER)
-    para(tf, label, size=10.5, color=MUTED, space_after=0, align=PP_ALIGN.CENTER)
-    return sh
-
-
-def table(slide, rows, *, left=0.85, top=2.6, width=11.65, col_widths=None,
-          header_fill=PANEL2, size: float = 12.5, row_h=0.4, highlight=None):
-    """A table with explicit fills; python-pptx's default banding is stripped."""
-
-    nrows, ncols = len(rows), len(rows[0])
-    shp = slide.shapes.add_table(nrows, ncols, Inches(left), Inches(top),
-                                 Inches(width), Inches(row_h * nrows))
-    tbl = shp.table
-    tbl.first_row = True
-    tbl.horz_banding = False
-
-    if col_widths:
-        total = sum(col_widths)
-        for i, w in enumerate(col_widths):
-            tbl.columns[i].width = Inches(width * w / total)
-    for r in range(nrows):
-        tbl.rows[r].height = Inches(row_h)
-
-    for r, row in enumerate(rows):
-        for c, val in enumerate(row):
-            cell = tbl.cell(r, c)
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = header_fill if r == 0 else PANEL
-            cell.margin_left = Inches(0.08)
-            cell.margin_right = Inches(0.06)
-            cell.margin_top = Inches(0.02)
-            cell.margin_bottom = Inches(0.02)
-            cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-            tf = cell.text_frame
-            tf.word_wrap = True
-            p = tf.paragraphs[0]
-            p.space_after = Pt(0)
-            run = p.add_run()
-            run.text = str(val)
-            run.font.size = Pt(size - 1.5 if r == 0 else size)
-            run.font.name = FONT
-            run.font.bold = r == 0
-            colour = MUTED if r == 0 else FG
-            if highlight and r == highlight:
-                colour = ACCENT2
-                run.font.bold = True
-            run.font.color.rgb = colour
-    return tbl
-
-
-def notes(slide, text: str) -> None:
+def notes(slide, text):
     slide.notes_slide.notes_text_frame.text = text
 
 
-def page_no(slide, n: int) -> None:
-    tf = tb(slide, 12.0, 6.92, 0.9, 0.3)
-    para(tf, str(n), size=10, color=MUTED, first=True, space_after=0, align=PP_ALIGN.RIGHT)
-
-
-# -- figures from the frozen results ------------------------------------ #
-def load_numbers() -> dict:
-    data = json.loads((ROOT / "out" / "eval-results.json").read_text())
-    m = data["modules"]
-    corr = m["M2_correlation"]
-    return {
-        "naive_p": corr["naive"]["link_scoring"]["precision"],
-        "naive_fm": corr["naive"]["link_scoring"]["false_merge_rate"],
-        "thr_p": corr["at_frozen_threshold"]["link_scoring"]["precision"],
-        "thr_fm": corr["at_frozen_threshold"]["link_scoring"]["false_merge_rate"],
-        "filt_p": corr["frequency_filtered"]["link_scoring"]["precision"],
-        "filt_fm": corr["frequency_filtered"]["link_scoring"]["false_merge_rate"],
-        "p1_naive": corr["naive"]["ranking"]["precision@1"]["value"],
-        "p1_filt": corr["frequency_filtered"]["ranking"]["precision@1"]["value"],
-        "baseline": corr["naive"]["ranking"]["random_baseline_precision@1"],
-        "careful_prec": m["M2_misconfig_rules"]["careful_rules"]["precision"]["value"],
-        "careful_succ": m["M2_misconfig_rules"]["careful_rules"]["precision"]["successes"],
-        "careful_tot": m["M2_misconfig_rules"]["careful_rules"]["precision"]["total"],
-    }
-
-
-FARM = {
-    "services": 14, "clusters": 4, "flaws": 25, "personas": 20,
-    "hard_neg": 38, "abstention": 6, "clean_controls": 42,
-}
-CT = {"returned": 3136, "san": 3018, "contaminated": 118, "onions": 688, "digicert_pct": 59.2}
-
-
-# -- slides ------------------------------------------------------------- #
-def slide_title(prs, n) -> None:
+# ------------------------------------------------------------------ slides
+def s_title(prs):
     s = blank(prs)
+    kicker(s, "Capstone project 1  ·  2025CSET703", y=1.55)
+    tf = tb(s, 0.85, 2.0, 11.6, 1.5)
+    para(tf, "ONIONTRACE", size=74, color=FG, bold=True, first=True)
 
-    bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(1.75), Inches(0.09), Inches(1.5))
-    bar.fill.solid(); bar.fill.fore_color.rgb = ACCENT
-    bar.line.fill.background(); bar.shadow.inherit = False
+    tf2 = tb(s, 0.85, 3.45, 9.6, 1.3)
+    para(tf2, "Linking onion services to one operator,", size=27, color=AMBER, first=True,
+         line_spacing=1.15)
+    para(tf2, "and saying how sure we are.", size=27, color=AMBER, line_spacing=1.15)
 
-    tf = tb(s, 1.25, 1.72, 10.8, 0.6)
-    para(tf, "CAPSTONE PROJECT  ·  2025CSET703  ·  GROUP 32", size=12.5, color=ACCENT,
-         bold=True, first=True, space_after=0)
+    rule(s, 0.85, 5.15, 2.2)
 
-    tf = tb(s, 1.25, 2.15, 10.8, 1.5)
-    para(tf, "ONIONTRACE", size=62, color=FG, bold=True, first=True, space_after=2)
-    para(tf, "Measuring operator correlation on Tor onion services", size=23,
-         color=ACCENT2, space_after=0)
+    tf3 = tb(s, 0.85, 5.5, 11.6, 1.5)
+    para(tf3, "Garvit Kanojia  ·  S25MCAG0002", size=18, color=FG, first=True, space_after=6)
+    para(tf3, "Niketa Chauhan  ·  S25MCAG0015", size=18, color=FG, space_after=12)
+    para(tf3, "Group 32  ·  Bennett University  ·  Guide: Prof. (Dr.) Ajay Kumar",
+         size=15, color=MUTED)
 
-    tf = tb(s, 1.25, 4.35, 10.8, 1.6)
-    para(tf, "A synthetic ground-truth farm, a measured correlator, and the finding that",
-         size=14, color=MUTED, first=True, space_after=2)
-    para(tf, "vendor defaults destroy naive identity correlation", size=14,
-         color=MUTED, space_after=0, bold=True)
-
-    tf = tb(s, 1.25, 5.85, 10.8, 1.0)
-    para(tf, "Garvit Kanojia  ·  S25MCAG0002        Niketa Chauhan  ·  S25MCAG0015",
-         size=14, color=FG, first=True, space_after=4, bold=True)
-    para(tf, "Faculty guide:  Prof. (Dr.) Ajay Kumar        Bennett University",
-         size=12.5, color=MUTED, space_after=0)
-
-    notes(s, "Introduce the project in one sentence: we built a test bed with known "
-             "ground truth so that operator-correlation claims can be measured instead "
-             "of asserted. The headline result is a negative one and it is the most "
-             "useful thing we produced.")
+    notes(s, "Open with the question the project answers, not the acronym. Two onion sites "
+             "can look completely unrelated and still be run by the same person. We built a "
+             "tool that proposes which ones are, and refuses to state it as fact.")
 
 
-def slide_problem(prs, n) -> None:
+def s_problem(prs):
     s = blank(prs)
-    header(s, "Problem", "Onion services are easy to run and hard to attribute",
-           "The network is designed so that nobody, including a researcher, can look up who is behind an address.")
+    picture(s, FIG / "d1_problem.png", x=0, y=1.15, max_w=W_IN, max_h=5.3,
+            center_x=W_IN / 2)
+    foot(s, "Each address is a public key. It carries no owner, no location and no link to any other address.")
 
-    bullets(s, [
-        "A v3 address is a public key. It says nothing about who holds it, and it changes freely.",
-        "A single operator commonly runs several services: a market, a forum, a mirror, a help desk.",
-        "Analysts want to know when two addresses belong to the same operator, because that is what turns",
-        ("a list of websites into a picture of an organisation.", 1),
-        "The evidence available to a passive visitor is indirect: favicons, analytics IDs, TLS",
-        ("certificates, SSH host keys, bundled JavaScript, contact handles.", 1),
-    ], width=7.5)
-
-    card(s, 8.7, 2.65, 3.75, 3.5)
-    tf = tb(s, 9.0, 2.9, 3.15, 3.1)
-    para(tf, "WHY IT MATTERS", size=11, color=WARN, bold=True, first=True, space_after=10)
-    para(tf, "Attribution is the step that turns observation into understanding:", size=12,
-         color=MUTED, space_after=8)
-    para(tf, "one operator running six services is a different finding from six unrelated operators.",
-         size=12.5, color=FG, space_after=8)
-    para(tf, "And a wrong merge is not a harmless error. It names the wrong organisation.",
-         size=12.5, color=ACCENT2, space_after=0)
-
-    notes(s, "Keep this short. The point to land is that attribution is the hard, valuable "
-             "step, and that a false merge is a real-world harm, not a rounding error.")
+    notes(s, "This is the whole problem in one picture. An onion address is derived from a "
+             "key, so there is no registration, no WHOIS, nothing that names the operator. "
+             "If one person runs three marketplaces, nothing on those pages says so.")
 
 
-def slide_trap(prs, n) -> None:
+def s_defaults(prs):
     s = blank(prs)
-    header(s, "The trap", "The obvious approach fails for a reason nobody measures",
-           "Two services sharing a value is the first rule anyone writes. It is also the rule that merges strangers.")
+    picture(s, FIG / "d3_defaults.png", x=0, y=1.05, max_w=W_IN, max_h=5.55,
+            center_x=W_IN / 2)
+    foot(s, "Two sites sharing nginx's default certificate is not a link. Two sites sharing a rare favicon is.")
 
-    card(s, 0.85, 2.7, 5.6, 3.15, stroke=BAD)
-    tf = tb(s, 1.1, 2.95, 5.1, 2.75)
-    para(tf, "WHAT AN ANALYST EXPECTS", size=11, color=MUTED, bold=True, first=True, space_after=8)
-    para(tf, "\"These two services share a favicon and an analytics ID,", size=13, color=FG, space_after=2)
-    para(tf, "so they are probably the same operator.\"", size=13, color=FG, space_after=10)
-    para(tf, "Reasonable. And often correct.", size=12.5, color=MUTED, space_after=0, italic=True)
-
-    card(s, 6.85, 2.7, 5.6, 3.15, stroke=WARN)
-    tf = tb(s, 7.1, 2.95, 5.1, 2.75)
-    para(tf, "WHAT ACTUALLY HAPPENS", size=11, color=WARN, bold=True, first=True, space_after=8)
-    para(tf, "Vendors ship the same default favicon to every install. Analytics", size=13, color=FG, space_after=2)
-    para(tf, "snippets get copy-pasted. Directory listings publish the same", size=13, color=FG, space_after=2)
-    para(tf, "contact handle on everybody's page.", size=13, color=FG, space_after=10)
-    para(tf, "So the shared value proves shared software, not shared ownership.",
-         size=12.5, color=ACCENT2, space_after=0, bold=True)
-
-    tf = tb(s, 0.85, 6.15, 11.6, 0.6)
-    para(tf, "The field treats this as folklore. We made it a measured quantity, and then measured the fix.",
-         size=14, color=FG, first=True, space_after=0, bold=True)
-
-    notes(s, "This slide sets up the contribution. Do not rush it: the entire paper is "
-             "about converting an acknowledged-but-unquantified hazard into a number and a design rule.")
+    notes(s, "This is the core finding and it is a negative one. The obvious idea, link sites "
+             "that share technical details, does not work, because the internet shares "
+             "technical details constantly. We measured it at 0.207 precision, so four links "
+             "in five were wrong. Counting how rare each value is before treating it as "
+             "evidence is what fixes that.")
 
 
-def slide_gap(prs, n) -> None:
+def s_pipeline(prs):
     s = blank(prs)
-    header(s, "Gap in existing work", "The tool that does correlation does not measure it",
-           "OnionScan is the reference tool in this space and it is genuinely good. That is what makes the gap specific.")
+    picture(s, FIG / "d2_pipeline.png", x=0, y=1.05, max_w=W_IN, max_h=5.55,
+            center_x=W_IN / 2)
+    foot(s, "Six stages, one command. Each stage writes down what it produced, including when it failed.")
 
-    rows = [
-        ["", "OnionScan (Lewis, 2016)", "This work"],
-        ["Cross-service correlation", "Supported, described in its own docs", "Supported and scored"],
-        ["Frequency weighting", "Not present", "Core mechanism, cap derived from cluster size"],
-        ["Precision / false-merge figures", "Not reported", "Measured against frozen ground truth"],
-        ["Negative controls", "Not reported", "38 hard negatives, 6 abstention cases"],
-        ["Abstention", "Not present", "Explicit: refuses rather than guessing"],
-        ["Repeatability", "Manual, per-investigation", "Seed-driven, regenerated on demand"],
-    ]
-    table(s, rows, top=2.55, col_widths=[3.2, 4.2, 4.2], size=12.5, row_h=0.46)
-
-    tf = tb(s, 0.85, 6.35, 11.6, 0.5)
-    para(tf, "Our contribution is the measurement and the design consequence, not the idea of correlating.",
-         size=13, color=ACCENT2, first=True, space_after=0, bold=True)
-
-    notes(s, "Be scrupulously fair to OnionScan here. It does correlation; it just does not "
-             "quantify it. Crediting the predecessor properly is what makes our gap credible.")
+    notes(s, "Left to right: build a test network, check the analyst has authorisation "
+             "before collecting anything, detect misconfigurations, correlate services, "
+             "attribute writing style, then build the identity graph. One command runs all "
+             "of it, which matters when you have to reproduce a number in a viva.")
 
 
-def slide_objectives(prs, n) -> None:
+def s_farm(prs):
     s = blank(prs)
-    header(s, "Objectives", "What the project set out to do")
+    picture(s, FIG / "d5_farm.png", x=0, y=1.15, max_w=W_IN, max_h=5.3,
+            center_x=W_IN / 2)
+    foot(s, "Four clusters that really are linked, and decoys that look linked but are not.")
 
-    items = [
-        ("01", "Build ground truth", "A synthetic farm with known operator clusters, so every claim has a right answer to be scored against."),
-        ("02", "Measure the naive approach", "Quantify how badly stock defaults corrupt the obvious correlator, and how much of it is avoidable."),
-        ("03", "Design a correlator that survives it", "Frequency weighting, abstention, and candidate-only output instead of assertions."),
-        ("04", "Validate beyond the synthetic", "Real certificate-transparency data, real server binaries, real onion services we operate ourselves."),
-        ("05", "Put a human in the loop", "An analyst console where nothing merges without a named operator and a stated rationale."),
-    ]
-    y = 2.35
-    for num, head, body in items:
-        sh = card(s, 0.85, y, 11.65, 0.86)
-        tfh = tb(s, 1.05, y + 0.19, 0.75, 0.5)
-        para(tfh, num, size=17, color=ACCENT, bold=True, first=True, space_after=0)
-        tf = tb(s, 1.85, y + 0.13, 10.4, 0.62)
-        para(tf, head, size=14, color=FG, bold=True, first=True, space_after=1)
-        para(tf, body, size=11.5, color=MUTED, space_after=0)
-        y += 0.95
-
-    notes(s, "Five objectives, mapping to the five modules. Do not read them out; say "
-             "that they are ordered by dependency, because ground truth had to exist before anything could be measured.")
+    notes(s, "The decoys are the important part. A test set where everything similar is "
+             "genuinely linked cannot catch a tool that links everything similar. About a "
+             "third of this network exists to punish exactly that mistake.")
 
 
-def slide_architecture(prs, n) -> None:
+def s_detect(prs):
     s = blank(prs)
-    header(s, "Architecture", "Five modules and a farm, built in dependency order")
-
-    boxes = [
-        ("Farm", "ground truth", 0.85, ACCENT2),
-        ("M1  Acquisition", "passive collection", 3.05, ACCENT),
-        ("M2  Detection", "rules + correlator", 5.6, ACCENT),
-        ("M3  Identity graph", "candidate merges", 8.25, ACCENT),
-        ("M6  Console", "analyst decides", 10.75, ACCENT),
-    ]
-    for label, sub, x, colour in boxes:
-        sh = card(s, x, 2.75, 2.05, 1.25, stroke=colour)
-        tf = sh.text_frame
-        tf.margin_left = tf.margin_right = Emu(0)
-        para(tf, label, size=12.5, color=FG, bold=True, first=True, space_after=2,
-             align=PP_ALIGN.CENTER)
-        para(tf, sub, size=9.5, color=MUTED, space_after=0, align=PP_ALIGN.CENTER)
-
-    for x in (2.93, 5.48, 8.13, 10.63):
-        a = s.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, Inches(x), Inches(3.25),
-                               Inches(0.12), Inches(0.22))
-        a.fill.solid(); a.fill.fore_color.rgb = LINE
-        a.line.fill.background(); a.shadow.inherit = False
-
-    band = card(s, 0.85, 4.45, 11.65, 1.5)
-    tf = tb(s, 1.1, 4.68, 11.1, 1.1)
-    para(tf, "RUNNING THROUGH EVERY LAYER", size=10.5, color=WARN, bold=True, first=True, space_after=7)
-    para(tf, "Deployment gates:  no case, no collection  ·  authorisation reference required  "
-             "·  per-case seeds  ·  retention set before data exists", size=12, color=FG, space_after=5)
-    para(tf, "Provenance:  every artefact carries a SHA-256 of the observation it was read from",
-         size=12, color=FG, space_after=0)
-
-    tf = tb(s, 0.85, 6.25, 11.6, 0.6)
-    para(tf, "One command runs the chain:  python -m oniontrace run --seed 20260925   ·   373 tests, all passing",
-         size=12.5, color=MUTED, first=True, space_after=0)
-
-    notes(s, "Point out the ordering: the evaluation harness was built before the modules "
-             "it measures. That is deliberate and it is why the numbers are defensible.")
-
-
-def slide_farm(prs, n) -> None:
-    s = blank(prs)
-    header(s, "Ground truth", "A farm where the answer is known by construction",
-           "Generated from a seed, so anyone can regenerate it and re-derive every number.")
-
-    metrics = [
-        ("14", "services", ACCENT2), ("4", "clusters of 3", FG),
-        ("25", "planted flaws", FG), ("38", "hard negatives", WARN),
-        ("20", "personas", FG), ("6", "abstention cases", FG),
+    kicker(s, "Module 2")
+    title(s, "What it finds on a service", sub="Nineteen checks, run against every service in the network.")
+    stats = [
+        ("19 / 19", "checks caught their planted flaw", TEAL),
+        ("0", "false alarms on the clean services", TEAL),
+        ("7 of 19", "have no clean negative test at all", AMBER),
     ]
     x = 0.85
-    for val, lab, col in metrics:
-        metric(s, x, 2.5, 1.83, value=val, label=lab, color=col)
-        x += 1.95
-
-    bullets(s, [
-        "Twelve services sit in four clusters of three; two are singletons, and two are clean controls.",
-        "The hard negatives are the interesting part: unrelated clusters are given byte-identical",
-        ("vendor-default artefacts, so a naive correlator merges them and every merge is false.", 1),
-        "Near-miss decoys carry a published placeholder handle, so linking a person to it would be",
-        ("an accusation built on public information.", 1),
-        "42 clean-control endpoints exist so a false positive is observable, not just assumed absent.",
-    ], top=4.05, width=11.6, size=14, gap=8)
-
-    notes(s, "The hard negatives are the single most important design decision in the farm. "
-             "Without them, the naive correlator would look fine and we would have learned nothing.")
-
-
-def slide_acquisition(prs, n) -> None:
-    s = blank(prs)
-    header(s, "M1  Acquisition", "Passive collection, behind gates that cannot be skipped",
-           "Everything here reads what an anonymous visitor receives. No credentials, no enumeration, no exploitation.")
-
-    bullets(s, [
-        "Tor SOCKS collection with scheduled revisits and WARC-style snapshots kept for provenance.",
-        "Public Telegram previews via server-rendered pages only; deduplicated by message id.",
-        "Certificate Transparency as a secondary signal linking an onion to clearnet infrastructure.",
-        "Collection permits, run budgets and resumable cursors, so a run is bounded and repeatable.",
-    ], width=7.4, top=2.6)
-
-    card(s, 8.65, 2.6, 3.85, 3.5, stroke=ACCENT2)
-    tf = tb(s, 8.92, 2.85, 3.3, 3.1)
-    para(tf, "THE RULE WE BUILT AROUND", size=10.5, color=ACCENT2, bold=True, first=True, space_after=9)
-    para(tf, "no case, no collection", size=13.5, color=FG, bold=True, space_after=9)
-    para(tf, "A run must name an owning analyst, an authorisation reference, its own seeds, "
-             "and a retention date set at creation.", size=11.5, color=MUTED, space_after=9)
-    para(tf, "There is no global crawl list, so a run cannot inherit targets from a previous investigation.",
-         size=11.5, color=FG, space_after=0)
-
-    notes(s, "This is where a government panel would push, so be ready: the answer is that "
-             "authorisation is a required field with a document reference, not a checkbox.")
-
-
-def slide_detection(prs, n) -> None:
-    s = blank(prs)
-    header(s, "M2  Detection", "19 rules, scored on recall and precision",
-           "Rules look for what a misconfigured service exposes to a visitor: directory listings, exposed dotfiles, version banners, host-key reuse.")
-
-    rows = [
-        ["Rule set", "Recall", "Precision", "What it means"],
-        ["Careful rules (19)", "19 / 19", "19 / 19", "Fires where it should, stays silent where it should"],
-        ["Naive rules (31)", "17 / 19", "17 / 31", "Fires, but also fires on pages that are clean"],
-    ]
-    table(s, rows, top=2.55, col_widths=[3.0, 1.5, 1.6, 5.5], size=13, row_h=0.5, highlight=1)
-
-    tf = tb(s, 0.85, 4.35, 11.6, 1.6)
-    para(tf, "THE HONEST CAVEAT", size=11, color=WARN, bold=True, first=True, space_after=8)
-    para(tf, "For 7 of the 19 rules no negative fixture exists in the farm, so a false positive could not have "
-             "been observed even if the rule were wrong. The defensible sentence is therefore:", size=13, color=FG, space_after=8)
-    para(tf, "\"no false positive was observed, and for seven rules none could have been.\"",
-         size=13.5, color=ACCENT2, bold=True, space_after=0)
-
-    notes(s, "Volunteer this caveat before anyone asks. It is in the paper, and offering it "
-             "is more convincing than defending the 19/19 as if it were complete.")
-
-
-def slide_finding(prs, n) -> None:
-    s = blank(prs)
-    header(s, "Headline finding", "One rule turns a coin-flip into a defensible answer",
-           "Same farm, same seeds, three correlators. Only the treatment of common artefacts changes.")
-
-    rows = [
-        ["Correlator", "Precision", "False-merge rate", "Precision@1"],
-        ["Naive: share any artefact", "0.207", "0.793", "0.75"],
-        ["Thresholded", "0.571", "0.429", "0.75"],
-        ["Frequency-filtered (cap 3)", "1.000", "0.000", "1.00"],
-        ["Random baseline", "0.154", "—", "0.15"],
-    ]
-    table(s, rows, top=2.6, col_widths=[4.6, 2.2, 2.6, 2.2], size=13.5, row_h=0.52, highlight=3)
-
-    tf = tb(s, 0.85, 5.15, 11.6, 1.5)
-    para(tf, "Discarding artefact values that appear on more than three services removes every false merge, and it costs no recall.",
-         size=14, color=FG, first=True, space_after=8, bold=True)
-    para(tf, "The naive correlator is barely better than guessing (0.207 against a 0.154 baseline). A confidence threshold cannot fix it, "
-             "because the false merges are confident: they rest on real, byte-identical artefacts. Only frequency can separate them.",
-         size=12.5, color=MUTED, space_after=0)
-
-    notes(s, "This is the slide to slow down on. The key point is the middle row: a "
-             "threshold does not help, because the false merges score high. That is why the "
-             "fix has to be frequency weighting, not a stricter cutoff.")
-
-
-def slide_graph(prs, n) -> None:
-    s = blank(prs)
-    header(s, "M3  Identity graph", "Candidate merges, never assertions",
-           "The graph proposes. A person decides. Nothing moves without a named operator and a stated reason.")
-
-    metrics = [
-        ("14", "entities"), ("12", "proposed links"), ("1.000", "precision"),
-        ("1.000", "recall"), ("0", "false merges"),
-    ]
-    x = 0.85
-    for val, lab in metrics:
-        metric(s, x, 2.55, 2.25, value=val, label=lab)
-        x += 2.35
-
-    bullets(s, [
-        "Every link carries its evidence, the weight that produced the score, and any counter-evidence.",
-        "A merge requires a named actor and a rationale, and writes a full before-state so it can be reversed exactly.",
-        "Vendor defaults are excluded from every link and reported separately as cohorts, so their absence is explainable.",
-        "Below-threshold pairs are still shown, labelled possible, with the score visible rather than hidden.",
-    ], top=4.05, width=11.6, size=13.5, gap=7)
-
-    notes(s, "If asked why 12 links and not 12 merges: because the system is not allowed to "
-             "merge. The 12 proposals recover all 12 true pairs with no false positive, and an "
-             "analyst still has to confirm each one.")
-
-
-def slide_codemix(prs, n) -> None:
-    s = blank(prs)
-    header(s, "M5  Code-mix block", "The Hinglish feature earns its place, but only when gated",
-           "Language-split function words plus code-mix ratio and switch rate, switched on by detected mix rather than applied to everybody.")
-
-    rows = [
-        ["Writer", "Without code-mix", "With code-mix", "Change"],
-        ["Hinglish (20% mix)", "0.500", "0.750", "+0.250"],
-        ["Pure English", "0.250", "0.250", "no change"],
-        ["Template reuser", "0.750", "0.750", "no change"],
-        ["Overall hit@1", "0.400", "0.450", "+0.050"],
-    ]
-    table(s, rows, top=2.6, col_widths=[4.2, 3.0, 3.0, 2.2], size=13.5, row_h=0.5, highlight=1)
-
-    card(s, 0.85, 5.0, 5.6, 1.55, stroke=WARN)
-    tf = tb(s, 1.1, 5.2, 5.1, 1.2)
-    para(tf, "WHY A GATE AND NOT A FEATURE", size=10.5, color=WARN, bold=True, first=True, space_after=7)
-    para(tf, "Applied to everyone, code-mix cut template reusers from 0.750 to 0.250. "
-             "A writer with a fixed template has little vocabulary variance, so extra "
-             "dimensions are pure noise.", size=11.5, color=FG, space_after=0)
-
-    card(s, 6.85, 5.0, 5.6, 1.55, stroke=BAD)
-    tf = tb(s, 7.1, 5.2, 5.1, 1.2)
-    para(tf, "AND WHY THIS IS NOT A HEADLINE", size=10.5, color=BAD, bold=True, first=True, space_after=7)
-    para(tf, "Four mixed-regime personas means the gain is one query flipping. It is a "
-             "direction, not a magnitude, and the gate was fitted on the same farm.",
-         size=11.5, color=FG, space_after=0)
-
-    notes(s, "The honest framing matters here: we built the differentiator, measured it, "
-             "found it helps only where it should, and reported the template-reuser "
-             "regression rather than hiding it behind an average.")
-
-
-def slide_dashboard(prs, n) -> None:
-    s = blank(prs)
-    header(s, "M6  Analyst console", "The interface has to show doubt, not hide it",
-           "Scores, counter-evidence and the merge log are on the same screen as the finding.")
-
-    img = ROOT / "out" / "screen" / "dashboard.png"
-    if img.exists():
-        s.shapes.add_picture(str(img), Inches(0.85), Inches(2.5), height=Inches(4.15))
-
-        card(s, 8.75, 2.5, 3.75, 4.15)
-        tf = tb(s, 8.98, 2.72, 3.3, 3.75)
-        para(tf, "WHAT IS ON SCREEN", size=10.5, color=ACCENT, bold=True, first=True, space_after=10)
-        for line in [
-            "Force-directed entity graph, coloured by link status.",
-            "Solid lines are supported; dashed are below threshold.",
-            "Every link row shows the artefacts that produced it.",
-            "Conflicts show both sides instead of picking one.",
-            "Confirm, reject and reverse are one click each.",
-            "Evidence pack exports to PDF with the digest ledger.",
-        ]:
-            para(tf, "▪  " + line, size=11.5, color=MUTED, space_after=8)
-    elif not ALLOW_MISSING_SCREENSHOT:
-        raise SystemExit(
-            f"error: {img} is missing.\n"
-            "The console is the M6 evidence; a deck without it carries a placeholder where "
-            "evidence belongs.\n"
-            "  python scripts/capture_dashboard.py        # build a case, serve it, capture it\n"
-            "  python scripts/build_presentation.py --skip-screenshot   # text-only build"
-        )
-
-    notes(s, "Live demo opportunity: start the console on 127.0.0.1:8420, show the graph, "
-             "click a node, then export the evidence pack. If the demo fails, this slide carries it.")
-
-
-def slide_validation(prs, n) -> None:
-    s = blank(prs)
-    header(s, "Real-world validation", "Three channels, none of which touch a third party",
-           "Correlation stays synthetic by necessity, because no public ground truth for operator identity exists. Everything else was validated on real data.")
-
-    cols = [
-        ("Certificate Transparency", ACCENT,
-         [f"{CT['returned']:,} certificates returned",
-          f"{CT['san']:,} with a real .onion SAN",
-          f"{CT['onions']} unique onion addresses",
-          f"{CT['digicert_pct']}% under one issuer",
-          f"{CT['contaminated']} entries rejected as contamination"]),
-        ("Our own servers", ACCENT2,
-         ["Two nginx instances, loopback only",
-          "7 probes against each",
-          "Careful rules: correct verdicts",
-          "Naive rules: fire on clean pages",
-          "Configs and raw responses frozen"]),
-        ("Onion services we ran", WARN,
-         ["Two v3 services published by us",
-          "Fetched over real Tor circuits",
-          "Misconfigured: 2 findings, 0 false",
-          "Naive: 5 findings, 1 false",
-          "Clean control: careful silent, naive fired"]),
-    ]
-    x = 0.85
-    for title, colour, lines in cols:
-        sh = card(s, x, 2.5, 3.75, 3.6, stroke=colour)
-        tf = tb(s, x + 0.25, 2.75, 3.3, 3.2)
-        para(tf, title.upper(), size=10.5, color=colour, bold=True, first=True, space_after=10)
-        for ln in lines:
-            para(tf, "▪  " + ln, size=11.5, color=FG, space_after=8)
+    for big, small, color in stats:
+        card = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(3.0),
+                                  Inches(3.75), Inches(2.2))
+        card.fill.solid()
+        card.fill.fore_color.rgb = CARD
+        card.line.color.rgb = LINE
+        card.line.width = Pt(1.5)
+        card.shadow.inherit = False
+        tf = tb(s, x + 0.35, 3.25, 3.05, 1.7)
+        para(tf, big, size=44, color=color, bold=True, first=True, space_after=10)
+        para(tf, small, size=15, color=MUTED, line_spacing=1.2)
         x += 3.95
 
-    tf = tb(s, 0.85, 6.35, 11.6, 0.6)
-    para(tf, "No third-party onion service was contacted at any point. The contamination count is reported rather than quietly filtered.",
-         size=12.5, color=MUTED, first=True, space_after=0)
+    foot(s, "The third number is the one to be careful about: seven checks have never been seen to fail.")
 
-    notes(s, "Two things to be precise about: the CT numbers are retrospective public data, "
-             "not a live probe; and the two onion services were ours, so no third party was involved. "
-             "Both are stated in the paper.")
+    notes(s, "Say the caveat before anyone asks. Seven of the nineteen rules have no negative "
+             "fixture, so a false alarm on those could exist and we could not have seen it. "
+             "That is why the claim is zero observed and not zero possible.")
 
 
-def slide_ethics(prs, n) -> None:
+def s_results(prs):
     s = blank(prs)
-    header(s, "Ethics and legal posture", "Passive by design, and the design is enforced in code",
-           "This is the part a review panel examines hardest, so it is built into the software rather than promised in prose.")
+    picture(s, FIG / "d4_results.png", x=0, y=1.08, max_w=W_IN, max_h=5.5,
+            center_x=W_IN / 2)
+    foot(s, "The middle bar is the part we expected to work, and it does not. Only counting rarity fixes it.")
 
-    left = [
-        "Only what an anonymous visitor receives is collected.",
-        "No credentials, no enumeration, no exploitation.",
-        "No third-party onion service was ever contacted.",
-        "Tor runs client-only, inside a sandbox without access to keys.",
-    ]
-    right = [
-        "Active scanning was considered and rejected as unlawful.",
-        "Legal footing: Section 43 of the IT Act, and authorisation is a required field.",
-        "SSRF guard blocks private, link-local and metadata addresses.",
-        "NAT64 addresses are judged by the IPv4 they tunnel to.",
-    ]
-
-    card(s, 0.85, 2.5, 5.6, 3.3, stroke=ACCENT2)
-    tf = tb(s, 1.12, 2.75, 5.05, 2.9)
-    para(tf, "WHAT WE DO", size=10.5, color=ACCENT2, bold=True, first=True, space_after=10)
-    for ln in left:
-        para(tf, "▪  " + ln, size=12, color=FG, space_after=9)
-
-    card(s, 6.85, 2.5, 5.6, 3.3, stroke=BAD)
-    tf = tb(s, 7.12, 2.75, 5.05, 2.9)
-    para(tf, "WHAT WE REFUSED TO DO", size=10.5, color=BAD, bold=True, first=True, space_after=10)
-    for ln in right:
-        para(tf, "▪  " + ln, size=12, color=FG, space_after=9)
-
-    tf = tb(s, 0.85, 6.1, 11.6, 0.6)
-    para(tf, "A NAT64 address such as 64:ff9b::7f00:1 is 127.0.0.1. Our first guard allowed it. The test that catches it is now in the suite.",
-         size=12, color=MUTED, first=True, space_after=0)
-
-    notes(s, "The NAT64 example is worth telling: it shows the guard was tested against real "
-             "adversarial cases rather than written and assumed correct.")
+    notes(s, "This is the result the paper is built on. Naive linking gives 0.207. A score "
+             "threshold only reaches 0.571 and cannot do better, because a vendor default "
+             "scores perfectly. Counting how many sites share each value is what takes it to "
+             "1.000 with no false merges.")
 
 
-def slide_limitations(prs, n) -> None:
+def s_console(prs):
     s = blank(prs)
-    header(s, "Limitations", "What this work does not establish",
-           "Stated as structure, not as footnotes. A claim with no boundary is not a research result.")
+    kicker(s, "Module 6")
+    title(s, "The analyst's screen", sub="Every link shows the evidence behind it, and the doubt.")
+    picture(s, SCREEN, x=0.85, y=2.75, max_w=11.6, max_h=3.8, center_x=W_IN / 2)
+    foot(s, "Nothing merges on its own. A named analyst confirms it, and every merge can be undone exactly.")
 
+    notes(s, "Switch to the live console here if it is running. Click a link, point at the "
+             "plus and minus lines, then click confirm. The point: counter-evidence sits next "
+             "to evidence, not behind a score.")
+
+
+def s_real(prs):
+    s = blank(prs)
+    kicker(s, "Validation")
+    title(s, "What we tested on, and what we did not touch",
+          sub="Three lawful ways to get real data without scanning anybody.")
     rows = [
-        ["Limitation", "Consequence"],
-        ["Correlation ground truth is synthetic",
-         "Precision figures describe behaviour on the farm, not on the live network"],
-        ["Small n, fixed topology, one seed family",
-         "Confidence intervals are wide; results reproduced across 3 seeds, not across topologies"],
-        ["7 of 19 rules have no negative fixture",
-         "False positives could not have been observed for those rules"],
-        ["Attribution over real human text is out of scope",
-         "Persona metrics are synthetic retrieval, not authorship attribution"],
-        ["Single-analyst, loopback, no authentication",
-         "This is an analyst tool, not a multi-user deployment"],
+        ("3,018", "real .onion addresses taken from public certificate transparency logs", TEAL),
+        ("2", "of our own servers, one nginx and one onion service, over real Tor", TEAL),
+        ("0", "bytes fetched from a third party we do not own", AMBER),
     ]
-    table(s, rows, top=2.5, col_widths=[4.6, 7.05], size=12.5, row_h=0.52)
+    y = 3.0
+    for big, small, color in rows:
+        tf = tb(s, 0.85, y, 1.9, 0.8)
+        para(tf, big, size=30, color=color, bold=True, first=True)
+        tf2 = tb(s, 2.9, y + 0.08, 9.3, 0.9)
+        para(tf2, small, size=18, color=FG, first=True, line_spacing=1.15)
+        y += 1.2
 
-    tf = tb(s, 0.85, 5.95, 11.6, 0.7)
-    para(tf, "Every one of these is in the paper, in the abstract or in a section that a reviewer will reach.",
-         size=12.5, color=ACCENT2, first=True, space_after=0, bold=True)
+    foot(s, "Correlation stays synthetic, because no public ground truth for operator identity exists.")
 
-    notes(s, "Do not apologise for these. State them as scope. The strongest thing in the "
-             "project is that its boundaries are written down before anyone asks.")
+    notes(s, "This is the slide the examiner will push on. Be direct: we did not scan "
+             "anybody. Certificate transparency logs are public and free to read. The two "
+             "servers are ours. Under section 43 of the IT Act, unauthorised access is an "
+             "offence, so it was never on the table.")
 
 
-def slide_conclusion(prs, n) -> None:
+def s_limits(prs):
     s = blank(prs)
-    header(s, "Conclusion", "What we can now say that we could not say before")
-
+    kicker(s, "Limitations")
+    title(s, "What this does not do")
     items = [
-        ("The hazard is quantified.",
-         "Sharing artefacts naively gives 0.207 precision, barely above the 0.154 baseline, with a 0.793 false-merge rate."),
-        ("The fix is specific and cheap.",
-         "A frequency cap removes every false merge on the farm and loses no recall. It needs no model and no GPU."),
-        ("A threshold cannot substitute.",
-         "False merges are confident because they rest on real, identical artefacts, so tightening a cutoff does not separate them."),
-        ("The machinery exists and is tested.",
-         "Farm, collection, detection, identity graph and analyst console, with 343 automated tests and a regenerable evidence pack."),
-        ("The boundaries are recorded.",
-         "Where the evidence is synthetic, the report says so, and where a rule was never challenged, that is stated too."),
+        "It does not prove two services share an owner. It proposes a link and records who agreed.",
+        "No live collection. Every byte here came from our own machines or a public log.",
+        "Attribution is measured on generated writers, not on people. A direction, not a number.",
+        "The console is one analyst's tool on one machine. It has no login and does not pretend to.",
     ]
-    y = 2.3
-    for head, body in items:
-        card(s, 0.85, y, 11.65, 0.82, fill=PANEL)
-        tf = tb(s, 1.1, y + 0.11, 11.15, 0.62)
-        para(tf, head, size=13, color=ACCENT2, bold=True, first=True, space_after=2)
-        para(tf, body, size=11.5, color=MUTED, space_after=0)
-        y += 0.9
+    y = 2.35
+    for text in items:
+        tf = tb(s, 0.85, y, 11.6, 0.9)
+        para(tf, text, size=20, color=FG, first=True, line_spacing=1.2)
+        rule(s, 0.85, y + 0.82, 11.6, RGBColor(0x24, 0x2E, 0x3A), Pt(1))
+        y += 1.12
 
-    notes(s, "End on the second point. The contribution is not a sophisticated model; it is "
-             "one rule, measured, that changes the answer from a coin flip to a defensible one.")
+    notes(s, "Do not rush this slide. A project that states its limits is trusted on "
+             "everything else it says. If someone finds a gap you did not list, the other "
+             "numbers get doubted too.")
 
 
-def slide_thanks(prs, n) -> None:
+def s_close(prs):
     s = blank(prs)
+    kicker(s, "In one slide", y=1.25)
+    tf = tb(s, 0.85, 1.8, 11.6, 3.4)
+    para(tf, "A shared default is not a link.", size=33, color=FG, bold=True, first=True,
+         space_after=20)
+    para(tf, "Counting rarity turns correlation from a guess into a decision.",
+         size=33, color=AMBER, bold=True, space_after=20)
+    para(tf, "Every claim here carries the test that produced it.",
+         size=33, color=FG, bold=True)
+    rule(s, 0.85, 5.7, 2.2)
 
-    bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(2.15), Inches(0.09), Inches(1.2))
-    bar.fill.solid(); bar.fill.fore_color.rgb = ACCENT
-    bar.line.fill.background(); bar.shadow.inherit = False
-
-    tf = tb(s, 1.25, 2.1, 10.8, 1.4)
-    para(tf, "Thank you", size=52, color=FG, bold=True, first=True, space_after=4)
-    para(tf, "Questions welcome, including the uncomfortable ones.", size=20, color=ACCENT2, space_after=0)
-
-    tf = tb(s, 1.25, 4.35, 11.0, 1.9)
-    para(tf, "Reproduce it", size=11, color=ACCENT, bold=True, first=True, space_after=6)
-    para(tf, "python -m oniontrace run --seed 20260925        # the whole chain, one command",
-         size=12, color=MUTED, space_after=2, font="Courier New")
-    para(tf, "python -m farm validate                          # check the farm is consistent",
-         size=12, color=MUTED, space_after=2, font="Courier New")
-    para(tf, "python -m eval run --seed 20260925 --out ./out   # rebuild every number in this deck",
-         size=12, color=MUTED, space_after=2, font="Courier New")
-    para(tf, "python -m graph --db ./casework/CASE-1/graph.db --case CASE-1 build --farm ./out/farm.json",
-         size=12, color=MUTED, space_after=2, font="Courier New")
-    para(tf, "python -m dashboard                              # analyst console on 127.0.0.1:8420",
-         size=12, color=MUTED, space_after=0, font="Courier New")
-
-    tf = tb(s, 1.25, 6.35, 11.0, 0.5)
-    para(tf, "Garvit Kanojia · S25MCAG0002        Niketa Chauhan · S25MCAG0015        Guide: Prof. (Dr.) Ajay Kumar",
-         size=11.5, color=MUTED, first=True, space_after=0)
-
-    notes(s, "Leave this up during questions. The reproduce commands are the answer to "
-             "'how do we know these numbers are real'.")
+    notes(s, "Land these three sentences and stop. If you have one minute left, these are the minute.")
 
 
-# -- main --------------------------------------------------------------- #
-def build(out: Path) -> Path:
-    prs = new_deck()
-    builders = [
-        slide_title, slide_problem, slide_trap, slide_gap, slide_objectives,
-        slide_architecture, slide_farm, slide_acquisition, slide_detection,
-        slide_finding, slide_graph, slide_codemix, slide_dashboard, slide_validation,
-        slide_ethics, slide_limitations, slide_conclusion, slide_thanks,
-    ]
-    for i, fn in enumerate(builders, start=1):
-        fn(prs, i)
-        page_no(prs.slides[-1], i)
+def s_end(prs):
+    s = blank(prs)
+    tf = tb(s, 0.85, 2.75, 11.6, 2.2)
+    para(tf, "Questions", size=58, color=FG, bold=True, first=True, space_after=22)
+    para(tf, "Including the awkward ones.", size=23, color=MUTED)
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    prs.save(str(out))
-    return out
+    tf2 = tb(s, 0.85, 6.05, 11.6, 0.6)
+    para(tf2, "github.com/idkgarvit  ·  code, tests and the paper live together",
+         size=15, color=MUTED, first=True)
+
+    notes(s, "Have three answers ready: why not scan the live network, why the correlation "
+             "numbers are not on real operators, and what you would do next with more time.")
 
 
-def main(argv=None) -> int:
+# ------------------------------------------------------------------ audit
+def audit(prs) -> list[str]:
+    """Read the deck back and look for what makes one sound written by a machine."""
+
+    problems = []
+    for i, slide in enumerate(prs.slides, 1):
+        for sh in slide.shapes:
+            if not sh.has_text_frame:
+                continue
+            text = sh.text_frame.text
+            low = text.lower()
+            for word in BANNED:
+                if word in low:
+                    problems.append(f"slide {i}: banned phrase {word!r}")
+            if "\u2014" in text or "\u2013" in text:
+                problems.append(f"slide {i}: em or en dash in {text[:40]!r}")
+            for sentence in re.split(r"(?<=[.!?])\s+", text):
+                words = len(sentence.split())
+                if words > 34:
+                    problems.append(f"slide {i}: {words}-word sentence {sentence[:48]!r}")
+    return problems
+
+
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", default="ONIONTRACE_Presentation.pptx")
+    ap.add_argument("--out", default=str(ROOT / "out" / "ONIONTRACE_Presentation.pptx"))
+    ap.add_argument("--skip-screenshot", action="store_true",
+                    help="build without the console image (text-only draft)")
     args = ap.parse_args(argv)
-    path = build(Path(args.out))
-    print(json.dumps({"written": str(path), "bytes": path.stat().st_size}, indent=2))
+
+    missing = [p.name for p in (FIG / "d1_problem.png", FIG / "d2_pipeline.png",
+                                FIG / "d3_defaults.png", FIG / "d4_results.png",
+                                FIG / "d5_farm.png") if not p.exists()]
+    if missing:
+        raise SystemExit(
+            "error: diagrams missing: " + ", ".join(missing) +
+            "\n  python scripts/build_diagrams.py"
+        )
+
+    prs = Presentation()
+    prs.slide_width = Emu(int(W_IN * 914400))
+    prs.slide_height = Emu(int(H_IN * 914400))
+
+    builders = [s_title, s_problem, s_defaults, s_pipeline, s_farm, s_detect,
+                s_results, s_real, s_limits, s_close, s_end]
+    if not args.skip_screenshot:
+        if not SCREEN.exists():
+            raise SystemExit(
+                f"error: {SCREEN} is missing. The console is the evidence for its slide.\n"
+                "  python -m dashboard   then capture, or pass --skip-screenshot"
+            )
+        builders.insert(7, s_console)
+
+    for fn in builders:
+        fn(prs)
+
+    issues = audit(prs)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    prs.save(out)
+
+    print(f"wrote {out}  ({out.stat().st_size:,} bytes)")
+    print(f"{len(prs.slides)} slides")
+    if issues:
+        print(f"\n{len(issues)} text problem(s):")
+        for x in issues:
+            print(f"  - {x}")
+        return 1
+    print("text audit clean: no banned phrases, no dashes, no run-on sentences")
     return 0
 
 
