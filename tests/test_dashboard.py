@@ -203,6 +203,75 @@ def test_merge_without_evidence_is_refused(case):
     assert r.status_code == 400
 
 
+def test_every_page_has_a_top_level_heading(case):
+    """Heading hierarchy starts at H1.
+
+    The case and index pages used to start at H2 and H3, so the outline a screen reader
+    announces had no page title in it at all.
+    """
+
+    client, cid, _ = case
+    for path in ("/", f"/case/{cid}"):
+        html = client.get(path).text
+        assert "<h1" in html, f"{path} has no H1"
+        # and nothing before the first H1 that is an H2
+        head = html.split("<main>", 1)[-1]
+        first = min(
+            (head.find(f"<h{n}") for n in (1, 2, 3) if f"<h{n}" in head),
+            default=-1,
+        )
+        assert head[first:first + 3] == "<h1", f"{path} opens its outline with a lower heading"
+
+
+def test_merge_is_offered_only_after_a_link_is_confirmed(case):
+    """The console must not offer to collapse two entities on evidence alone.
+
+    Before this, `POST /case/{id}/merge` existed but nothing in the UI reached it, so the
+    one operation that moves a node was unreachable for the analyst using the console.
+    """
+
+    client, cid, _ = case
+    data = client.get(f"/api/case/{cid}/graph").json()
+    cand = next(e for e in data["edges"] if e["status"] == "candidate")
+
+    html = client.get(f"/case/{cid}").text
+    assert f'data-edge-id="{cand["edge_id"]}"' in html, "edge cards are not addressable"
+    assert "mergeform" not in html, "merge control offered before any link was confirmed"
+
+    client.post(f"/case/{cid}/edge/{cand['edge_id']}/status",
+                data={"status": "confirmed", "actor": "tester"})
+    html = client.get(f"/case/{cid}").text
+    assert "mergeform" in html, "confirming a link did not reveal the merge control"
+
+
+def test_merge_from_the_console_is_reversible(case):
+    """Confirm -> merge -> reverse, through the same routes the buttons use."""
+
+    client, cid, _ = case
+    data = client.get(f"/api/case/{cid}/graph").json()
+    before = data["counts"]["entities"]
+    cand = next(e for e in data["edges"] if e["status"] == "candidate")
+
+    client.post(f"/case/{cid}/edge/{cand['edge_id']}/status",
+                data={"status": "confirmed", "actor": "tester"})
+    r = client.post(f"/case/{cid}/merge", data={
+        "survivor": cand["a_entity"], "absorbed": cand["b_entity"],
+        "actor": "tester", "rationale": "shared unique favicon",
+    })
+    assert r.status_code in (200, 303)
+    mid = client.get(f"/api/case/{cid}/graph").json()
+    assert mid["counts"]["entities"] == before - 1
+    merge_id = mid["merges"][0]["merge_id"]
+
+    r = client.post(f"/case/{cid}/reverse", data={
+        "merge_id": merge_id, "actor": "tester", "reason": "test",
+    })
+    assert r.status_code in (200, 303)
+    after = client.get(f"/api/case/{cid}/graph").json()
+    assert after["counts"]["entities"] == before
+    assert after["merges"][0]["reversed_at"]
+
+
 def test_findings_reach_the_case_view(case):
     """A case view without its findings is not a case view; it is a graph."""
 

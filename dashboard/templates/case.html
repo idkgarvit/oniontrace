@@ -2,6 +2,8 @@
 {% block title %}ONIONTRACE · {{ case_id }}{% endblock %}
 
 {% block content %}
+<h1 class="pagehead">Case <code>{{ case_id }}</code></h1>
+
 <div class="stats">
   <div class="stat"><span class="n">{{ counts.entities }}</span><span class="l">entities</span></div>
   <div class="stat"><span class="n">{{ counts.edges }}</span><span class="l">proposed links</span></div>
@@ -34,7 +36,9 @@
     <header><h2>Links</h2></header>
     <ol class="edgelist">
       {% for e in edges %}
-      <li class="edge {{ 'is-conflict' if e.has_conflict else e.status }}">
+      <li class="edge {{ 'is-conflict' if e.has_conflict else e.status }}"
+          data-edge-id="{{ e.edge_id }}"
+          data-status="{{ 'conflict' if e.has_conflict else e.status }}">
         <div class="edgehead">
           <a href="/case/{{ case_id }}/entity/{{ e.a_entity }}">{{ e.a_entity }}</a>
           <span class="arrow">↔</span>
@@ -60,6 +64,16 @@
           <button name="status" value="confirmed" class="ok">Confirm</button>
           <button name="status" value="rejected" class="no">Reject</button>
         </form>
+        {% if e.status == 'confirmed' and not e.has_conflict %}
+        <form method="post" action="/case/{{ case_id }}/merge" class="inline mergeform">
+          <input type="hidden" name="survivor" value="{{ e.a_entity }}">
+          <input type="hidden" name="absorbed" value="{{ e.b_entity }}">
+          <input name="actor" placeholder="actor" required aria-label="actor for this merge">
+          <input name="rationale" placeholder="why one operator" required
+                 aria-label="rationale for this merge">
+          <button class="merge">Merge</button>
+        </form>
+        {% endif %}
       </li>
       {% endfor %}
     </ol>

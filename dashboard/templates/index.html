@@ -3,11 +3,13 @@
 {% block subtitle %}Cases on this machine. A graph is built from a farm manifest with <code>python -m graph build</code>.{% endblock %}
 
 {% block content %}
+<h1 class="pagehead">Cases on this machine</h1>
+
 {% if cases %}
 <div class="cards">
   {% for c in cases %}
   <a class="card" href="/case/{{ c.case_id }}">
-    <h3>{{ c.case_id }}</h3>
+    <h2>{{ c.case_id }}</h2>
     <dl>
       <div><dt>entities</dt><dd>{{ c.counts.entities }}</dd></div>
       <div><dt>links</dt><dd>{{ c.counts.edges }}</dd></div>
@@ -19,7 +21,7 @@
 </div>
 {% else %}
 <div class="empty">
-  <h3>No cases yet</h3>
+  <h2>No cases yet</h2>
   <p>Build one from the shipped farm:</p>
   <pre><code>python -m graph --db ./casework/CASE-1/graph.db --case CASE-1 \
     build --farm ./out/farm.json</code></pre>

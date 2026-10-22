@@ -115,7 +115,7 @@ button.no:hover{background:#2e1613}
 .card{background:var(--panel); border:1px solid var(--line); border-radius:10px;
   padding:14px 16px; color:var(--fg)}
 .card:hover{border-color:var(--accent); text-decoration:none}
-.card h3{margin:0 0 10px; font-size:14px}
+.card h2{margin:0 0 10px; font-size:14px}
 .card dl{display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; margin:0}
 .card dl div{display:flex; justify-content:space-between; font-size:12px}
 .card dt{color:var(--muted)} .card dd{margin:0; font-family:ui-monospace,monospace}
@@ -136,3 +136,16 @@ button.no:hover{background:#2e1613}
 .findlist li{padding:2px 0; border-bottom:1px solid #1f2731}
 .findlist li:last-child{border-bottom:none}
 .findlist em{display:block; color:var(--muted); font-style:normal; font-size:10.5px}
+
+.pagehead{margin:0 0 14px; font-size:22px; font-weight:650; letter-spacing:-0.01em}
+.pagehead code{font-size:0.85em; color:var(--accent)}
+.card h2{margin:0 0 10px; font-size:15px; font-weight:650}
+
+/* Merge appears only on a confirmed link: the graph is not allowed to collapse two
+   entities on evidence alone, so the control for doing it is not offered before a
+   named analyst has agreed with the evidence. */
+.mergeform{margin-top:6px; padding-top:6px; border-top:1px dashed var(--line)}
+.mergeform input{font-size:11px; padding:4px 6px; width:118px; background:var(--panel2);
+  border:1px solid var(--line); border-radius:5px; color:var(--foreground)}
+.mergeform button.merge{background:#3a2a5c; border:1px solid #6b4fa8; color:#e8dcff}
+.mergeform button.merge:hover{background:#4a3572}

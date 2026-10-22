@@ -446,7 +446,7 @@ oniontrace/
 tests/
   test_pipeline.py 13 tests; pins stage failure recording, reproducibility, per-case run dirs
   test_graph.py  25 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
-  test_dashboard.py 13 tests; pins route refusals, traversal rejection, evidence-pack limits
+  test_dashboard.py 16 tests; pins route refusals, traversal rejection, evidence-pack limits
   test_farm.py   65 tests; each locks in a property a reported metric depends on
   test_eval.py   65 tests; each pins what a number in the report is allowed to mean
   test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
@@ -526,7 +526,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (361 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (369 today, after `graph/`, `dashboard/`, the code-mix
   block and the end-to-end pipeline landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
@@ -616,6 +616,33 @@ a live network. That claim needs the Part E2.2 pilot and the deployment gates in
 deployment, and until then every number and every guarantee in this repository is a
 statement about a fixture and a boundary we drew ourselves.
 
+
+## Browser QA of the console
+
+The console is tested two ways. `tests/test_dashboard.py` drives the routes with a test
+client, which catches server-side regressions but cannot see a page. `scripts/qa/` drives a
+real Chromium over the DevTools Protocol on a real screen, which catches the things a test
+client cannot:
+
+```bash
+python -m dashboard                                   # in one shell
+chromium --remote-debugging-port=9222 http://127.0.0.1:8420/case/CASE-DEMO
+
+python scripts/qa/stage1_render.py 9222 out/screen/qa  # DOM, layout, contrast, console
+python scripts/qa/stage2_interact.py 9222 out/screen/qa --fresh  # every button, every 404
+python scripts/qa/stage3_lifecycle.py 9222 out/screen/qa         # confirm -> merge -> reverse
+```
+
+Clicks go through `Input.dispatchMouseEvent` at the element's own coordinates after
+confirming the element is the topmost hit at that point, so an invisible overlay or a
+zero-size button is caught rather than bypassed. `--fresh` rebuilds the case first, because
+a QA pass that inherits the previous pass's notes and confirmations measures history
+instead of the app.
+
+These found four defects that the route tests could not: the case and index pages shipped
+with no `H1` at all (headings started at `H2` and `H3`), the merge operation had a route but
+no control, edge cards carried no stable identifier in the DOM, and the render audit counted
+the "No notes yet" placeholder as a note.
 
 ## Rebuilding the deck
 
