@@ -80,14 +80,39 @@ def _cases() -> list[dict[str, Any]]:
     return out
 
 
+def _group_by_service(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group findings by service for display, biggest first.
+
+    Grouped rather than listed flat because a finding's meaning depends on which
+    service it was found on: five findings on one host is one misconfigured operator,
+    the same five spread across five hosts is a fleet.
+    """
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for f in findings:
+        grouped.setdefault(f["service_id"], []).append(f)
+    return [
+        {"service_id": sid, "findings": items}
+        for sid, items in sorted(grouped.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    ]
+
+
 def _entity_view(store: GraphStore, entity_id: str) -> dict[str, Any]:
     ent = store.entity(entity_id)
     all_artefacts = {a.service_id: [] for a in []}
     for art in store.artefacts():
         all_artefacts.setdefault(art.service_id, []).append(art)
 
+    by_service: dict[str, list[dict[str, Any]]] = {}
+    for f in store.findings():
+        by_service.setdefault(f["service_id"], []).append(f)
+
     services = [
-        {"service_id": sid, "artefacts": all_artefacts.get(sid, [])}
+        {
+            "service_id": sid,
+            "artefacts": all_artefacts.get(sid, []),
+            "findings": by_service.get(sid, []),
+        }
         for sid in ent.service_ids
     ]
 
@@ -112,6 +137,7 @@ def index(request: Request) -> HTMLResponse:
 def case_view(request: Request, case_id: str) -> HTMLResponse:
     with _open(case_id) as store:
         graph = store.export()
+        findings = store.findings()
         cohorts = default_cohorts(store.artefacts())
         merges = [
             {
@@ -140,6 +166,8 @@ def case_view(request: Request, case_id: str) -> HTMLResponse:
             "cohorts": cohorts,
             "merges": merges,
             "notes": notes,
+            "findings": findings,
+            "findings_by_service": _group_by_service(findings),
         },
     )
 
@@ -249,6 +277,7 @@ def evidence_pdf(case_id: str) -> Response:
 
     with _open(case_id) as store:
         graph = store.export()
+        findings = store.findings()
         cohorts = default_cohorts(store.artefacts())
         merges = [
             {
@@ -265,7 +294,8 @@ def evidence_pdf(case_id: str) -> Response:
         notes = store.notes()
 
     pdf = render_evidence_pack(
-        case_id=case_id, graph=graph, cohorts=cohorts, merges=merges, notes=notes
+        case_id=case_id, graph=graph, cohorts=cohorts, merges=merges,
+        notes=notes, findings=findings,
     )
     return Response(
         content=pdf,

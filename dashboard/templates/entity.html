@@ -12,7 +12,18 @@
   <header><h2>Services in this candidate</h2></header>
   {% for s in services %}
   <div class="svcblock">
-    <h3><code>{{ s.service_id }}</code></h3>
+    <h3><code>{{ s.service_id }}</code>
+      {% if s.findings %}<span class="badge b-conflict">{{ s.findings|length }} findings</span>
+      {% else %}<span class="badge b-rejected">no findings</span>{% endif %}
+    </h3>
+    {% if s.findings %}
+    <ul class="findlist" style="margin-bottom:8px">
+      {% for f in s.findings %}
+      <li><code>{{ f.kind }}</code> <span class="muted">{{ f.path }}</span>
+        <em>{{ f.evidence[:90] }}</em></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     <table>
       <tr><th>artefact</th><th>value</th><th>observed at</th><th>digest</th></tr>
       {% for a in s.artefacts %}

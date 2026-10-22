@@ -31,6 +31,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Sequence
 
+from eval.detectors.codemix import codemix_profile
 from farm.language import FUNCTION_WORD_SETS
 
 _TOKEN = re.compile(r"[a-z']+")
@@ -109,7 +110,27 @@ def behaviour_profile(posts: Sequence) -> dict[str, float]:
 # Query construction
 # --------------------------------------------------------------------------- #
 
-MODELS: tuple[str, ...] = ("text_full", "text_function", "behaviour", "combined")
+#: Detected code-mix above which the code-mix feature block is switched on.
+#:
+#: Fitted on the farm and reported as fitted. Measured hit@1 by gate, over the 20
+#: persona queries, is flat for every value from 0.15 to 0.25 -- mixed writers 0.750,
+#: English 0.250, template reusers 0.750 -- so the plateau is ten points wide and 0.20
+#: sits in the middle of it rather than on an edge.
+#:
+#: THE HONEST LIMIT: the mixed-writer gain is 0.500 -> 0.750 on FOUR personas, which is
+#: one query flipping. That is a direction, not a magnitude. It is reported here and in
+#: the report as such, because a 25-point lift on n=4 invites exactly the wrong reading.
+MIX_GATE = 0.20
+
+MODELS: tuple[str, ...] = (
+    "text_full",
+    "text_function",
+    "behaviour",
+    "combined",
+    "codemix",
+    "combined_codemix",
+    "combined_gated",
+)
 
 
 @dataclass(frozen=True)
@@ -187,6 +208,30 @@ def features_for(posts: Sequence, model: str) -> dict[str, float]:
         merged.update(
             {f"bh_{k}": v for k, v in behaviour_profile(posts).items()}
         )
+        return merged
+    if model == "codemix":
+        # The Hindi and English spaces are already prefixed by the codemix module,
+        # so nothing here can collide with the monolingual bag.
+        return codemix_profile(posts)
+    if model == "combined_gated":
+        # Code-mix features are only added when the corpus actually looks code-mixed.
+        # Measured reason: applied unconditionally they lifted mixed writers by 25
+        # points on hit@1 and cut template-reusers by 50, because a writer with a fixed
+        # template has little vocabulary variance and extra dimensions are pure noise.
+        # The gate is on the *query* corpus, which is what an analyst observes.
+        merged = dict(text_profile(posts, function_words_only=True))
+        merged.update({f"bh_{k}": v for k, v in behaviour_profile(posts).items()})
+        profiles = codemix_profile(posts)
+        if profiles.get("cm:mean_ratio", 0.0) > MIX_GATE:
+            merged.update(profiles)
+        return merged
+
+    if model == "combined_codemix":
+        # The model the plan actually asked for: style, behaviour and code-mix habit
+        # together. This is the one a deployment would ship if the ablation supports it.
+        merged = dict(text_profile(posts, function_words_only=True))
+        merged.update({f"bh_{k}": v for k, v in behaviour_profile(posts).items()})
+        merged.update(codemix_profile(posts))
         return merged
     raise ValueError(f"unknown model {model!r}; expected one of {MODELS}")
 
@@ -283,11 +328,15 @@ def evaluate(farm, models: Sequence[str] = MODELS) -> dict:
             (drifted if query.drifted else stable)[1].append(truth)
 
         entry = {
-            "features": (
-                {"text_full": "all tokens", "text_function": "function words only",
-                 "behaviour": "hours, cadence, templates, length",
-                 "combined": "function words + behaviour"}[model]
-            ),
+            "features": {
+                "text_full": "all tokens",
+                "text_function": "function words only",
+                "behaviour": "hours, cadence, templates, length",
+                "combined": "function words + behaviour",
+                "codemix": "language-split function words + mix ratio and switch rate",
+                "combined_codemix": "function words + behaviour + code-mix habit",
+                "combined_gated": "function words + behaviour, plus code-mix only when detected",
+            }.get(model, model),
             "long": _bucket_metrics(farm, *by_bucket["long"]),
             "short": _bucket_metrics(farm, *by_bucket["short"]),
             "drift_breakdown": {

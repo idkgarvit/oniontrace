@@ -40,6 +40,12 @@ acquisition package below runs against those same generated fixtures unless a hu
 ## Quick start
 
 ```bash
+# The whole chain in one command: farm -> gates -> detect -> correlate -> attribute -> graph
+python -m oniontrace run --seed 20260925 --case CASE-1
+#   writes out/CASE-1-20260925/{manifest.json,REPORT.md} and casework/CASE-1/graph.db
+#   each case gets its own run directory, so a second case cannot overwrite the first
+#   casework/ is where the analyst console looks by default
+
 # Check the farm is internally consistent (run this before trusting any metric)
 python -m farm validate
 
@@ -210,6 +216,7 @@ fixtures would be decoration.
 | M5 style drift — content vs function words | **100% → 31.2%** vs **50% → 75.0%** (a crossover) |
 | E4 provenance | 83 entries verified; a planted mutation detected, then restored clean |
 | Retrieval abstention | **0/4 → 4/4** correct abstentions once the frozen threshold is applied |
+| M5 code-mix block (gated at mix ≥ 0.20) | Hinglish writers **0.500 → 0.750**; English and template reusers unchanged |
 
 Two of these are worth reading closely.
 
@@ -500,7 +507,8 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (343 today, after `graph/` and `dashboard/` landed.)
+  **284 tests pass in total.** (361 today, after `graph/`, `dashboard/`, the code-mix
+  block and the end-to-end pipeline landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
 the **M5 transformer upgrade** (the committed TF-IDF baseline lives in
@@ -513,6 +521,42 @@ That the correlator is next is the plan's own ordering, not a preference: the fa
 and the harness exist so the modules can be measured as they land, the gates exist so the
 collector satisfied them from its first commit, and acquisition now supplies the snapshots
 the correlator will read.
+
+## The end-to-end pipeline, and the code-mix block
+
+`python -m oniontrace run` executes the six stages in dependency order and writes a
+manifest that records what each one produced. **A failing stage is recorded, not
+swallowed**: the stages it feeds still run and the manifest says which answers are
+missing. A pipeline that stops silently and still reports success is worse than one that
+says detection failed and correlation was therefore skipped.
+
+The generated `REPORT.md` names the limit of each section rather than presenting every
+number as equally strong. Attribution figures are labelled synthetic, and the code-mix
+gain is labelled as four personas.
+
+**The code-mix block (`eval/detectors/codemix.py`)** adds a token-level language ID,
+language-split function-word spaces, a code-mix ratio and an intra-post switch rate. It is
+*gated* on detected mix rather than applied to everyone, because measurement said so:
+
+| Writer | Without code-mix | With code-mix |
+|---|---|---|
+| Hinglish (≈20% mix) | 0.500 | **0.750** |
+| Pure English | 0.250 | 0.250 |
+| Template reuser | 0.750 | 0.750 |
+| Overall hit@1 | 0.400 | 0.450 |
+
+Applied unconditionally, code-mix cut template reusers from 0.750 to 0.250. A writer
+reusing a fixed template has little vocabulary variance, so extra dimensions are noise.
+`MIX_GATE = 0.20` sits in the middle of a 0.10-wide plateau (0.15–0.25) where the gain
+holds with no loss anywhere.
+
+Two limits are stated in the module and repeated here. The gain is 0.500 → 0.750 on
+**four** personas, so it is one query flipping: a direction, not a magnitude. And the gate
+was chosen on the same farm it is scored on, so it is a fitted value, not a held-out one.
+
+The detector shares vocabulary with the generator that produces the text. That overlap is
+measured and reported (`codemix.lexicon_overlap`), because a detector scoring text from
+its own word list has not been shown to generalise.
 
 ## Analyst console and identity graph
 

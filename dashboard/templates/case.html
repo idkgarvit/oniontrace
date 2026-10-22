@@ -66,6 +66,29 @@
   </aside>
 </div>
 
+<section class="panel" style="margin-bottom:16px">
+  <header><h2>Detection findings ({{ findings|length }})</h2>
+    <span class="muted small">M2 rules · what each service exposes to a visitor</span></header>
+  {% if findings_by_service %}
+  <div class="findgrid">
+    {% for g in findings_by_service %}
+    <div class="findcard">
+      <h3><code>{{ g.service_id }}</code></h3>
+      <ul class="findlist">
+        {% for f in g.findings %}
+        <li><code>{{ f.kind }}</code> <span class="muted">{{ f.path }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="hint">For seven of the nineteen rules no negative fixture exists, so a false
+    positive could not have been observed. Absence of a finding is not evidence of a clean service.</p>
+  {% else %}
+  <p class="muted">No findings recorded. Run <code>python -m oniontrace run</code> to populate them.</p>
+  {% endif %}
+</section>
+
 <div class="layout two">
   <section class="panel">
     <header><h2>Vendor-default cohorts</h2></header>

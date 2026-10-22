@@ -90,6 +90,16 @@ CREATE TABLE IF NOT EXISTS merge_log (
     reversed_by  TEXT
 );
 
+CREATE TABLE IF NOT EXISTS finding (
+    finding_id TEXT PRIMARY KEY,
+    service_id TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    path       TEXT NOT NULL,
+    evidence   TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS finding_service ON finding(service_id);
+
 CREATE TABLE IF NOT EXISTS note (
     note_id    TEXT PRIMARY KEY,
     entity_id  TEXT,
@@ -440,6 +450,35 @@ class GraphStore:
             )
         return out
 
+    # -- findings -------------------------------------------------------- #
+    def add_finding(
+        self, *, service_id: str, kind: str, path: str, evidence: str
+    ) -> None:
+        """Record one M2 detection against a service.
+
+        Findings live next to the graph rather than in a separate store because an
+        analyst reading a link needs to see what was found on the services behind it.
+        Two stores would drift the first time only one of them was updated.
+        """
+
+        fid = f"fnd-{_digest([service_id, kind, path])[:16]}"
+        self._conn.execute(
+            "INSERT OR REPLACE INTO finding"
+            " (finding_id, service_id, kind, path, evidence, created_at)"
+            " VALUES (?,?,?,?,?,?)",
+            (fid, service_id, kind, path, evidence, utc_now()),
+        )
+        self._conn.commit()
+
+    def findings(self, *, service_id: str | None = None) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM finding"
+        args: tuple[Any, ...] = ()
+        if service_id:
+            sql += " WHERE service_id = ?"
+            args = (service_id,)
+        sql += " ORDER BY service_id, kind"
+        return [dict(r) for r in self._conn.execute(sql, args)]
+
     # -- notes ----------------------------------------------------------- #
     def _note(self, body: str, *, actor: str, entity_id: str | None = None) -> None:
         self._conn.execute(
@@ -527,6 +566,7 @@ class GraphStore:
                 }
                 for m in self.merge_log()
             ],
+            "findings": self.findings(),
             "notes": self.notes(),
             "counts": {
                 "entities": len([n for n in nodes if n["merged_into"] is None]),
@@ -535,5 +575,6 @@ class GraphStore:
                 "conflicts": len(
                     [e for e in self.edges() if e.status == EdgeStatus.CONFLICT.value]
                 ),
+                "findings": len(self.findings()),
             },
         }

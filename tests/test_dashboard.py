@@ -70,6 +70,19 @@ def case(tmp_path, monkeypatch):
         ["--db", str(db), "--case", "CASE-T", "build", "--farm", str(FARM)]
     )
     assert rc == 0
+
+    # Findings are written by the pipeline's detect stage, not by `graph build`, so
+    # the fixture seeds them directly. Testing the console against a case with no
+    # findings would pass while the findings panel did nothing.
+    from graph.store import GraphStore
+
+    with GraphStore(db, case_id="CASE-T") as store:
+        svc = store.entities()[0].service_ids[0]
+        store.add_finding(service_id=svc, kind="dot_env", path="/.env",
+                          evidence="HTTP 200, body begins AWS_")
+        store.add_finding(service_id=svc, kind="server_status", path="/server-status",
+                          evidence="mod_status table")
+
     return TestClient(app), "CASE-T", tmp_path
 
 
@@ -167,6 +180,40 @@ def test_merge_without_evidence_is_refused(case):
         follow_redirects=False,
     )
     assert r.status_code == 400
+
+
+def test_findings_reach_the_case_view(case):
+    """A case view without its findings is not a case view; it is a graph."""
+
+    client, cid, _ = case
+    r = client.get(f"/case/{cid}")
+    assert r.status_code == 200
+    assert "Detection findings" in r.text
+    assert "findcard" in r.text
+
+
+def test_findings_appear_on_the_entity_card(case):
+    client, cid, _ = case
+    data = client.get(f"/api/case/{cid}/graph").json()
+    with_findings = {
+        f["service_id"] for f in data.get("findings", [])
+    }
+    entity = next(
+        (e for e in data["entities"] if set(e["services"]) & with_findings), None
+    )
+    if entity is None:
+        pytest.skip("no entity carries a finding in this case")
+    r = client.get(f"/case/{cid}/entity/{entity['entity_id']}")
+    assert r.status_code == 200
+    assert "findings" in r.text
+
+
+def test_findings_are_in_the_evidence_pack(case):
+    client, cid, _ = case
+    r = client.get(f"/case/{cid}/evidence.pdf")
+    assert r.status_code == 200
+    text = _pdf_text(r.content)
+    assert "Detection findings" in text
 
 
 def test_evidence_pack_is_a_pdf_that_states_its_limits(case):

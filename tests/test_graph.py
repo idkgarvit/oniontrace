@@ -348,6 +348,30 @@ def test_export_keeps_merged_nodes_visible():
         assert data["counts"]["merged"] == 1
 
 
+def test_findings_are_stored_and_counted():
+    """Findings live beside the graph so a link can be read with what was found on it."""
+
+    with GraphStore(":memory:", case_id="C") as store:
+        store.add_entity("ent-A", "A")
+        store.add_finding(service_id="s1", kind="dot_env", path="/.env",
+                          evidence="HTTP 200, body begins AWS_")
+        store.add_finding(service_id="s1", kind="dot_git", path="/.git/config",
+                          evidence="HTTP 200")
+        assert len(store.findings()) == 2
+        assert len(store.findings(service_id="s1")) == 2
+        assert store.findings(service_id="s2") == []
+        assert store.export()["counts"]["findings"] == 2
+
+
+def test_a_finding_is_idempotent_for_the_same_rule_and_path():
+    """Re-running detection must not double-count the same observation."""
+
+    with GraphStore(":memory:", case_id="C") as store:
+        for _ in range(3):
+            store.add_finding(service_id="s1", kind="dot_env", path="/.env", evidence="x")
+        assert len(store.findings()) == 1
+
+
 def test_notes_are_attributed_and_kept():
     with GraphStore(":memory:", case_id="C") as store:
         store.add_entity("ent-A", "A")

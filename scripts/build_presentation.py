@@ -410,7 +410,7 @@ def slide_architecture(prs, n) -> None:
          size=12, color=FG, space_after=0)
 
     tf = tb(s, 0.85, 6.25, 11.6, 0.6)
-    para(tf, "343 automated tests. farm, eval and gates import nothing outside the standard library.",
+    para(tf, "One command runs the chain:  python -m oniontrace run --seed 20260925   ·   360 tests, all passing",
          size=12.5, color=MUTED, first=True, space_after=0)
 
     notes(s, "Point out the ordering: the evaluation harness was built before the modules "
@@ -543,6 +543,39 @@ def slide_graph(prs, n) -> None:
     notes(s, "If asked why 12 links and not 12 merges: because the system is not allowed to "
              "merge. The 12 proposals recover all 12 true pairs with no false positive, and an "
              "analyst still has to confirm each one.")
+
+
+def slide_codemix(prs, n) -> None:
+    s = blank(prs)
+    header(s, "M5  Code-mix block", "The Hinglish feature earns its place, but only when gated",
+           "Language-split function words plus code-mix ratio and switch rate, switched on by detected mix rather than applied to everybody.")
+
+    rows = [
+        ["Writer", "Without code-mix", "With code-mix", "Change"],
+        ["Hinglish (20% mix)", "0.500", "0.750", "+0.250"],
+        ["Pure English", "0.250", "0.250", "no change"],
+        ["Template reuser", "0.750", "0.750", "no change"],
+        ["Overall hit@1", "0.400", "0.450", "+0.050"],
+    ]
+    table(s, rows, top=2.6, col_widths=[4.2, 3.0, 3.0, 2.2], size=13.5, row_h=0.5, highlight=1)
+
+    card(s, 0.85, 5.0, 5.6, 1.55, stroke=WARN)
+    tf = tb(s, 1.1, 5.2, 5.1, 1.2)
+    para(tf, "WHY A GATE AND NOT A FEATURE", size=10.5, color=WARN, bold=True, first=True, space_after=7)
+    para(tf, "Applied to everyone, code-mix cut template reusers from 0.750 to 0.250. "
+             "A writer with a fixed template has little vocabulary variance, so extra "
+             "dimensions are pure noise.", size=11.5, color=FG, space_after=0)
+
+    card(s, 6.85, 5.0, 5.6, 1.55, stroke=BAD)
+    tf = tb(s, 7.1, 5.2, 5.1, 1.2)
+    para(tf, "AND WHY THIS IS NOT A HEADLINE", size=10.5, color=BAD, bold=True, first=True, space_after=7)
+    para(tf, "Four mixed-regime personas means the gain is one query flipping. It is a "
+             "direction, not a magnitude, and the gate was fitted on the same farm.",
+         size=11.5, color=FG, space_after=0)
+
+    notes(s, "The honest framing matters here: we built the differentiator, measured it, "
+             "found it helps only where it should, and reported the template-reuser "
+             "regression rather than hiding it behind an average.")
 
 
 def slide_dashboard(prs, n) -> None:
@@ -725,6 +758,8 @@ def slide_thanks(prs, n) -> None:
 
     tf = tb(s, 1.25, 4.35, 11.0, 1.9)
     para(tf, "Reproduce it", size=11, color=ACCENT, bold=True, first=True, space_after=6)
+    para(tf, "python -m oniontrace run --seed 20260925        # the whole chain, one command",
+         size=12, color=MUTED, space_after=2, font="Courier New")
     para(tf, "python -m farm validate                          # check the farm is consistent",
          size=12, color=MUTED, space_after=2, font="Courier New")
     para(tf, "python -m eval run --seed 20260925 --out ./out   # rebuild every number in this deck",
@@ -748,7 +783,7 @@ def build(out: Path) -> Path:
     builders = [
         slide_title, slide_problem, slide_trap, slide_gap, slide_objectives,
         slide_architecture, slide_farm, slide_acquisition, slide_detection,
-        slide_finding, slide_graph, slide_dashboard, slide_validation,
+        slide_finding, slide_graph, slide_codemix, slide_dashboard, slide_validation,
         slide_ethics, slide_limitations, slide_conclusion, slide_thanks,
     ]
     for i, fn in enumerate(builders, start=1):

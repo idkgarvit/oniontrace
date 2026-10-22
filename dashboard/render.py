@@ -71,9 +71,10 @@ TEMPLATE = """<!doctype html>
 
 <h2>Summary</h2>
 <table>
-  <tr><th>Entities</th><th>Merged</th><th>Proposed links</th><th>Conflicts</th><th>Notes</th></tr>
+  <tr><th>Entities</th><th>Merged</th><th>Findings</th><th>Proposed links</th>
+      <th>Conflicts</th><th>Notes</th></tr>
   <tr>
-    <td>{n_entities}</td><td>{n_merged}</td><td>{n_edges}</td>
+    <td>{n_entities}</td><td>{n_merged}</td><td>{n_findings}</td><td>{n_edges}</td>
     <td>{n_conflicts}</td><td>{n_notes}</td>
   </tr>
 </table>
@@ -83,6 +84,17 @@ TEMPLATE = """<!doctype html>
   <tr><th style="width:26%">Entity</th><th style="width:12%">Status</th>
       <th style="width:30%">Services</th><th>Artefacts observed</th></tr>
   {entity_rows}
+</table>
+
+<h2>Detection findings</h2>
+<p class="muted" style="margin-top:0">
+  What each service exposes to a passive visitor. These are observations, not
+  conclusions: a version banner is a fact, and what it implies is an inference.
+</p>
+<table>
+  <tr><th style="width:18%">Service</th><th style="width:22%">Rule</th>
+      <th style="width:18%">Path</th><th>Evidence</th></tr>
+  {finding_rows}
 </table>
 
 <h2>Proposed links</h2>
@@ -156,6 +168,7 @@ def render_evidence_pack(
     cohorts: list[dict[str, Any]],
     merges: list[dict[str, Any]],
     notes: list[dict[str, Any]],
+    findings: list[dict[str, Any]] | None = None,
 ) -> bytes:
     """Build the PDF bytes for one case."""
 
@@ -193,6 +206,16 @@ def render_evidence_pack(
         "</tr>"
         for e in sorted(graph["edges"], key=lambda x: -x["score"])
     )
+
+    finding_rows = "".join(
+        "<tr>"
+        f"<td class=\"mono\">{html.escape(f['service_id'])}</td>"
+        f"<td class=\"mono\">{html.escape(f['kind'])}</td>"
+        f"<td class=\"mono\">{html.escape(f['path'])}</td>"
+        f"<td>{html.escape(str(f['evidence'])[:180])}</td>"
+        "</tr>"
+        for f in sorted(findings or [], key=lambda x: (x["service_id"], x["kind"]))
+    ) or '<tr><td colspan="4" class="muted">no detection findings recorded</td></tr>'
 
     cohort_rows = "".join(
         "<tr>"
@@ -245,6 +268,8 @@ def render_evidence_pack(
         case_id=html.escape(case_id),
         generated=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         n_entities=len(entities),
+        n_findings=len(findings or []),
+        finding_rows=finding_rows,
         n_merged=len(merged),
         n_edges=len(graph["edges"]),
         n_conflicts=graph["counts"].get("conflicts", 0),
