@@ -348,6 +348,68 @@ def test_export_keeps_merged_nodes_visible():
         assert data["counts"]["merged"] == 1
 
 
+def test_merging_the_same_pair_twice_is_refused():
+    """A merge records a decision, so the same decision cannot be recorded twice.
+
+    Without this guard, clicking Merge twice wrote two merge records that changed
+    nothing. The log then claimed two decisions where one was made, and reversing either
+    record restored a state the other had already superseded.
+    """
+
+    def linked_pair(store) -> None:
+        store.add_entity("ent-A", "A")
+        store.add_entity("ent-B", "B")
+        store.add_edge(
+            to_edges(
+                [
+                    propose_for_pair(
+                        "ent-A", ["s1"], {"favicon_sha256": "f"},
+                        "ent-B", ["s2"], {"favicon_sha256": "f"},
+                        {("favicon_sha256", "f"): 2},
+                    )
+                ]
+            )[0]
+        )
+
+    with GraphStore(":memory:", case_id="C") as store:
+        linked_pair(store)
+        store.merge("ent-A", "ent-B", actor="a.sharma", rationale="shared favicon")
+        assert len(store.merge_log()) == 1
+
+        with pytest.raises(GraphError, match="already merged"):
+            store.merge("ent-A", "ent-B", actor="a.sharma", rationale="again")
+
+        # and in the other direction, which moves nothing either
+        with pytest.raises(GraphError, match="already merged"):
+            store.merge("ent-B", "ent-A", actor="a.sharma", rationale="reversed pair")
+
+        assert len(store.merge_log()) == 1, "a refused merge must not be logged"
+
+
+def test_a_merged_entity_is_not_a_merge_candidate_again():
+    with GraphStore(":memory:", case_id="C") as store:
+        store.add_entity("ent-A", "A")
+        store.add_entity("ent-B", "B")
+        store.add_edge(
+            to_edges(
+                [
+                    propose_for_pair(
+                        "ent-A", ["s1"], {"favicon_sha256": "f"},
+                        "ent-B", ["s2"], {"favicon_sha256": "f"},
+                        {("favicon_sha256", "f"): 2},
+                    )
+                ]
+            )[0]
+        )
+        assert store.entity("ent-B").merged_into is None
+
+        store.merge("ent-A", "ent-B", actor="a.sharma", rationale="shared favicon")
+        assert store.entity("ent-B").merged_into == "ent-A"
+
+        store.reverse_merge(store.merge_log()[0].merge_id, actor="a.sharma", reason="wrong")
+        assert store.entity("ent-B").merged_into is None
+
+
 def test_findings_are_stored_and_counted():
     """Findings live beside the graph so a link can be read with what was found on it."""
 

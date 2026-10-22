@@ -154,6 +154,10 @@ class Entity:
     status: str = "candidate"
     service_ids: list[str] = field(default_factory=list)
     created_at: str = ""
+    # Whether this entity has been folded into another. It lives on the model because
+    # every caller that asks "can I act on this entity" needs it, and a store method that
+    # silently dropped a database column left merge state invisible outside SQL.
+    merged_into: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -163,6 +167,7 @@ class Entity:
             "status": self.status,
             "service_ids": list(self.service_ids),
             "created_at": self.created_at,
+            "merged_into": self.merged_into,
         }
 
 

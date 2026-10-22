@@ -186,6 +186,7 @@ class GraphStore:
             status=r["status"],
             service_ids=services,
             created_at=r["created_at"],
+            merged_into=r["merged_into"],
         )
 
     def entities(self, *, include_merged: bool = False) -> list[Entity]:
@@ -320,6 +321,19 @@ class GraphStore:
         if survivor == absorbed:
             raise GraphError("cannot merge an entity into itself")
 
+        # Both sides must still be live. Without this, merging the same pair twice wrote
+        # a second merge record that changed nothing: the log then claimed two decisions
+        # where an analyst made one, and reversing either record restored a state the
+        # other record had already superseded.
+        sur = self.entity(survivor)
+        abs_ = self.entity(absorbed)
+        for ent in (sur, abs_):
+            if ent.merged_into:
+                raise GraphError(
+                    f"{ent.entity_id} is already merged into {ent.merged_into}; "
+                    "reverse that merge if the decision was wrong"
+                )
+
         a, b = _canonical(survivor, absorbed)
         edge = self._conn.execute(
             "SELECT edge_id FROM edge WHERE a_entity = ? AND b_entity = ?", (a, b)
@@ -329,8 +343,6 @@ class GraphStore:
                 "no evidence links these entities; propose an edge before merging"
             )
 
-        sur = self.entity(survivor)
-        abs_ = self.entity(absorbed)
         before = {
             "survivor": sur.to_dict(),
             "absorbed": abs_.to_dict(),

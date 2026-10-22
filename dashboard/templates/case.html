@@ -13,6 +13,12 @@
   <div class="stat"><span class="n">{{ cohorts|length }}</span><span class="l">default cohorts</span></div>
 </div>
 
+{% if error %}
+<p class="banner err" role="alert">
+  <b>Refused:</b> {{ error }} — nothing was changed.
+</p>
+{% endif %}
+
 <p class="banner">
   Every line below is a <b>candidate link</b>. The graph proposes; it never merges on its own.
   A score is an aggregate of observed artefacts and is shown so you can disagree with it.
@@ -60,12 +66,14 @@
           {% endfor %}
         </ul>
         <form method="post" action="/case/{{ case_id }}/edge/{{ e.edge_id }}/status" class="inline">
+          <input type="hidden" name="onerror" value="case">
           <input type="hidden" name="actor" value="analyst">
           <button name="status" value="confirmed" class="ok">Confirm</button>
           <button name="status" value="rejected" class="no">Reject</button>
         </form>
-        {% if e.status == 'confirmed' and not e.has_conflict %}
+        {% if e.status == 'confirmed' and not e.has_conflict and e.mergeable %}
         <form method="post" action="/case/{{ case_id }}/merge" class="inline mergeform">
+          <input type="hidden" name="onerror" value="case">
           <input type="hidden" name="survivor" value="{{ e.a_entity }}">
           <input type="hidden" name="absorbed" value="{{ e.b_entity }}">
           <input name="actor" placeholder="actor" required aria-label="actor for this merge">
@@ -134,6 +142,7 @@
           {% if m.reversed_at %}<span class="muted">reversed</span>
           {% else %}
           <form method="post" action="/case/{{ case_id }}/reverse" class="inline">
+            <input type="hidden" name="onerror" value="case">
             <input type="hidden" name="merge_id" value="{{ m.merge_id }}">
             <input type="hidden" name="actor" value="analyst">
             <input type="hidden" name="reason" value="analyst review">

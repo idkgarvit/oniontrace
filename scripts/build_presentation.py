@@ -413,7 +413,7 @@ def slide_architecture(prs, n) -> None:
          size=12, color=FG, space_after=0)
 
     tf = tb(s, 0.85, 6.25, 11.6, 0.6)
-    para(tf, "One command runs the chain:  python -m oniontrace run --seed 20260925   ·   369 tests, all passing",
+    para(tf, "One command runs the chain:  python -m oniontrace run --seed 20260925   ·   373 tests, all passing",
          size=12.5, color=MUTED, first=True, space_after=0)
 
     notes(s, "Point out the ordering: the evaluation harness was built before the modules "

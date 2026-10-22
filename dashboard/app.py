@@ -23,6 +23,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from urllib.parse import quote
+
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -80,6 +82,24 @@ def _cases() -> list[dict[str, Any]]:
     return out
 
 
+def _refuse(case_id: str, exc: Exception, *, from_form: bool) -> RedirectResponse:
+    """Turn a refusal into something the person who asked for it can act on.
+
+    A failing form post used to render FastAPI's raw `{"detail": ...}` as the whole page:
+    the analyst lost the case view and got a JSON blob with no way back. A browser form is
+    now redirected to the case with the reason in a banner; a programmatic caller still
+    gets the 400, because a machine wants the status code.
+
+    Call it as `return _refuse(...)`. A response cannot be raised, and raising one turned
+    every refusal into a 500.
+    """
+
+    message = str(exc) or exc.__class__.__name__
+    if from_form:
+        return RedirectResponse(f"/case/{case_id}?error={quote(message)}", status_code=303)
+    raise HTTPException(status_code=400, detail=message)
+
+
 def _group_by_service(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Group findings by service for display, biggest first.
 
@@ -134,7 +154,7 @@ def index(request: Request) -> HTMLResponse:
 
 
 @app.get("/case/{case_id}", response_class=HTMLResponse)
-def case_view(request: Request, case_id: str) -> HTMLResponse:
+def case_view(request: Request, case_id: str, error: str = "") -> HTMLResponse:
     with _open(case_id) as store:
         graph = store.export()
         findings = store.findings()
@@ -154,6 +174,13 @@ def case_view(request: Request, case_id: str) -> HTMLResponse:
         notes = store.notes()
 
     live = [e for e in graph["entities"] if e["merged_into"] is None]
+    live_ids = {e["entity_id"] for e in live}
+    # A link whose ends are no longer both live cannot be merged again. The store refuses
+    # it, so offering the control would only produce an error page.
+    edges = sorted(graph["edges"], key=lambda e: -e["score"])
+    for e in edges:
+        e["mergeable"] = e["a_entity"] in live_ids and e["b_entity"] in live_ids
+
     return templates.TemplateResponse(
         request,
         "case.html",
@@ -162,12 +189,13 @@ def case_view(request: Request, case_id: str) -> HTMLResponse:
             "graph_json": json.dumps(graph),
             "counts": graph["counts"],
             "entities": live,
-            "edges": sorted(graph["edges"], key=lambda e: -e["score"]),
+            "edges": edges,
             "cohorts": cohorts,
             "merges": merges,
             "notes": notes,
             "findings": findings,
             "findings_by_service": _group_by_service(findings),
+            "error": error,
         },
     )
 
@@ -215,7 +243,11 @@ def add_note(
 
 @app.post("/case/{case_id}/edge/{edge_id}/status")
 def set_edge_status(
-    case_id: str, edge_id: str, status: str = Form(...), actor: str = Form(...)
+    case_id: str,
+    edge_id: str,
+    status: str = Form(...),
+    actor: str = Form(...),
+    onerror: str = Form(default=""),
 ) -> RedirectResponse:
     if status not in {EdgeStatus.CONFIRMED.value, EdgeStatus.REJECTED.value, EdgeStatus.POSSIBLE.value}:
         raise HTTPException(status_code=400, detail="invalid status")
@@ -223,7 +255,7 @@ def set_edge_status(
         try:
             store.set_edge_status(edge_id, status, actor=actor)
         except GraphError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return _refuse(case_id, exc, from_form=onerror == "case")
     return RedirectResponse(f"/case/{case_id}", status_code=303)
 
 
@@ -234,12 +266,13 @@ def merge(
     absorbed: str = Form(...),
     actor: str = Form(...),
     rationale: str = Form(...),
+    onerror: str = Form(default=""),
 ) -> RedirectResponse:
     with _open(case_id) as store:
         try:
             store.merge(survivor, absorbed, actor=actor, rationale=rationale)
         except GraphError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return _refuse(case_id, exc, from_form=onerror == "case")
     return RedirectResponse(f"/case/{case_id}", status_code=303)
 
 
@@ -249,12 +282,13 @@ def reverse(
     merge_id: str = Form(...),
     actor: str = Form(...),
     reason: str = Form(default=""),
+    onerror: str = Form(default=""),
 ) -> RedirectResponse:
     with _open(case_id) as store:
         try:
             store.reverse_merge(merge_id, actor=actor, reason=reason)
         except GraphError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return _refuse(case_id, exc, from_form=onerror == "case")
     return RedirectResponse(f"/case/{case_id}", status_code=303)
 
 

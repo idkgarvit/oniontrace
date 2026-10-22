@@ -149,3 +149,5 @@ button.no:hover{background:#2e1613}
   border:1px solid var(--line); border-radius:5px; color:var(--foreground)}
 .mergeform button.merge{background:#3a2a5c; border:1px solid #6b4fa8; color:#e8dcff}
 .mergeform button.merge:hover{background:#4a3572}
+
+.banner.err{border-color:#7a2f36; background:#2a1416; color:#ffd9dc}

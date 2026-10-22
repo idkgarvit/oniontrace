@@ -272,6 +272,64 @@ def test_merge_from_the_console_is_reversible(case):
     assert after["merges"][0]["reversed_at"]
 
 
+def test_the_merge_control_disappears_once_a_side_is_merged(case):
+    """Offering a control the store will refuse is a button that can only produce an error."""
+
+    client, cid, _ = case
+    data = client.get(f"/api/case/{cid}/graph").json()
+    cand = next(e for e in data["edges"] if e["status"] == "candidate")
+    client.post(f"/case/{cid}/edge/{cand['edge_id']}/status",
+                data={"status": "confirmed", "actor": "tester"})
+    assert "mergeform" in client.get(f"/case/{cid}").text
+
+    client.post(f"/case/{cid}/merge", data={
+        "survivor": cand["a_entity"], "absorbed": cand["b_entity"],
+        "actor": "tester", "rationale": "shared favicon",
+    })
+    html = client.get(f"/case/{cid}").text
+    assert html.count("mergeform") == 0, "merge offered on a pair that is already merged"
+
+    # and asking anyway is refused rather than silently logged a second time
+    r = client.post(f"/case/{cid}/merge", data={
+        "survivor": cand["a_entity"], "absorbed": cand["b_entity"],
+        "actor": "tester", "rationale": "again",
+    })
+    assert r.status_code == 400
+    assert len(client.get(f"/api/case/{cid}/graph").json()["merges"]) == 1
+
+
+def test_a_refused_merge_returns_a_page_to_a_browser_and_400_to_a_machine(case):
+    """A failing form post must not replace the analyst's page with raw JSON.
+
+    `<input required>` accepts whitespace, so a rationale of three spaces reached the
+    store and rendered `{"detail": "a merge requires a rationale"}` as the entire page.
+    """
+
+    client, cid, _ = case
+    data = client.get(f"/api/case/{cid}/graph").json()
+    cand = next(e for e in data["edges"] if e["status"] == "candidate")
+    client.post(f"/case/{cid}/edge/{cand['edge_id']}/status",
+                data={"status": "confirmed", "actor": "tester"})
+    payload = {
+        "survivor": cand["a_entity"], "absorbed": cand["b_entity"],
+        "actor": "tester", "rationale": "   ",
+    }
+
+    # A browser form carries the marker and gets the case back with a banner.
+    r = client.post(f"/case/{cid}/merge", data={**payload, "onerror": "case"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert "error=" in r.headers["location"]
+    page = client.get(r.headers["location"]).text
+    assert "banner err" in page and "requires a rationale" in page
+    assert "Entity graph" in page, "the analyst lost the case view"
+
+    # A programmatic caller gets the status code it can branch on.
+    r = client.post(f"/case/{cid}/merge", data=payload, follow_redirects=False)
+    assert r.status_code == 400
+    assert "rationale" in r.json()["detail"]
+
+
 def test_findings_reach_the_case_view(case):
     """A case view without its findings is not a case view; it is a graph."""
 
