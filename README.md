@@ -654,7 +654,7 @@ text. Three scripts produce it, and each one refuses to guess:
 ```bash
 python scripts/build_diagrams.py                          # five diagrams -> out/fig/*.png
 python -m dashboard &                                     # the console slide needs it
-python scripts/capture_dashboard.py                       # photograph it
+python scripts/capture_dashboard.py --selector .graph-panel --width 900 --height 1200
 python scripts/build_presentation.py --out deck.pptx      # assemble and audit the text
 python scripts/verify_deck.py deck.pptx                   # bounds and text fit
 python scripts/analyse_slides.py out/preview/slides     # measure the rendered pixels
@@ -674,6 +674,12 @@ out, then measures clipping, overflow and image-over-text collisions in the DOM;
 writes the per-slide PNGs and the PDF from that same render. `capture_dashboard.py` refuses
 to run if something is already listening on the console port, since a stale server would be
 photographed instead of the one the script just built.
+
+The console is captured as one element, not as a whole page. A full-page capture puts about
+1920 CSS pixels across the slide, which lands the console's 10 to 13 pixel labels at roughly
+3.5pt, unreadable past the front row. Cropping to the graph panel at a 900 pixel viewport
+makes the same labels about 7pt, and the capture refuses an element wider than 1000 CSS pixels
+for exactly that reason.
 
 `analyse_slides.py` reads the rendered PNGs for what geometry cannot see: a slide that is
 nearly blank because a figure failed to load, content running into an edge, and one slide

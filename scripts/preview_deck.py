@@ -59,10 +59,27 @@ def slide_html(prs, slide, index: int, imgdir: Path) -> str:
             )
             continue
         if not sh.has_text_frame or not sh.text_frame.text.strip():
-            # an empty shape (the accent rule) still occupies space
+            # Shapes with no text are the accent rules and the stat cards. Paint them with
+            # their real fill and border: a preview that draws every one of them as a solid
+            # border-coloured block makes the cards look like grey slabs on the contact sheet
+            # while the actual deck has dark cards with a thin outline.
+            fill, border, radius = "#2a3542", "none", "0"
+            try:
+                if sh.fill.type is not None and sh.fill.fore_color.type is not None:
+                    fill = f"#{sh.fill.fore_color.rgb}"
+            except (AttributeError, TypeError):
+                pass
+            try:
+                if sh.line.color.type is not None:
+                    border = f"1px solid #{sh.line.color.rgb}"
+            except (AttributeError, TypeError):
+                pass
+            if sh.shape_type == 5:  # rounded rectangle
+                radius = "6px"
             parts.append(
                 f"<div style='position:absolute;left:{x}in;top:{y}in;width:{w}in;height:{h}in;"
-                f"background:#2a3542' data-kind='bar'></div>"
+                f"background:{fill};border:{border};border-radius:{radius}' "
+                f"data-kind='bar'></div>"
             )
             continue
 

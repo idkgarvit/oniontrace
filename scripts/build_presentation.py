@@ -246,10 +246,10 @@ def s_console(prs):
     s = blank(prs)
     # No heading here on purpose. The screenshot is the argument, and every inch given to a
     # title is an inch taken off a console the back row has to read.
-    picture(s, SCREEN, x=0.85, y=0.42, max_w=11.6, max_h=5.85, center_x=W_IN / 2)
-    tf = tb(s, 0.85, 6.55, 11.6, 0.8)
+    picture(s, SCREEN, x=0.85, y=0.40, max_w=11.6, max_h=6.15, center_x=W_IN / 2)
+    tf = tb(s, 0.85, 6.78, 11.6, 0.6)
     para(tf, "The analyst's console. Evidence and counter-evidence sit side by side, and "
-             "nothing merges until a named person says so.", size=17, color=MUTED, first=True)
+             "nothing merges until a named person says so.", size=14, color=MUTED, first=True)
 
     notes(s, "Switch to the live console here if it is running. Click a link, point at the "
              "plus and minus lines, then click confirm. The point: counter-evidence sits next "
