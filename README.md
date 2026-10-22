@@ -500,20 +500,49 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.**
+  **284 tests pass in total.** (343 today, after `graph/` and `dashboard/` landed.)
 
-Not yet implemented, in plan order: the **production** M2 misconfig rules and
-cross-service correlator, then M3, M5 and M6-lite — the harness scores reference
-detectors in `eval/detectors/`, which is what makes the gap measurable rather than
-invisible. **Live acquisition is deliberately unfinished**: the transport
-exists and its five guards are tested, but no run in this repository has ever fetched a
-byte over a network, and any report citing acquisition has to say so. M1 is therefore
-scored as `fixture-verified` and never as `live-tested`.
+Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
+the **M5 transformer upgrade** (the committed TF-IDF baseline lives in
+`eval/detectors/attribution.py`). **Live acquisition is deliberately unfinished**: the
+transport exists and its five guards are tested, but no run in this repository has ever
+fetched a byte from a third-party target, and any report citing acquisition has to say so.
+M1 is therefore scored as `fixture-verified` and never as `live-tested`.
 
 That the correlator is next is the plan's own ordering, not a preference: the farm (WP2.1)
 and the harness exist so the modules can be measured as they land, the gates exist so the
 collector satisfied them from its first commit, and acquisition now supplies the snapshots
 the correlator will read.
+
+## Analyst console and identity graph
+
+Two modules have landed since the paragraph above was written, and this section replaces it
+for those parts.
+
+**`graph/` — M3 identity graph.** SQLite rather than Neo4j, so a marker can run it with the
+standard library. The module exists to enforce one rule: *the system produces candidate
+merges, never assertions*. A link is a proposal with its evidence attached; `merge()` is the
+only operation that moves a node and it demands a named actor, a stated rationale, and a
+prior edge, and it writes a complete before-state so `reverse_merge()` restores the pair
+exactly. Vendor defaults and published placeholders are excluded from every link and
+reported separately as *cohorts*, so an absent link is explainable rather than mysterious.
+
+Measured against the shipped farm, the graph proposes **12 links that recover all 12 true
+cluster pairs with no false positive** (precision 1.000, recall 1.000). Six of those score
+above the candidate threshold and six fall below it; the six below are still shown, labelled
+`possible`, with their scores visible.
+
+**`dashboard/` — M6-lite console.** FastAPI, bound to `127.0.0.1` with the host not
+configurable, serving one case at a time: entity graph, per-link evidence including
+counter-evidence, confirm/reject, reversible merges, analyst notes, and a one-click PDF
+evidence pack carrying the artefact digest ledger and its own statement of what a digest
+does not establish. There is no authentication. That is a stated limitation for a
+single-analyst tool, not an oversight.
+
+```bash
+python -m graph --db ./casework/CASE-1/graph.db --case CASE-1 build --farm ./out/farm.json
+python -m dashboard        # http://127.0.0.1:8420
+```
 
 ### A note on what none of this claims
 

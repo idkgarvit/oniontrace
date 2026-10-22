@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}ONIONTRACE · {{ case_id }}{% endblock %}
+
+{% block content %}
+<div class="stats">
+  <div class="stat"><span class="n">{{ counts.entities }}</span><span class="l">entities</span></div>
+  <div class="stat"><span class="n">{{ counts.edges }}</span><span class="l">proposed links</span></div>
+  <div class="stat {% if counts.conflicts %}warn{% endif %}">
+    <span class="n">{{ counts.conflicts }}</span><span class="l">conflicts</span></div>
+  <div class="stat"><span class="n">{{ counts.merged }}</span><span class="l">merged</span></div>
+  <div class="stat"><span class="n">{{ cohorts|length }}</span><span class="l">default cohorts</span></div>
+</div>
+
+<p class="banner">
+  Every line below is a <b>candidate link</b>. The graph proposes; it never merges on its own.
+  A score is an aggregate of observed artefacts and is shown so you can disagree with it.
+</p>
+
+<div class="layout">
+  <section class="panel graph-panel">
+    <header><h2>Entity graph</h2>
+      <div class="legend">
+        <span><i class="dot s-candidate"></i>candidate</span>
+        <span><i class="dot s-possible"></i>possible</span>
+        <span><i class="dot s-conflict"></i>conflict</span>
+        <span><i class="dot s-confirmed"></i>confirmed</span>
+      </div>
+    </header>
+    <svg id="graph" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg>
+    <p class="hint">Drag a node to move it. Click a node to open its card.</p>
+  </section>
+
+  <aside class="panel">
+    <header><h2>Links</h2></header>
+    <ol class="edgelist">
+      {% for e in edges %}
+      <li class="edge {{ 'is-conflict' if e.has_conflict else e.status }}">
+        <div class="edgehead">
+          <a href="/case/{{ case_id }}/entity/{{ e.a_entity }}">{{ e.a_entity }}</a>
+          <span class="arrow">↔</span>
+          <a href="/case/{{ case_id }}/entity/{{ e.b_entity }}">{{ e.b_entity }}</a>
+        </div>
+        <div class="edgemeta">
+          <span class="badge b-{{ 'conflict' if e.has_conflict else e.status }}">
+            {{ 'conflict' if e.has_conflict else e.status }}</span>
+          <span class="method">{{ e.method }}</span>
+          <span class="score">{{ '%.3f'|format(e.score) }}</span>
+        </div>
+        <ul class="evidence">
+          {% for ev in e.supporting %}
+          <li class="sup">+ {{ ev.kind }} <code>{{ ev.value[:34] }}</code>
+            <em>{{ ev.note }}</em></li>
+          {% endfor %}
+          {% for ev in e.counter %}
+          <li class="con">− {{ ev.kind }} {{ ev.note }}</li>
+          {% endfor %}
+        </ul>
+        <form method="post" action="/case/{{ case_id }}/edge/{{ e.edge_id }}/status" class="inline">
+          <input type="hidden" name="actor" value="analyst">
+          <button name="status" value="confirmed" class="ok">Confirm</button>
+          <button name="status" value="rejected" class="no">Reject</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ol>
+  </aside>
+</div>
+
+<div class="layout two">
+  <section class="panel">
+    <header><h2>Vendor-default cohorts</h2></header>
+    <p class="muted small">Values shared because software ships them, or because they were
+      published elsewhere. Excluded from every link above. Listed so their absence is explainable.</p>
+    <table>
+      <tr><th>kind</th><th>value</th><th>services</th><th>why it does not identify</th></tr>
+      {% for c in cohorts %}
+      <tr><td><code>{{ c.kind }}</code></td><td><code>{{ c.value }}</code></td>
+          <td class="num">{{ c.service_count }}</td><td class="muted">{{ c.why }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">none observed</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  <section class="panel">
+    <header><h2>Merge log</h2></header>
+    {% if merges %}
+    <table>
+      <tr><th>merge</th><th>survivor / absorbed</th><th>actor</th><th>rationale</th><th></th></tr>
+      {% for m in merges %}
+      <tr>
+        <td><code>{{ m.merge_id[-8:] }}</code></td>
+        <td><code>{{ m.survivor }}</code> / <code>{{ m.absorbed }}</code></td>
+        <td>{{ m.actor }}</td>
+        <td class="muted">{{ m.rationale }}</td>
+        <td>
+          {% if m.reversed_at %}<span class="muted">reversed</span>
+          {% else %}
+          <form method="post" action="/case/{{ case_id }}/reverse" class="inline">
+            <input type="hidden" name="merge_id" value="{{ m.merge_id }}">
+            <input type="hidden" name="actor" value="analyst">
+            <input type="hidden" name="reason" value="analyst review">
+            <button class="no">Reverse</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="muted">No merges. The graph has proposed {{ counts.edges }} links and asserted none.</p>
+    {% endif %}
+
+    <header><h2>Notes</h2></header>
+    <form method="post" action="/case/{{ case_id }}/note" class="notebox">
+      <input name="actor" placeholder="your name" required>
+      <textarea name="body" rows="2" placeholder="Analyst note…" required></textarea>
+      <button class="ok">Add note</button>
+    </form>
+    <ul class="notes">
+      {% for n in notes %}
+      <li><b>{{ n.actor }}</b> <span class="muted small">{{ n.created_at }}</span><br>{{ n.body }}</li>
+      {% else %}
+      <li class="muted">No notes yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+<script>window.__GRAPH__ = {{ graph_json|safe }};</script>
+<script src="/static/graph.js"></script>
+{% endblock %}

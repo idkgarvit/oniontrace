@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}ONIONTRACE · {{ entity.entity_id }}{% endblock %}
+
+{% block content %}
+<p class="back"><a href="/case/{{ case_id }}">← back to graph</a></p>
+
+<h1 class="entityhead">{{ entity.entity_id }}
+  <span class="badge b-{{ entity.status }}">{{ entity.status }}</span></h1>
+<p class="muted">Case {{ case_id }} · created {{ entity.created_at }}</p>
+
+<section class="panel">
+  <header><h2>Services in this candidate</h2></header>
+  {% for s in services %}
+  <div class="svcblock">
+    <h3><code>{{ s.service_id }}</code></h3>
+    <table>
+      <tr><th>artefact</th><th>value</th><th>observed at</th><th>digest</th></tr>
+      {% for a in s.artefacts %}
+      <tr>
+        <td><code>{{ a.kind }}</code></td>
+        <td><code>{{ a.value[:48] }}</code></td>
+        <td><code>{{ a.path }}</code></td>
+        <td class="mono muted">{{ a.evidence_sha256[:24] }}…</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">no artefacts recorded</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <header><h2>Links from this entity</h2></header>
+  {% if edges %}
+  <table>
+    <tr><th>other entity</th><th>method</th><th>score</th><th>status</th><th>evidence</th></tr>
+    {% for e in edges %}
+    {% set other = e.b_entity if e.a_entity == entity.entity_id else e.a_entity %}
+    <tr>
+      <td><a href="/case/{{ case_id }}/entity/{{ other }}">{{ other }}</a></td>
+      <td>{{ e.method }}</td>
+      <td class="score">{{ '%.3f'|format(e.score) }}</td>
+      <td><span class="badge b-{{ 'conflict' if e.has_conflict else e.status }}">
+        {{ 'conflict' if e.has_conflict else e.status }}</span></td>
+      <td>
+        <ul class="evidence">
+          {% for ev in e.supporting %}<li class="sup">+ {{ ev.kind }} <code>{{ ev.value[:30] }}</code></li>{% endfor %}
+          {% for ev in e.counter %}<li class="con">− {{ ev.kind }} {{ ev.note }}</li>{% endfor %}
+        </ul>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No links proposed for this entity. That is a result, not a failure: the
+    artefacts it carries are shared by too much of the population to identify anybody.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <header><h2>Notes on this entity</h2></header>
+  <form method="post" action="/case/{{ case_id }}/note" class="notebox">
+    <input type="hidden" name="entity_id" value="{{ entity.entity_id }}">
+    <input name="actor" placeholder="your name" required>
+    <textarea name="body" rows="2" placeholder="Note…" required></textarea>
+    <button class="ok">Add note</button>
+  </form>
+  <ul class="notes">
+    {% for n in notes %}<li><b>{{ n.actor }}</b> {{ n.body }}</li>
+    {% else %}<li class="muted">No notes yet.</li>{% endfor %}
+  </ul>
+</section>
+{% endblock %}

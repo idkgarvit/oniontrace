@@ -1,0 +1,16 @@
+# ONIONTRACE runtime
+# farm/, eval/, gates/, graph/ and the fixture path of collect/ import nothing outside
+# the standard library. Only live collection, the dashboard and the tests need extras.
+
+# --- live collection (optional; only when --live is passed) ---
+requests>=2.31
+
+# --- dashboard (M6-lite) ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9        # form posts in the analyst console
+weasyprint>=62                  # one-click evidence pack (HTML -> PDF)
+
+# --- development ---
+pytest>=8.0

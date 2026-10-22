@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}ONIONTRACE · cases{% endblock %}
+{% block subtitle %}Cases on this machine. A graph is built from a farm manifest with <code>python -m graph build</code>.{% endblock %}
+
+{% block content %}
+{% if cases %}
+<div class="cards">
+  {% for c in cases %}
+  <a class="card" href="/case/{{ c.case_id }}">
+    <h3>{{ c.case_id }}</h3>
+    <dl>
+      <div><dt>entities</dt><dd>{{ c.counts.entities }}</dd></div>
+      <div><dt>links</dt><dd>{{ c.counts.edges }}</dd></div>
+      <div><dt>conflicts</dt><dd>{{ c.counts.conflicts }}</dd></div>
+      <div><dt>merged</dt><dd>{{ c.counts.merged }}</dd></div>
+    </dl>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <h3>No cases yet</h3>
+  <p>Build one from the shipped farm:</p>
+  <pre><code>python -m graph --db ./casework/CASE-1/graph.db --case CASE-1 \
+    build --farm ./out/farm.json</code></pre>
+  <p class="muted">Then reload this page.</p>
+</div>
+{% endif %}
+{% endblock %}

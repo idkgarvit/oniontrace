@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}ONIONTRACE{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">ONION<span>TRACE</span></a>
+  <span class="tag">M6-lite analyst console</span>
+  {% if case_id %}<span class="crumb">case <b>{{ case_id }}</b></span>{% endif %}
+  <nav class="topnav">
+    {% if case_id %}<a href="/case/{{ case_id }}">Graph</a>
+    <a href="/case/{{ case_id }}/evidence.pdf">Evidence PDF</a>{% endif %}
+  </nav>
+</header>
+
+<main>
+{% if self.subtitle()|trim %}<p class="subtitle">{% block subtitle %}{% endblock %}</p>{% endif %}
+{% block content %}{% endblock %}
+</main>
+
+<footer>
+  Passive collection only · every link is a candidate until an analyst confirms it ·
+  SHA-256 provenance under stated assumptions, not a chain of custody
+</footer>
+</body>
+</html>
