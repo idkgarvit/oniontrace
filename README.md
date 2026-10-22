@@ -451,8 +451,8 @@ tests/
   test_eval.py   65 tests; each pins what a number in the report is allowed to mean
   test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
-  test_deck.py    6 tests; the deck carries notes on every slide, stays 16:9, and
-                  refuses to build without its diagrams or its console capture
+  test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
+                  figures above 200 dpi, and refuses to build without diagrams or capture
   test_collect.py 69 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
 ```
@@ -528,7 +528,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (379 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (380 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
@@ -675,4 +675,6 @@ to run if something is already listening on the console port, since a stale serv
 photographed instead of the one the script just built.
 
 Every number on the diagrams is read from `out/eval-results.json` at build time, so a figure
-on a slide cannot disagree with the file it came from.
+on a slide cannot disagree with the file it came from. That path is gitignored scratch, so
+`data/eval-results.json` holds the same file frozen at the commit that produced the paper and
+is used when a clean checkout has no `out/`. A freshly generated `out/` always wins.

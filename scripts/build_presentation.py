@@ -26,7 +26,9 @@ from pptx.util import Emu, Inches, Pt
 
 ROOT = Path(__file__).resolve().parent.parent
 FIG = ROOT / "out" / "fig"
-SCREEN = ROOT / "out" / "screen" / "qa" / "01-case-view.png"
+# The console capture the deck shows. capture_dashboard.py writes exactly this path,
+# so the slide and the script cannot drift apart.
+SCREEN = ROOT / "out" / "screen" / "console.png"
 
 BG = RGBColor(0x0E, 0x13, 0x18)
 FG = RGBColor(0xE8, 0xED, 0xF3)
@@ -242,10 +244,12 @@ def s_results(prs):
 
 def s_console(prs):
     s = blank(prs)
-    kicker(s, "Module 6")
-    title(s, "The analyst's screen", sub="Every link shows the evidence behind it, and the doubt.")
-    picture(s, SCREEN, x=0.85, y=2.75, max_w=11.6, max_h=3.8, center_x=W_IN / 2)
-    foot(s, "Nothing merges on its own. A named analyst confirms it, and every merge can be undone exactly.")
+    # No heading here on purpose. The screenshot is the argument, and every inch given to a
+    # title is an inch taken off a console the back row has to read.
+    picture(s, SCREEN, x=0.85, y=0.42, max_w=11.6, max_h=5.85, center_x=W_IN / 2)
+    tf = tb(s, 0.85, 6.55, 11.6, 0.8)
+    para(tf, "The analyst's console. Evidence and counter-evidence sit side by side, and "
+             "nothing merges until a named person says so.", size=17, color=MUTED, first=True)
 
     notes(s, "Switch to the live console here if it is running. Click a link, point at the "
              "plus and minus lines, then click confirm. The point: counter-evidence sits next "
@@ -322,7 +326,7 @@ def s_end(prs):
     para(tf, "Including the awkward ones.", size=23, color=MUTED)
 
     tf2 = tb(s, 0.85, 6.05, 11.6, 0.6)
-    para(tf2, "github.com/idkgarvit  ·  code, tests and the paper live together",
+    para(tf2, "Code, tests and the paper are submitted together with this project.",
          size=15, color=MUTED, first=True)
 
     notes(s, "Have three answers ready: why not scan the live network, why the correlation "

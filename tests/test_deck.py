@@ -26,6 +26,25 @@ sys.path.insert(0, str(ROOT / "scripts"))
 FIG_NAMES = ["d1_problem", "d2_pipeline", "d3_defaults", "d4_results", "d5_farm"]
 
 
+@pytest.fixture(scope="module", autouse=True)
+def figures():
+    """The deck cannot exist without its diagrams, so a fresh checkout renders them first.
+
+    out/ is gitignored, so a cloned repository has no figures at all. Without this the deck
+    tests would fail on a clean clone for a reason that has nothing to do with the deck.
+
+    The diagrams read their numbers from out/eval-results.json when present and from the
+    frozen data/eval-results.json otherwise, which is what makes this work without a harness
+    run.
+    """
+
+    if all((ROOT / "out" / "fig" / f"{n}.png").exists() for n in FIG_NAMES):
+        return
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "build_diagrams.py")],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 @pytest.fixture(scope="module")
 def deck(tmp_path_factory) -> Path:
     """Build the text-only deck once. The console screenshot is optional by design."""
@@ -73,6 +92,27 @@ def test_the_deck_is_16_by_9(deck):
     prs = Presentation(deck)
     ratio = prs.slide_width / prs.slide_height
     assert abs(ratio - 16 / 9) < 0.01
+
+
+def test_every_figure_is_sharp_enough_to_project(deck):
+    """A stretched diagram looks fine on a laptop and soft on a projector wall."""
+
+    import io
+
+    from PIL import Image
+
+    prs = Presentation(deck)
+    soft = []
+    for i, s in enumerate(prs.slides, 1):
+        for sh in s.shapes:
+            if sh.shape_type != 13:
+                continue
+            width_in = sh.width / 914400
+            px = Image.open(io.BytesIO(sh.image.blob)).size[0]
+            dpi = px / width_in
+            if dpi < 200:
+                soft.append(f"slide {i}: {dpi:.0f} dpi")
+    assert not soft, f"images below 200 dpi: {soft}"
 
 
 def test_building_without_diagrams_fails_loudly(tmp_path):

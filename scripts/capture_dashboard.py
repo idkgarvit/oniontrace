@@ -26,7 +26,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = ROOT / "out" / "screen" / "dashboard.png"
+DEFAULT_OUT = ROOT / "out" / "screen" / "console.png"
 HOST = "127.0.0.1"
 PORT = 8420
 
@@ -78,6 +78,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--width", type=int, default=1500)
     ap.add_argument("--height", type=int, default=1800)
+    ap.add_argument("--scale", type=int, default=2,
+                    help="device pixel ratio; 2 keeps the console crisp when it fills a "
+                         "projected slide")
     ap.add_argument("--skip-build", action="store_true",
                     help="use the case as it stands on disk")
     args = ap.parse_args(argv)
@@ -119,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
             [
                 _browser(), "--headless", "--disable-gpu", "--no-sandbox",
                 "--hide-scrollbars", f"--window-size={args.width},{args.height}",
+                f"--force-device-scale-factor={args.scale}",
                 "--virtual-time-budget=8000", f"--screenshot={out}", url,
             ],
             cwd=ROOT, check=True, capture_output=True,
@@ -132,7 +136,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if not out.exists() or out.stat().st_size < 20_000:
         raise SystemExit(f"error: screenshot at {out} is missing or suspiciously small")
-    print(f"wrote {out}  ({out.stat().st_size:,} bytes)")
+
+    from PIL import Image
+
+    w, h = Image.open(out).size
+    print(f"wrote {out}  ({out.stat().st_size:,} bytes, {w}x{h})")
+    if w < 2400:
+        raise SystemExit(
+            f"error: capture is only {w}px wide. At full slide width that is under 200 dpi, "
+            "which prints soft on a projector. Raise --scale."
+        )
     return 0
 
 

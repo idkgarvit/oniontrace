@@ -1,0 +1,1374 @@
+{
+  "meta": {
+    "harness_version": "0.1.0",
+    "seed": 20260925,
+    "farm_fingerprint": "95fc7dacad08648c",
+    "farm_config": {
+      "seed": 20260925,
+      "n_clusters": 4,
+      "services_per_cluster": 3,
+      "n_singleton_services": 2,
+      "n_clean_control_services": 2,
+      "personas_per_cluster": 4,
+      "n_near_miss_decoys": 4,
+      "n_clean_control_endpoints": 6,
+      "n_abstention_retrieval_cases": 4,
+      "target_flaw_count": 25,
+      "posts_per_persona": 12
+    },
+    "reproduction_command": "python -m eval run --seed 20260925 --out ./out",
+    "precision_floor": 0.95
+  },
+  "split": {
+    "name": "by-cluster-4clusters",
+    "dev_clusters": [
+      "C0",
+      "C1"
+    ],
+    "test_clusters": [
+      "C2",
+      "C3"
+    ]
+  },
+  "thresholds": [
+    {
+      "name": "correlation_link_score",
+      "value": 1.0,
+      "policy": "lowest threshold with precision>=0.95 (maximise recall)",
+      "fitted_on": "dev",
+      "dev_precision": 1.0,
+      "dev_recall": 1.0,
+      "dev_n": 12
+    },
+    {
+      "name": "attribution_score",
+      "value": 0.959182,
+      "policy": "lowest threshold with precision>=0.95 (maximise recall)",
+      "fitted_on": "dev",
+      "dev_precision": 1.0,
+      "dev_recall": 0.125,
+      "dev_n": 1
+    }
+  ],
+  "modules": {
+    "M1_collection": {
+      "status": "fixture-verified",
+      "passed": true,
+      "checks": {
+        "scope_refused_unsent": true,
+        "first_run_stored": 19,
+        "second_run_idempotent": true,
+        "checkpoints_saved": true,
+        "warc_records_linked": true,
+        "no_self_seeding": true
+      },
+      "notes": [
+        "out-of-scope refused before the request: True",
+        "first run stored 19; second stored 0, fetched 0 new: True",
+        "cursors=8 snapshots=19 warc_records=12 linked=True"
+      ]
+    },
+    "M2_misconfig_rules": {
+      "careful_rules": {
+        "injected_flaws": 19,
+        "detections": 19,
+        "tp": 19,
+        "fp": 0,
+        "fn": 0,
+        "recall": {
+          "successes": 19,
+          "total": 19,
+          "value": 1.0,
+          "ci95": [
+            0.831821,
+            1.0
+          ],
+          "abstained": 0,
+          "skipped_no_answer": 0
+        },
+        "precision": {
+          "successes": 19,
+          "total": 19,
+          "value": 1.0,
+          "ci95": [
+            0.831821,
+            1.0
+          ],
+          "abstained": 0,
+          "skipped_no_answer": 0
+        },
+        "missed": [],
+        "false_positives": [],
+        "fp_on_clean_control_endpoints": []
+      },
+      "naive_rules": {
+        "injected_flaws": 19,
+        "detections": 31,
+        "tp": 17,
+        "fp": 14,
+        "fn": 2,
+        "recall": {
+          "successes": 17,
+          "total": 19,
+          "value": 0.894737,
+          "ci95": [
+            0.686059,
+            0.970641
+          ],
+          "abstained": 0,
+          "skipped_no_answer": 0
+        },
+        "precision": {
+          "successes": 17,
+          "total": 31,
+          "value": 0.548387,
+          "ci95": [
+            0.377722,
+            0.708383
+          ],
+          "abstained": 0,
+          "skipped_no_answer": 0
+        },
+        "missed": [
+          "svc-c0-0:server_status",
+          "svc-c0-2:phpinfo"
+        ],
+        "false_positives": [
+          "svc-c0-0:readme_internal_hostname",
+          "svc-c2-1:staging_page",
+          "svc-solo-0:cookie_name_unique",
+          "svc-solo-0:debug_endpoint",
+          "svc-solo-0:default_admin_panel",
+          "svc-solo-0:directory_autoindex",
+          "svc-solo-0:dot_git",
+          "svc-solo-0:exif_gps_in_image",
+          "svc-solo-0:phpinfo",
+          "svc-solo-0:readme_internal_hostname",
+          "svc-solo-0:robots_path_leak",
+          "svc-solo-0:server_status",
+          "svc-solo-0:staging_page",
+          "svc-solo-0:verbose_error_path_disclosure"
+        ],
+        "fp_on_clean_control_endpoints": []
+      },
+      "rules_with_hard_negative_fixture": [
+        "cookie_name_unique",
+        "debug_endpoint",
+        "default_admin_panel",
+        "directory_autoindex",
+        "dot_git",
+        "exif_gps_in_image",
+        "phpinfo",
+        "readme_internal_hostname",
+        "robots_path_leak",
+        "server_status",
+        "staging_page",
+        "verbose_error_path_disclosure"
+      ],
+      "separation_note": "Both tables are scored against the same ground truth. The gap between them is what demonstrates the negative fixtures can fail a careless rule set, and therefore that the careful table's score means something."
+    },
+    "M2_correlation": {
+      "naive": {
+        "variant": "naive",
+        "max_artifact_frequency": null,
+        "ranking": {
+          "n_queries": 12,
+          "pool_size": 13,
+          "precision@1": {
+            "successes": 9,
+            "total": 12,
+            "value": 0.75,
+            "ci95": [
+              0.467695,
+              0.911058
+            ],
+            "abstained": 0,
+            "skipped_no_answer": 0
+          },
+          "mrr": 0.8125,
+          "recall@3": 0.75,
+          "hit@3": {
+            "successes": 9,
+            "total": 12,
+            "value": 0.75,
+            "ci95": [
+              0.467695,
+              0.911058
+            ],
+            "abstained": 0,
+            "skipped_no_answer": 0
+          },
+          "random_baseline_precision@1": 0.153846,
+          "random_baseline_precision@1_restricted": 0.181818,
+          "baseline_note": "the baseline describes the pool actually ranked: 13 candidates, singletons included (2/13 = 0.1538). The restricted figure (2/11 = 0.1818) applies only if singletons are excluded from the pool, which is not what this run does -- reporting it here would put a number next to a result that describes a different experiment."
+        },
+        "link_scoring": {
+          "threshold": 0.0,
+          "tp": 12,
+          "fp": 46,
+          "fn": 0,
+          "tn": 33,
+          "proposed": 58,
+          "actual": 12,
+          "precision": 0.206897,
+          "precision_ci95": [
+            0.122515,
+            0.327692
+          ],
+          "recall": 1.0,
+          "false_merge_rate": 0.793103,
+          "false_omit_rate": 0.0
+        }
+      },
+      "frequency_filtered": {
+        "variant": "frequency-filtered",
+        "max_artifact_frequency": 3,
+        "ranking": {
+          "n_queries": 12,
+          "pool_size": 13,
+          "precision@1": {
+            "successes": 12,
+            "total": 12,
+            "value": 1.0,
+            "ci95": [
+              0.757506,
+              1.0
+            ],
+            "abstained": 0,
+            "skipped_no_answer": 0
+          },
+          "mrr": 1.0,
+          "recall@3": 1.0,
+          "hit@3": {
+            "successes": 12,
+            "total": 12,
+            "value": 1.0,
+            "ci95": [
+              0.757506,
+              1.0
+            ],
+            "abstained": 0,
+            "skipped_no_answer": 0
+          },
+          "random_baseline_precision@1": 0.153846,
+          "random_baseline_precision@1_restricted": 0.181818,
+          "baseline_note": "the baseline describes the pool actually ranked: 13 candidates, singletons included (2/13 = 0.1538). The restricted figure (2/11 = 0.1818) applies only if singletons are excluded from the pool, which is not what this run does -- reporting it here would put a number next to a result that describes a different experiment."
+        },
+        "link_scoring": {
+          "threshold": 0.0,
+          "tp": 12,
+          "fp": 0,
+          "fn": 0,
+          "tn": 79,
+          "proposed": 12,
+          "actual": 12,
+          "precision": 1.0,
+          "precision_ci95": [
+            0.757506,
+            1.0
+          ],
+          "recall": 1.0,
+          "false_merge_rate": 0.0,
+          "false_omit_rate": 0.0
+        }
+      },
+      "frequency_cap": 3,
+      "frozen_link_threshold": {
+        "name": "correlation_link_score",
+        "value": 1.0,
+        "policy": "lowest threshold with precision>=0.95 (maximise recall)",
+        "fitted_on": "dev",
+        "dev_precision": 1.0,
+        "dev_recall": 1.0,
+        "dev_n": 12
+      },
+      "at_frozen_threshold": {
+        "variant": "naive",
+        "max_artifact_frequency": null,
+        "ranking": {
+          "n_queries": 12,
+          "pool_size": 13,
+          "precision@1": {
+            "successes": 9,
+            "total": 12,
+            "value": 0.75,
+            "ci95": [
+              0.467695,
+              0.911058
+            ],
+            "abstained": 0,
+            "skipped_no_answer": 0
+          },
+          "mrr": 0.8125,
+          "recall@3": 0.75,
+          "hit@3": {
+            "successes": 9,
+            "total": 12,
+            "value": 0.75,
+            "ci95": [
+              0.467695,
+              0.911058
+            ],
+            "abstained": 0,
+            "skipped_no_answer": 0
+          },
+          "random_baseline_precision@1": 0.153846,
+          "random_baseline_precision@1_restricted": 0.181818,
+          "baseline_note": "the baseline describes the pool actually ranked: 13 candidates, singletons included (2/13 = 0.1538). The restricted figure (2/11 = 0.1818) applies only if singletons are excluded from the pool, which is not what this run does -- reporting it here would put a number next to a result that describes a different experiment."
+        },
+        "link_scoring": {
+          "threshold": 1.0,
+          "tp": 12,
+          "fp": 9,
+          "fn": 0,
+          "tn": 70,
+          "proposed": 21,
+          "actual": 12,
+          "precision": 0.571429,
+          "precision_ci95": [
+            0.365466,
+            0.7553
+          ],
+          "recall": 1.0,
+          "false_merge_rate": 0.428571,
+          "false_omit_rate": 0.0
+        }
+      }
+    },
+    "M3_entity_resolution": {
+      "exact_match": {
+        "variant": "exact-match",
+        "links": {
+          "threshold": 0.0,
+          "tp": 8,
+          "fp": 6,
+          "fn": 0,
+          "tn": 176,
+          "proposed": 14,
+          "actual": 8,
+          "precision": 0.571429,
+          "precision_ci95": [
+            0.325906,
+            0.786192
+          ],
+          "recall": 1.0,
+          "false_merge_rate": 0.428571,
+          "false_omit_rate": 0.0
+        },
+        "proposed_links": [
+          {
+            "left": "DECOY-00",
+            "right": "DECOY-01",
+            "score": 1.0,
+            "shared_keys": [
+              "contact_handle"
+            ],
+            "evidence": "contact_handle=PUBLIC_PLACEHOLDER"
+          },
+          {
+            "left": "DECOY-00",
+            "right": "DECOY-02",
+            "score": 1.0,
+            "shared_keys": [
+              "contact_handle"
+            ],
+            "evidence": "contact_handle=PUBLIC_PLACEHOLDER"
+          },
+          {
+            "left": "DECOY-00",
+            "right": "DECOY-03",
+            "score": 1.0,
+            "shared_keys": [
+              "contact_handle"
+            ],
+            "evidence": "contact_handle=PUBLIC_PLACEHOLDER"
+          },
+          {
+            "left": "DECOY-01",
+            "right": "DECOY-02",
+            "score": 1.0,
+            "shared_keys": [
+              "contact_handle"
+            ],
+            "evidence": "contact_handle=PUBLIC_PLACEHOLDER"
+          },
+          {
+            "left": "DECOY-01",
+            "right": "DECOY-03",
+            "score": 1.0,
+            "shared_keys": [
+              "contact_handle"
+            ],
+            "evidence": "contact_handle=PUBLIC_PLACEHOLDER"
+          },
+          {
+            "left": "DECOY-02",
+            "right": "DECOY-03",
+            "score": 1.0,
+            "shared_keys": [
+              "contact_handle"
+            ],
+            "evidence": "contact_handle=PUBLIC_PLACEHOLDER"
+          },
+          {
+            "left": "C0-P0",
+            "right": "C0-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=b26000e62811a9608f17133199fb118c8b598699"
+          },
+          {
+            "left": "C0-P2",
+            "right": "C0-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=79e2a9e922e32a1ba5462b31fffde152657f7842"
+          },
+          {
+            "left": "C1-P0",
+            "right": "C1-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=2bbe2eeb011899e9756a3e380e6fb7e23bb653b5"
+          },
+          {
+            "left": "C1-P2",
+            "right": "C1-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=2f9c57ea41f13687fa0a626a0e1e698f94bc308a"
+          },
+          {
+            "left": "C2-P0",
+            "right": "C2-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=39d10c6f8520df967a56511814afe9c2ae7c0aa1"
+          },
+          {
+            "left": "C2-P2",
+            "right": "C2-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=59aeb37a1394043af75b8a1072c18f7feadb83f9"
+          },
+          {
+            "left": "C3-P0",
+            "right": "C3-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=5ee072c93068a13e8c41e660864c0502d4dd4908"
+          },
+          {
+            "left": "C3-P2",
+            "right": "C3-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=a704776dd7eb823452334b91733aae0cb9efb516"
+          }
+        ],
+        "true_merge_pairs": 8,
+        "decoy_false_pairs": 6,
+        "false_merges_on_decoys": 6,
+        "decoy_false_merge_rate": 1.0
+      },
+      "placeholder_blocklisted": {
+        "variant": "placeholder-blocklisted",
+        "links": {
+          "threshold": 0.0,
+          "tp": 8,
+          "fp": 0,
+          "fn": 0,
+          "tn": 182,
+          "proposed": 8,
+          "actual": 8,
+          "precision": 1.0,
+          "precision_ci95": [
+            0.675592,
+            1.0
+          ],
+          "recall": 1.0,
+          "false_merge_rate": 0.0,
+          "false_omit_rate": 0.0
+        },
+        "proposed_links": [
+          {
+            "left": "C0-P0",
+            "right": "C0-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=b26000e62811a9608f17133199fb118c8b598699"
+          },
+          {
+            "left": "C0-P2",
+            "right": "C0-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=79e2a9e922e32a1ba5462b31fffde152657f7842"
+          },
+          {
+            "left": "C1-P0",
+            "right": "C1-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=2bbe2eeb011899e9756a3e380e6fb7e23bb653b5"
+          },
+          {
+            "left": "C1-P2",
+            "right": "C1-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=2f9c57ea41f13687fa0a626a0e1e698f94bc308a"
+          },
+          {
+            "left": "C2-P0",
+            "right": "C2-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=39d10c6f8520df967a56511814afe9c2ae7c0aa1"
+          },
+          {
+            "left": "C2-P2",
+            "right": "C2-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=59aeb37a1394043af75b8a1072c18f7feadb83f9"
+          },
+          {
+            "left": "C3-P0",
+            "right": "C3-P1",
+            "score": 0.333333,
+            "shared_keys": [
+              "pgp_fingerprint"
+            ],
+            "evidence": "pgp_fingerprint=5ee072c93068a13e8c41e660864c0502d4dd4908"
+          },
+          {
+            "left": "C3-P2",
+            "right": "C3-P3",
+            "score": 0.333333,
+            "shared_keys": [
+              "wallet_address"
+            ],
+            "evidence": "wallet_address=a704776dd7eb823452334b91733aae0cb9efb516"
+          }
+        ],
+        "true_merge_pairs": 8,
+        "decoy_false_pairs": 6,
+        "false_merges_on_decoys": 0,
+        "decoy_false_merge_rate": 0.0
+      }
+    },
+    "M5_attribution": {
+      "scope_limit": "synthetic persona retrieval -- NOT validated human authorship attribution. Personas are generated with known parameters, so recovering them recovers the generator.",
+      "models": {
+        "text_full": {
+          "features": "all tokens",
+          "long": {
+            "n_queries": 6,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 1,
+              "total": 6,
+              "value": 0.166667,
+              "ci95": [
+                0.030053,
+                0.563503
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 2,
+              "total": 6,
+              "value": 0.333333,
+              "ci95": [
+                0.096771,
+                0.700007
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 0.666667,
+            "mrr": 0.326471,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "short": {
+            "n_queries": 14,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 5,
+              "total": 14,
+              "value": 0.357143,
+              "ci95": [
+                0.163447,
+                0.612356
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 7,
+              "total": 14,
+              "value": 0.5,
+              "ci95": [
+                0.267992,
+                0.732008
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 0.642857,
+            "mrr": 0.474372,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "drift_breakdown": {
+            "drifted_corpus_queries": {
+              "n_queries": 16,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 4,
+                "total": 16,
+                "value": 0.25,
+                "ci95": [
+                  0.101821,
+                  0.494983
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 5,
+                "total": 16,
+                "value": 0.3125,
+                "ci95": [
+                  0.141646,
+                  0.555956
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 0.5625,
+              "mrr": 0.360419,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            },
+            "stable_corpus_queries": {
+              "n_queries": 4,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 2,
+                "total": 4,
+                "value": 0.5,
+                "ci95": [
+                  0.150039,
+                  0.849961
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 4,
+                "total": 4,
+                "value": 1.0,
+                "ci95": [
+                  0.510109,
+                  1.0
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 1.0,
+              "mrr": 0.708333,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            }
+          }
+        },
+        "text_function": {
+          "features": "function words only",
+          "long": {
+            "n_queries": 6,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 4,
+              "total": 6,
+              "value": 0.666667,
+              "ci95": [
+                0.299993,
+                0.903229
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 6,
+              "total": 6,
+              "value": 1.0,
+              "ci95": [
+                0.609666,
+                1.0
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 1.0,
+            "mrr": 0.805556,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "short": {
+            "n_queries": 14,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 2,
+              "total": 14,
+              "value": 0.142857,
+              "ci95": [
+                0.040094,
+                0.399414
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 8,
+              "total": 14,
+              "value": 0.571429,
+              "ci95": [
+                0.325906,
+                0.786192
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 0.928571,
+            "mrr": 0.423413,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "drift_breakdown": {
+            "drifted_corpus_queries": {
+              "n_queries": 16,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 5,
+                "total": 16,
+                "value": 0.3125,
+                "ci95": [
+                  0.141646,
+                  0.555956
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 12,
+                "total": 16,
+                "value": 0.75,
+                "ci95": [
+                  0.505017,
+                  0.898179
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 0.9375,
+              "mrr": 0.557986,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            },
+            "stable_corpus_queries": {
+              "n_queries": 4,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 1,
+                "total": 4,
+                "value": 0.25,
+                "ci95": [
+                  0.045587,
+                  0.699358
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 2,
+                "total": 4,
+                "value": 0.5,
+                "ci95": [
+                  0.150039,
+                  0.849961
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 1.0,
+              "mrr": 0.458333,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            }
+          }
+        },
+        "behaviour": {
+          "features": "hours, cadence, templates, length",
+          "long": {
+            "n_queries": 6,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 3,
+              "total": 6,
+              "value": 0.5,
+              "ci95": [
+                0.187616,
+                0.812384
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 3,
+              "total": 6,
+              "value": 0.5,
+              "ci95": [
+                0.187616,
+                0.812384
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 0.666667,
+            "mrr": 0.590278,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "short": {
+            "n_queries": 14,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 5,
+              "total": 14,
+              "value": 0.357143,
+              "ci95": [
+                0.163447,
+                0.612356
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 10,
+              "total": 14,
+              "value": 0.714286,
+              "ci95": [
+                0.453509,
+                0.882786
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 0.857143,
+            "mrr": 0.57619,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "drift_breakdown": {
+            "drifted_corpus_queries": {
+              "n_queries": 16,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 5,
+                "total": 16,
+                "value": 0.3125,
+                "ci95": [
+                  0.141646,
+                  0.555956
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 9,
+                "total": 16,
+                "value": 0.5625,
+                "ci95": [
+                  0.331786,
+                  0.769013
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 0.75,
+              "mrr": 0.506771,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            },
+            "stable_corpus_queries": {
+              "n_queries": 4,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 3,
+                "total": 4,
+                "value": 0.75,
+                "ci95": [
+                  0.300642,
+                  0.954413
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 4,
+                "total": 4,
+                "value": 1.0,
+                "ci95": [
+                  0.510109,
+                  1.0
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 1.0,
+              "mrr": 0.875,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            }
+          }
+        },
+        "combined": {
+          "features": "function words + behaviour",
+          "long": {
+            "n_queries": 6,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 3,
+              "total": 6,
+              "value": 0.5,
+              "ci95": [
+                0.187616,
+                0.812384
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 3,
+              "total": 6,
+              "value": 0.5,
+              "ci95": [
+                0.187616,
+                0.812384
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 0.833333,
+            "mrr": 0.59881,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "short": {
+            "n_queries": 14,
+            "pool_size": 20,
+            "hit@1": {
+              "successes": 5,
+              "total": 14,
+              "value": 0.357143,
+              "ci95": [
+                0.163447,
+                0.612356
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "hit@3": {
+              "successes": 10,
+              "total": 14,
+              "value": 0.714286,
+              "ci95": [
+                0.453509,
+                0.882786
+              ],
+              "abstained": 0,
+              "skipped_no_answer": 0
+            },
+            "recall@5": 0.857143,
+            "mrr": 0.567857,
+            "random_baseline": {
+              "hit@1": 0.05,
+              "hit@3": 0.15,
+              "recall@5": 0.25
+            }
+          },
+          "drift_breakdown": {
+            "drifted_corpus_queries": {
+              "n_queries": 16,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 5,
+                "total": 16,
+                "value": 0.3125,
+                "ci95": [
+                  0.141646,
+                  0.555956
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 9,
+                "total": 16,
+                "value": 0.5625,
+                "ci95": [
+                  0.331786,
+                  0.769013
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 0.8125,
+              "mrr": 0.502679,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            },
+            "stable_corpus_queries": {
+              "n_queries": 4,
+              "pool_size": 20,
+              "hit@1": {
+                "successes": 3,
+                "total": 4,
+                "value": 0.75,
+                "ci95": [
+                  0.300642,
+                  0.954413
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "hit@3": {
+                "successes": 4,
+                "total": 4,
+                "value": 1.0,
+                "ci95": [
+                  0.510109,
+                  1.0
+                ],
+                "abstained": 0,
+                "skipped_no_answer": 0
+              },
+              "recall@5": 1.0,
+              "mrr": 0.875,
+              "random_baseline": {
+                "hit@1": 0.05,
+                "hit@3": 0.15,
+                "recall@5": 0.25
+              }
+            }
+          }
+        }
+      },
+      "frozen_score_threshold": {
+        "name": "attribution_score",
+        "value": 0.959182,
+        "policy": "lowest threshold with precision>=0.95 (maximise recall)",
+        "fitted_on": "dev",
+        "dev_precision": 1.0,
+        "dev_recall": 0.125,
+        "dev_n": 1
+      }
+    },
+    "E4_provenance": {
+      "ledger_entry_count": 83,
+      "manifest_sha256": "6b39fe056c304b60eddb495975c04060957174519ba6ab97103e9e6f40e45267",
+      "verification": {
+        "verified": true,
+        "entries_checked": 83,
+        "mismatched": [],
+        "missing_from_ledger": [],
+        "manifest_digest_matches": true
+      },
+      "tamper_self_test": {
+        "runs": true,
+        "mutated": "svc-c0-0/",
+        "detected": true,
+        "mismatch_count": 1,
+        "clean_after_restore": true,
+        "conclusion": "tamper detected"
+      },
+      "assumptions": "Byte consistency relative to this recorded digest. Does NOT establish source truth, authorship, or admissibility. An adversary able to rewrite both snapshots and ledger can produce a consistent forgery."
+    }
+  },
+  "abstention": {
+    "correlation_unthresholded": {
+      "variant": "naive",
+      "thresholded": false,
+      "min_score": null,
+      "scoring": {
+        "total": 2,
+        "correct_abstentions": 2,
+        "false_assertions": 0,
+        "abstention_rate": 1.0,
+        "abstention_ci95": [
+          0.34238,
+          1.0
+        ],
+        "false_assertion_rate": 0.0
+      },
+      "cases": [
+        {
+          "case_id": "ABS-CORR-svc-solo-0",
+          "returned": false,
+          "top": null,
+          "top_score": 0.0
+        },
+        {
+          "case_id": "ABS-CORR-svc-solo-1",
+          "returned": false,
+          "top": null,
+          "top_score": 0.0
+        }
+      ]
+    },
+    "correlation_filtered": {
+      "variant": "frequency-filtered",
+      "thresholded": false,
+      "min_score": null,
+      "scoring": {
+        "total": 2,
+        "correct_abstentions": 2,
+        "false_assertions": 0,
+        "abstention_rate": 1.0,
+        "abstention_ci95": [
+          0.34238,
+          1.0
+        ],
+        "false_assertion_rate": 0.0
+      },
+      "cases": [
+        {
+          "case_id": "ABS-CORR-svc-solo-0",
+          "returned": false,
+          "top": null,
+          "top_score": 0.0
+        },
+        {
+          "case_id": "ABS-CORR-svc-solo-1",
+          "returned": false,
+          "top": null,
+          "top_score": 0.0
+        }
+      ]
+    },
+    "correlation_at_frozen_threshold": {
+      "variant": "naive",
+      "thresholded": true,
+      "min_score": 1.0,
+      "scoring": {
+        "total": 2,
+        "correct_abstentions": 2,
+        "false_assertions": 0,
+        "abstention_rate": 1.0,
+        "abstention_ci95": [
+          0.34238,
+          1.0
+        ],
+        "false_assertion_rate": 0.0
+      },
+      "cases": [
+        {
+          "case_id": "ABS-CORR-svc-solo-0",
+          "returned": false,
+          "top": null,
+          "top_score": 0.0
+        },
+        {
+          "case_id": "ABS-CORR-svc-solo-1",
+          "returned": false,
+          "top": null,
+          "top_score": 0.0
+        }
+      ]
+    },
+    "retrieval_unthresholded": {
+      "model": "text_function",
+      "thresholded": false,
+      "min_score": null,
+      "scoring": {
+        "total": 4,
+        "correct_abstentions": 0,
+        "false_assertions": 4,
+        "abstention_rate": 0.0,
+        "abstention_ci95": [
+          0.0,
+          0.489891
+        ],
+        "false_assertion_rate": 1.0
+      },
+      "cases": [
+        {
+          "case_id": "ABS-RETR-DECOY-00",
+          "returned": true,
+          "top": "C0-P0",
+          "top_score": 0.901133,
+          "threshold_applied": null,
+          "why_absent": "Query author DECOY-00 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        },
+        {
+          "case_id": "ABS-RETR-DECOY-01",
+          "returned": true,
+          "top": "C2-P1",
+          "top_score": 0.860868,
+          "threshold_applied": null,
+          "why_absent": "Query author DECOY-01 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        },
+        {
+          "case_id": "ABS-RETR-DECOY-02",
+          "returned": true,
+          "top": "C2-P0",
+          "top_score": 0.945438,
+          "threshold_applied": null,
+          "why_absent": "Query author DECOY-02 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        },
+        {
+          "case_id": "ABS-RETR-DECOY-03",
+          "returned": true,
+          "top": "C3-P0",
+          "top_score": 0.85857,
+          "threshold_applied": null,
+          "why_absent": "Query author DECOY-03 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        }
+      ]
+    },
+    "retrieval_at_frozen_threshold": {
+      "model": "text_function",
+      "thresholded": true,
+      "min_score": 0.959182,
+      "scoring": {
+        "total": 4,
+        "correct_abstentions": 4,
+        "false_assertions": 0,
+        "abstention_rate": 1.0,
+        "abstention_ci95": [
+          0.510109,
+          1.0
+        ],
+        "false_assertion_rate": 0.0
+      },
+      "cases": [
+        {
+          "case_id": "ABS-RETR-DECOY-00",
+          "returned": false,
+          "top": "C0-P0",
+          "top_score": 0.901133,
+          "threshold_applied": 0.959182,
+          "why_absent": "Query author DECOY-00 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        },
+        {
+          "case_id": "ABS-RETR-DECOY-01",
+          "returned": false,
+          "top": "C2-P1",
+          "top_score": 0.860868,
+          "threshold_applied": 0.959182,
+          "why_absent": "Query author DECOY-01 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        },
+        {
+          "case_id": "ABS-RETR-DECOY-02",
+          "returned": false,
+          "top": "C2-P0",
+          "top_score": 0.945438,
+          "threshold_applied": 0.959182,
+          "why_absent": "Query author DECOY-02 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        },
+        {
+          "case_id": "ABS-RETR-DECOY-03",
+          "returned": false,
+          "top": "C3-P0",
+          "top_score": 0.85857,
+          "threshold_applied": 0.959182,
+          "why_absent": "Query author DECOY-03 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association."
+        }
+      ]
+    },
+    "note": "A false assertion is the system answering a question it cannot answer. For a tool that proposes candidate identities this is the failure that produces a wrong name, so it is reported separately from recall rather than averaged into it. Thresholded and unthresholded runs are both reported: the difference is the finding, and publishing only the better number would hide that a threshold is doing the work."
+  },
+  "limitations": [
+    "Attribution results are SYNTHETIC PERSONA RETRIEVAL, not validated human authorship attribution. Personas are generated with known parameters, so recovering them recovers the generator.",
+    "Sample size is small: 12 clustered services across 4 clusters, 20 personas. Confidence intervals are reported because the point estimates alone would overstate what the sample supports.",
+    "The test split holds out 2 of 4 clusters, so evaluation is on unseen operators by construction, but the test set is small and the interval correspondingly wide.",
+    "Frequency filtering addresses widespread vendor-default artefacts and not coincidental ones. The coincidental class needs a maintained blocklist of known defaults, which this implementation does not have.",
+    "Rules without an implemented negative fixture: ['apache_version_banner', 'backup_file', 'dot_env', 'etag_pattern', 'http_header_order', 'nginx_version_banner', 'timezone_leak']. Their false-positive rates are measured only against true positives and are therefore optimistic; this is reported rather than left implied.",
+    "Provenance establishes byte consistency against a recorded digest. It is not chain of custody and does not establish admissibility."
+  ]
+}

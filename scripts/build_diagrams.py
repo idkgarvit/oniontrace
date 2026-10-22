@@ -17,7 +17,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "out" / "fig"
-RESULTS = ROOT / "out" / "eval-results.json"
+# out/ is scratch and therefore gitignored, so a clean checkout has no results file there.
+# data/ holds the same file frozen at the commit that produced the paper, so the diagrams can
+# be rebuilt from a fresh clone. A freshly generated out/ wins when it exists.
+_RESULT_CANDIDATES = [ROOT / "out" / "eval-results.json", ROOT / "data" / "eval-results.json"]
 
 
 def correlation_numbers() -> dict[str, float]:
@@ -30,12 +33,8 @@ def correlation_numbers() -> dict[str, float]:
 
     import json
 
-    if not RESULTS.exists():
-        raise SystemExit(
-            f"error: {RESULTS} is missing. Run `python -m eval` first; a results slide "
-            "without the results file is a guess."
-        )
-    mods = json.loads(RESULTS.read_text())["modules"]["M2_correlation"]
+    path = results_path()
+    mods = json.loads(path.read_text())["modules"]["M2_correlation"]
     return {
         "naive": mods["naive"]["link_scoring"]["precision"],
         "threshold": mods["at_frozen_threshold"]["link_scoring"]["precision"],
@@ -314,6 +313,16 @@ def d5_farm() -> None:
                    20, MUTED, anchor="start"))
     s.append("</svg>")
     render("".join(s), "d5_farm", w, h)
+
+
+def results_path() -> Path:
+    for p in _RESULT_CANDIDATES:
+        if p.exists():
+            return p
+    raise SystemExit(
+        "error: no eval results found. Expected out/eval-results.json or "
+        "data/eval-results.json\n  run the harness first: python -m eval.harness"
+    )
 
 
 def main() -> int:
