@@ -380,20 +380,27 @@ def test_notes_are_attributed_and_kept():
         assert len(notes) == 1 and notes[0]["actor"] == "a.sharma"
 
 
-def test_real_farm_recovers_every_true_pair_with_no_false_positive():
-    """End-to-end against the shipped farm.
+def test_real_farm_recovers_every_true_pair_with_no_false_positive(tmp_path):
+    """End-to-end against the generated farm.
 
     This is the claim the dashboard and the report both rest on, so it is asserted
     here rather than measured once by hand.
+
+    The farm is generated here, not read from ``out/farm.json``. Reading the generated
+    file meant this test skipped on a clean checkout, which is the shape of defect that
+    makes a suite report success it has not earned.
     """
 
     import json
-    from pathlib import Path
 
-    root = Path(__file__).resolve().parent.parent
-    farm_json = root / "out" / "farm.json"
-    if not farm_json.exists():
-        pytest.skip("out/farm.json not generated")
+    from farm.generator import generate_farm
+    from farm.model import FarmConfig
+
+    farm_json = tmp_path / "farm.json"
+    farm_json.write_text(
+        generate_farm(FarmConfig(seed=20260925)).to_json(include_text=True),
+        encoding="utf-8",
+    )
 
     data = json.loads(farm_json.read_text())
     svcs = [

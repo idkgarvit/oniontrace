@@ -597,3 +597,18 @@ a live network. That claim needs the Part E2.2 pilot and the deployment gates in
 deployment, and until then every number and every guarantee in this repository is a
 statement about a fixture and a boundary we drew ourselves.
 
+
+## Rebuilding the deck
+
+The presentation embeds a screenshot of the console. That capture is a script, not a manual
+step, because a hand-made screenshot is either stale or missing:
+
+```bash
+python scripts/capture_dashboard.py          # build a demo case, serve it, photograph it
+python scripts/build_presentation.py --out deck.pptx
+```
+
+The build **fails** rather than shipping a placeholder when the screenshot is missing. Use
+`--skip-screenshot` for an explicit text-only build. The capture refuses to run if something
+is already listening on the console port, since a stale server would be photographed instead
+of the one the script just built.

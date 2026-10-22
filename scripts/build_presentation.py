@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from pptx import Presentation
@@ -20,6 +21,8 @@ from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
 ROOT = Path(__file__).resolve().parent.parent
+ALLOW_MISSING_SCREENSHOT = "--skip-screenshot" in sys.argv
+sys.argv = [a for a in sys.argv if a != "--skip-screenshot"]
 
 # -- palette ------------------------------------------------------------ #
 BG = RGBColor(0x0E, 0x11, 0x16)
@@ -599,10 +602,14 @@ def slide_dashboard(prs, n) -> None:
             "Evidence pack exports to PDF with the digest ledger.",
         ]:
             para(tf, "▪  " + line, size=11.5, color=MUTED, space_after=8)
-    else:
-        tf = tb(s, 0.85, 2.6, 11.6, 3.0)
-        para(tf, "Dashboard screenshot not generated. Run the console and capture it.",
-             size=14, color=MUTED, first=True, space_after=0)
+    elif not ALLOW_MISSING_SCREENSHOT:
+        raise SystemExit(
+            f"error: {img} is missing.\n"
+            "The console is the M6 evidence; a deck without it carries a placeholder where "
+            "evidence belongs.\n"
+            "  python scripts/capture_dashboard.py        # build a case, serve it, capture it\n"
+            "  python scripts/build_presentation.py --skip-screenshot   # text-only build"
+        )
 
     notes(s, "Live demo opportunity: start the console on 127.0.0.1:8420, show the graph, "
              "click a node, then export the evidence pack. If the demo fails, this slide carries it.")

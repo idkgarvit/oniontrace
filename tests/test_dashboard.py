@@ -30,7 +30,6 @@ app_module = importlib.import_module("dashboard.app")
 app = app_module.app
 
 ROOT = Path(__file__).resolve().parent.parent
-FARM = ROOT / "out" / "farm.json"
 
 
 def _pdf_text(blob: bytes) -> str:
@@ -53,12 +52,34 @@ def _pdf_text(blob: bytes) -> str:
         Path(path).unlink(missing_ok=True)
 
 
-@pytest.fixture
-def case(tmp_path, monkeypatch):
-    """A real case built from the shipped farm into a throwaway root."""
+def _farm_json(tmp_path_factory) -> Path:
+    """Generate the farm rather than reading out/farm.json.
 
-    if not FARM.exists():
-        pytest.skip("out/farm.json not generated")
+    Reading the generated file made this whole module skip on a clean checkout, which
+    is the same shape of defect as a vacuous assertion: the suite reported success
+    while the console had never been exercised. The farm is deterministic for a seed,
+    so it can be built here.
+    """
+
+    from farm.generator import generate_farm
+    from farm.model import FarmConfig
+
+    d = tmp_path_factory.mktemp("farm")
+    path = d / "farm.json"
+    farm = generate_farm(FarmConfig(seed=20260925))
+    # to_json(include_text=True) is what `python -m farm generate` writes; matching it
+    # keeps this fixture on the same artefact path the CLI uses.
+    path.write_text(farm.to_json(include_text=True), encoding="utf-8")
+    return path
+
+
+@pytest.fixture(scope="session")
+def farm_path(tmp_path_factory) -> Path:
+    return _farm_json(tmp_path_factory)
+
+
+@pytest.fixture
+def case(tmp_path, monkeypatch, farm_path):
 
     monkeypatch.setenv("ONIONTRACE_CASES", str(tmp_path))
     monkeypatch.setattr(app_module, "CASE_ROOT", tmp_path)
@@ -67,7 +88,7 @@ def case(tmp_path, monkeypatch):
 
     db = tmp_path / "CASE-T" / "graph.db"
     rc = graph_main(
-        ["--db", str(db), "--case", "CASE-T", "build", "--farm", str(FARM)]
+        ["--db", str(db), "--case", "CASE-T", "build", "--farm", str(farm_path)]
     )
     assert rc == 0
 
