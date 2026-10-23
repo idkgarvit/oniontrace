@@ -173,6 +173,6 @@
   </section>
 </div>
 
-<script>window.__GRAPH__ = {{ graph_json|safe }};</script>
+<script>window.__GRAPH__ = {{ graph|tojson }};</script>
 <script src="/static/graph.js"></script>
 {% endblock %}

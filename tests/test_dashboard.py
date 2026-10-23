@@ -374,3 +374,125 @@ def test_evidence_pack_is_a_pdf_that_states_its_limits(case):
     assert "candidate" in text.lower()
     assert "not a chain of custody" in text.lower()
     assert cid in text
+
+
+# -- the console is reachable from a browser, so its data is a parse boundary --- #
+#
+# Every string in the graph arrives from a service the analyst does not control: an
+# analytics id, a page title, a header value. The graph is handed to the page inside a
+# <script> block, so a value containing `</script>` used to close that block and start a
+# new one. The attack is not hypothetical drill: it is the collector's own input stream.
+
+
+def test_an_artefact_cannot_break_out_of_the_graph_script(case):
+    client, cid, tmp_path = case
+    from graph.store import GraphStore
+
+    payload = '</script><img src=x onerror=alert(1)>'
+    with GraphStore(tmp_path / cid / "graph.db", case_id=cid) as store:
+        store.add_finding(
+            service_id=store.entities()[0].service_ids[0],
+            kind="page_title",
+            path="/",
+            evidence=payload,
+        )
+
+    html = client.get(f"/case/{cid}").text
+
+    # The only </script> tags left are the ones the template itself wrote.
+    assert html.count("</script>") == 2, "a collected value closed the script block early"
+    assert "<img src=x" not in html, "the payload reached the DOM as markup"
+    # It is still present, as inert data. Dropping it would hide evidence.
+    assert "\\u003c/script\\u003e" in html
+
+
+def test_a_note_cannot_break_out_of_the_graph_script(case):
+    client, cid, tmp_path = case
+    payload = '</SCRIPT ><svg onload=alert(1)>'
+
+    client.post(f"/case/{cid}/note", data={"actor": "analyst", "body": payload})
+    html = client.get(f"/case/{cid}").text
+
+    assert html.count("</script>") == 2
+    assert "<svg onload" not in html.lower()
+
+
+def test_a_cross_origin_write_is_refused(case):
+    client, cid, _ = case
+    r = client.post(
+        f"/case/{cid}/note",
+        data={"actor": "attacker", "body": "injected"},
+        headers={"origin": "https://evil.example"},
+    )
+    assert r.status_code == 403
+    assert "cross-origin" in r.text
+
+    # The note never landed.
+    assert "injected" not in client.get(f"/case/{cid}").text
+
+
+def test_a_write_from_the_console_itself_still_works(case):
+    client, cid, _ = case
+    r = client.post(
+        f"/case/{cid}/note",
+        data={"actor": "analyst", "body": "legitimate"},
+        headers={"origin": "http://127.0.0.1:8420"},
+        follow_redirects=False,
+    )
+    assert r.status_code in (200, 303)
+    assert "legitimate" in client.get(f"/case/{cid}").text
+
+
+def test_a_rebound_host_header_is_refused(case):
+    client, cid, _ = case
+    r = client.get(f"/case/{cid}", headers={"host": "evil.example"})
+    assert r.status_code == 421
+
+    r = client.get(f"/case/{cid}", headers={"host": "localhost:8420"})
+    assert r.status_code == 200
+
+
+# -- the PDF renderer is the other parse boundary ----------------------- #
+#
+# The evidence pack turns case data into a document that WeasyPrint renders. Any
+# resource the document names is fetched by WeasyPrint and handed to Pillow's format
+# dispatcher, which shells out to Ghostscript for EPS. Two published advisories against
+# this library live on exactly that path, and Ghostscript is installed on this host, so
+# the fetcher is pinned shut here rather than trusted.
+
+
+def test_the_evidence_pack_refuses_to_fetch_anything():
+    from dashboard.render import _no_external_resources
+
+    fetcher = _no_external_resources()
+    for url in (
+        "https://example.com/tracker.png",
+        "file:///etc/passwd",
+        "data:image/x-eps;base64,AAAA",
+    ):
+        with pytest.raises(ValueError, match="refused to load"):
+            fetcher.fetch(url)
+
+
+def test_a_hostile_payload_in_a_finding_renders_as_text(case):
+    client, cid, tmp_path = case
+    from graph.store import GraphStore
+
+    payload = '<img src="data:image/x-eps;base64,AAAA">'
+    with GraphStore(tmp_path / cid / "graph.db", case_id=cid) as store:
+        store.add_finding(
+            service_id=store.entities()[0].service_ids[0],
+            kind="page_title",
+            path="/",
+            evidence=payload,
+        )
+
+    r = client.get(f"/case/{cid}/evidence.pdf")
+    assert r.status_code == 200
+    assert r.content[:5] == b"%PDF-"
+
+    # The angle brackets survive as text, so the renderer never saw a tag. pdftotext
+    # breaks a long table cell mid-token, so compare with the whitespace removed.
+    text = _pdf_text(r.content).replace(" ", "").replace("\n", "")
+    assert "<img" in text
+    assert 'data:image/x-eps;base64,AAAA">' in text

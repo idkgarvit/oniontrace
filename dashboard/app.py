@@ -23,10 +23,16 @@ import os
 from pathlib import Path
 from typing import Any
 
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -40,6 +46,45 @@ CASE_ROOT = Path(os.environ.get("ONIONTRACE_CASES", BASE_DIR.parent / "casework"
 app = FastAPI(title="ONIONTRACE", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+# -- the origin boundary ------------------------------------------------ #
+# There is no login, so the browser origin is the whole boundary. Two ways a page the
+# analyst visits could otherwise reach these routes:
+#
+# * a plain cross-site form post to http://127.0.0.1:8420/case/.../merge, which would
+#   rewrite case state with the analyst's implicit trust of their own machine;
+# * DNS rebinding, where evil.example resolves to 127.0.0.1 after the page loads, so the
+#   request arrives with a foreign Host header and same-origin checks pass by accident.
+#
+# Both are closed here rather than per route, because a route added later would otherwise
+# inherit the hole. `testserver` is in the list because the test client uses it; it is not
+# a name any rebinding attack can own.
+_ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1", "testserver"}
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def _hostname(value: str | None) -> str:
+    return (value or "").rsplit(":", 1)[0].strip("[]").strip().lower()
+
+
+@app.middleware("http")
+async def _same_origin_only(request: Request, call_next):
+    host = _hostname(request.headers.get("host"))
+    if host and host not in _ALLOWED_HOSTS:
+        return PlainTextResponse("host not allowed", status_code=421)
+
+    if request.method not in _SAFE_METHODS:
+        origin = request.headers.get("origin")
+        if origin:
+            if _hostname(urlparse(origin).netloc) not in _ALLOWED_HOSTS:
+                return PlainTextResponse("cross-origin write refused", status_code=403)
+        else:
+            referer = request.headers.get("referer")
+            if referer and _hostname(urlparse(referer).netloc) not in _ALLOWED_HOSTS:
+                return PlainTextResponse("cross-origin write refused", status_code=403)
+
+    return await call_next(request)
 
 
 # -- helpers ------------------------------------------------------------ #
@@ -186,7 +231,11 @@ def case_view(request: Request, case_id: str, error: str = "") -> HTMLResponse:
         "case.html",
         {
             "case_id": case_id,
-            "graph_json": json.dumps(graph),
+            # Passed as data, not as a pre-serialised string: the template's `tojson`
+            # filter escapes `<`, `>` and `&`, so a collected artefact value can never
+            # close the surrounding <script> tag. json.dumps alone does not escape
+            # `</script>`, and the values here come from services an adversary controls.
+            "graph": graph,
             "counts": graph["counts"],
             "entities": live,
             "edges": edges,

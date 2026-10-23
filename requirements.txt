@@ -10,7 +10,9 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 jinja2>=3.1
 python-multipart>=0.0.9        # form posts in the analyst console
-weasyprint>=62                  # one-click evidence pack (HTML -> PDF)
+weasyprint>=70                  # one-click evidence pack (HTML -> PDF); 70 is the first
+                                # release without the url_fetcher bypass and the
+                                # Pillow->Ghostscript image dispatch advisories
 
 # --- development ---
 pytest>=8.0

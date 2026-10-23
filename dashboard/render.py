@@ -24,6 +24,35 @@ import html
 from datetime import datetime, timezone
 from typing import Any
 
+
+def _no_external_resources():
+    """A fetcher that refuses every resource the document tries to load.
+
+    The pack is assembled here from strings that were escaped on the way in, so it
+    never legitimately references anything outside itself. Blocking the fetcher anyway
+    turns "we happen not to emit an image tag" into "an image tag cannot fetch
+    anything", which matters because the renderer sits at the end of a pipeline whose
+    inputs come from services an adversary controls.
+
+    Two published advisories against WeasyPrint make this concrete: attacker-chosen
+    URLs reaching ``xmp_metadata`` or ``stylesheets`` bypassed a restrictive fetcher
+    and read local files into the output, and image bytes were handed to Pillow's
+    format dispatcher, which invokes Ghostscript for EPS. Neither is reachable while
+    this pack emits no URL-bearing markup, and neither is reachable after this guard
+    either.
+
+    Defined inside a function so that ``weasyprint`` stays an optional import: the
+    graph, the pipeline and the tests that do not build a PDF never load it.
+    """
+
+    from weasyprint.urls import URLFetcher
+
+    class _NoExternalResources(URLFetcher):
+        def fetch(self, url: str, headers=None):  # noqa: ANN001 - matches upstream
+            raise ValueError(f"evidence pack refused to load {url!r}")
+
+    return _NoExternalResources()
+
 TEMPLATE = """<!doctype html>
 <html><head><meta charset="utf-8"><style>
   @page {{ size: A4; margin: 18mm 16mm; @bottom-center {{
@@ -281,4 +310,4 @@ def render_evidence_pack(
         notes_block=notes_block,
         ledger_rows=ledger_rows or '<tr><td colspan="3" class="muted">no artefacts</td></tr>',
     )
-    return HTML(string=doc).write_pdf()
+    return HTML(string=doc, url_fetcher=_no_external_resources()).write_pdf()

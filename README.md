@@ -446,7 +446,8 @@ oniontrace/
 tests/
   test_pipeline.py 13 tests; pins stage failure recording, reproducibility, per-case run dirs
   test_graph.py  27 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
-  test_dashboard.py 18 tests; pins route refusals, traversal rejection, evidence-pack limits
+  test_dashboard.py 25 tests; pins route refusals, traversal rejection, evidence-pack limits,
+                   injection through collected values, and the origin/CSP boundary
   test_farm.py   65 tests; each locks in a property a reported metric depends on
   test_eval.py   65 tests; each pins what a number in the report is allowed to mean
   test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
@@ -528,7 +529,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (380 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (387 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
