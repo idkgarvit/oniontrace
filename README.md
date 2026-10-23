@@ -719,6 +719,11 @@ the same place, forever. Progress is now recorded per page, so a capped walk con
 where it stopped. That is also what the note above means when it says the directory is not
 marked as read: the pages read are remembered, the list is not.
 
+The next run with a ceiling of fourteen proved it on the same case: it skipped the pages it
+had already read, walked eleven it had not, and the case now holds nineteen snapshots and
+eleven distinct addresses, among them Der Spiegel's, the Financial Times' and Forbes' own
+onions, each still a proposal and none of them a seed.
+
 Then the index, on the same case, with no socket opened:
 
 ```
