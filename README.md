@@ -834,6 +834,27 @@ deployment, and until then every number and every guarantee in this repository i
 statement about a fixture and a boundary we drew ourselves.
 
 
+## One command that runs everything
+
+```bash
+python3 scripts/full_check.py                # terminal
+python3 scripts/full_check.py --live --html out/full-check.html   # page that fills in as it goes
+```
+
+Eight stages in order: the test suite, the paper verifier, the diagrams, the deck, the
+pipeline end to end, the gates' refusals, the execution environment, and certificate
+transparency against real logs. Exit code is 0 only when every stage passed, and a stage whose
+precondition is absent reports SKIP rather than PASS, because an unrun check that reports
+success is the failure mode the script exists to catch.
+
+It caught one while being written. `scripts/verify_diagrams.py` launched Chromium on a fixed
+port; a browser left running from an earlier session held it, the verifier's own browser
+failed to bind, and the debugger URL answered for the *old* window. That page has no width on
+its svg, so all 525 labels measured as off-canvas -- confident, meaningless numbers. The port
+is now chosen free at runtime, the target is checked to be the file this run opened, and a
+zero-sized canvas is an error instead of a verdict. All five diagrams are clean.
+
+
 ## Browser QA of the console
 
 The console is tested two ways. `tests/test_dashboard.py` drives the routes with a test

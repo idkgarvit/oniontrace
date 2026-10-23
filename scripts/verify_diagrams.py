@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import subprocess
 import sys
 import tempfile
@@ -21,7 +22,20 @@ import websockets
 
 ROOT = Path(__file__).resolve().parent.parent
 FIG = ROOT / "out" / "fig"
-PORT = 9333
+
+
+def _free_port() -> int:
+    """A port nobody is holding.
+
+    The fixed port was a trap: Chromium left running from an earlier session keeps 9333, this
+    script's own browser silently fails to bind it, and the debugger URL answers for the *old*
+    browser instead. That page has no width on its svg, so every label measures as off-canvas
+    and the script reports a pile of confident, meaningless numbers.
+    """
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
 
 
 async def measure(path: Path) -> dict:
@@ -35,18 +49,34 @@ async def measure(path: Path) -> dict:
         )
         page = fh.name
 
+    port = _free_port()
+    profile = tempfile.mkdtemp(prefix="verify-dg-")
     proc = subprocess.Popen(
         ["chromium", "--headless", "--disable-gpu", "--no-sandbox",
-         "--hide-scrollbars", f"--remote-debugging-port={PORT}",
-         "--user-data-dir=/tmp/verify-dg", f"file://{page}"],
+         "--hide-scrollbars", f"--remote-debugging-port={port}",
+         f"--user-data-dir={profile}", f"file://{page}"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     try:
         await asyncio.sleep(3.0)
         import urllib.request
 
-        targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json"))
-        page_t = [t for t in targets if t.get("type") == "page"][0]
+        targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json"))
+        wanted = f"file://{page}"
+        page_t = next(
+            (
+                t
+                for t in targets
+                if t.get("type") == "page" and t.get("url", "").startswith(wanted)
+            ),
+            None,
+        )
+        if page_t is None:
+            raise RuntimeError(
+                f"the debugger on port {port} is not showing {wanted}; it reports "
+                f"{[t.get('url', '') for t in targets]}. Refusing to measure a page this "
+                "script did not open"
+            )
         async with websockets.connect(page_t["webSocketDebuggerUrl"]) as ws:
             async def js(expr: str):
                 await ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate",
@@ -56,7 +86,7 @@ async def measure(path: Path) -> dict:
                     if msg.get("id") == 1:
                         return msg["result"]["result"].get("value")
 
-            return await js(r"""(() => {
+            result = await js(r"""(() => {
               const svg = document.querySelector('svg');
               const W = +svg.getAttribute('width'), H = +svg.getAttribute('height');
               const texts = [...svg.querySelectorAll('text')].map(t => {
@@ -79,6 +109,13 @@ async def measure(path: Path) -> dict:
                 }
               return {W, H, count: texts.length, texts, clash};
             })()""")
+            if not result or result["W"] <= 0 or result["H"] <= 0:
+                raise RuntimeError(
+                    f"{path.name}: the browser reported a "
+                    f"{result and result['W']}x{result and result['H']} canvas, so nothing "
+                    "measured against it means anything"
+                )
+            return result
     finally:
         proc.terminate()
         try:
@@ -91,7 +128,12 @@ async def measure(path: Path) -> dict:
 async def main() -> int:
     problems = 0
     for svg in sorted(FIG.glob("*.svg")):
-        d = await measure(svg)
+        try:
+            d = await measure(svg)
+        except RuntimeError as failure:
+            print(f"\n{svg.name}  NOT MEASURED: {failure}")
+            problems += 1
+            continue
         off = [t for t in d["texts"] if t["outL"] or t["outR"] or t["outT"] or t["outB"]]
         print(f"\n{svg.name}  {d['W']}x{d['H']}  {d['count']} text elements")
         if off:
