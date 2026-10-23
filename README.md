@@ -521,9 +521,41 @@ Run it with `python3 scripts/ct_log_check.py` inside the jail.
 The honest limit: **this is verification, not search.** A log is append-only and indexed by
 sequence number, not by name, and SSLMate's own documentation puts the public logs at over
 4 billion entries and 17TB. There is no way to ask a log "find every certificate naming a
-.ONION address" — that is a query a mirror provides and a log does not. Discovery therefore
-comes from sources that invite it: the `Onion-Location` headers publishers put on their own
-clearnet sites, which the collector already captures.
+.ONION address" — that is a query a mirror provides and a log does not. Discovery therefore comes from sources
+that invite it, which is the next subsection.
+
+### How discovery works now, and why not a search index
+
+Ahmia answered "give me onions matching this word" and stopped answering. The obvious move is
+another index, and it is the wrong one. Every public engine that does keyword search over
+hidden services either refuses automated querying (ahmia), is a curated list of criminal
+marketplaces this project will not touch, or is a directory of sensitive services it should
+not enumerate. That is not a gap in the tooling; it is the state of the world.
+
+What operators publish instead is a pointer from their own clearnet site to their own onion,
+in two standard forms: the `Onion-Location` response header, and
+`<meta http-equiv="onion-location">`. Both are the publisher asserting "this onion is mine".
+That is a *self-declared* pair, which is better evidence than a ranking for two reasons: the
+party best placed to know is the one asserting it, and the assertion arrived attached to a
+response the collector received and hashed.
+
+`collect/onionlocation.py` parses both forms; the `onion_location` origin reads one page per
+declared clearnet address and records the pair. It never follows the onion — a tool that
+visits whatever a page points at can be walked into a target by a hostile page.
+
+Measured from inside the jail through Tor on 2026-10-23, nine publisher front pages:
+
+| Page | Answer |
+| --- | --- |
+| `www.torproject.org` | 1 advertisement (`2gzyxa5ihm7nsggfxnu52rck2vv4rvmdlkiu3zzui5du4xyclen53wid.onion`) |
+| `freedom.press` | 1 advertisement (`fpfjxcrmw437h6z2xl3w4czl55kvkmxpapg37bbopsafdu7q454byxid.onion`) |
+| `securedrop.org` | 1 advertisement (`sdolvtfhatvsysc6l34d65ymdwxcujausv7k5jk4cy5ttzhjoi6fzvyd.onion`) |
+| `www.propublica.org`, `www.debian.org`, `duckduckgo.com`, `www.bbc.com`, `www.eff.org` | answered, no advertisement at the root page |
+| `www.nytimes.com` | `403` — the Tor exit was refused; recorded as a refusal, not as "no advertisement" |
+
+Three pairs from nine pages, and the refusals counted separately from the absences, because
+those are different facts. A publisher who does not advertise is not a publisher who has no
+onion.
 
 ## Layout
 
@@ -558,6 +590,7 @@ collect/
   collector.py   the orchestrator: four paths, budgets, checkpoints, WARC, the run report
   ahmia.py       the public index parser: ranked results into proposals (no host is
                  configured, because the index that was configured refuses queries)
+  onionlocation.py  self-published pairs: the Onion-Location header and the meta tag
   ctlog_direct.py  RFC 6962: operator list, signed tree heads, verified signatures,
                  Merkle leaves -- certificate transparency read at the source
   ctlog.py       certificate transparency: onion/clearnet associations, and their caveat
@@ -595,10 +628,12 @@ tests/
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
-  test_collect.py 72 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 74 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
   test_environment.py 25 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
+  test_onionlocation.py 14 tests; the two published forms, and every malformed value a
+                  hostile page could put in either of them
   test_ctlog_direct.py 13 tests; each builds its own key and bytes, so a tree head
                   either verifies offline or it does not -- none of them opens a socket
 ```
@@ -674,7 +709,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (428 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (444 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and

@@ -292,7 +292,7 @@ def test_a_sealed_case_makes_run_exit_non_zero_with_the_reason(root, capsys):
     assert code == 1
     assert "sealed" in out
     assert "BLOCKED" in out, "the row says the path was blocked rather than merely empty"
-    assert "refused: 4 of 4" in out
+    assert "refused: 5 of 5" in out
     assert gate.cases.snapshot_names(CASE) == ()
 
 

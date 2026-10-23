@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from gates.environment import DEFAULT_TOR_ENDPOINT
 from gates.gate import CollectionGate
@@ -101,6 +102,7 @@ def _scope_for(args: argparse.Namespace, gate: CollectionGate, case_id: str) -> 
     onion = _onion_seeds(gate, case_id)
     return CollectionScope(
         onion_addresses=onion,
+        clearnet_pages=tuple(args.clearnet_page or ()),
         search_queries=tuple(args.search_query or ()),
         ct_queries=tuple(args.ct_query or ()),
         telegram_channels=tuple(args.channel or ()),
@@ -137,7 +139,11 @@ def _live_transport(args: argparse.Namespace, clock, case_id: str, gate: Collect
         authorised_mode=args.authorised_mode,
         settings=settings,
         clock=clock,
-        extra_hosts=_onion_seeds(gate, case_id),
+        # The pages a run reads for a self-published onion are declared scope, so they
+        # join the allowance the same way onion seeds do. They are still checked by the
+        # SSRF guard first: being named by an operator is not the same as being safe.
+        extra_hosts=_onion_seeds(gate, case_id)
+        + tuple(_host_of(page) for page in (args.clearnet_page or ())),
     )
 
 
@@ -445,7 +451,23 @@ def _add_live_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--user-agent", default=LiveSettings().user_agent)
 
 
+def _host_of(url: str) -> str:
+    """The hostname of a page the operator named, for the live allowance."""
+    return (urlsplit(url).hostname or "").lower()
+
+
 def _add_scope_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--clearnet-page",
+        action="append",
+        default=None,
+        metavar="URL",
+        help=(
+            "a clearnet page to read for its self-published onion address (repeatable). "
+            "The finding is the pair the publisher declared, not the page; the onion is "
+            "never followed from here"
+        ),
+    )
     parser.add_argument(
         "--search-query",
         action="append",

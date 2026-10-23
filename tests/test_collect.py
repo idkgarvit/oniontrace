@@ -27,7 +27,9 @@ from collect.collector import (
     ORIGIN_AHMIA,
     ORIGIN_CT,
     ORIGIN_ONION,
+    ORIGIN_ONION_LOCATION,
     ORIGIN_TELEGRAM,
+    ORIGINS,
     CollectionPolicy,
     CollectionScope,
     Collector,
@@ -651,7 +653,9 @@ def test_each_path_leaves_its_own_run_entry_in_the_audit_chain(
     runs = [
         entry for entry in gate.audit.entries() if entry.action == AuditAction.COLLECTION_RUN
     ]
-    assert len(runs) == 4
+    # One entry per path, counted from ORIGINS so adding a path cannot silently make this
+    # assertion vacuous.
+    assert len(runs) == len(ORIGINS)
     assert all(entry.case_id == case for entry in runs)
 
 
@@ -734,7 +738,11 @@ def test_a_second_run_at_the_same_moment_issues_no_requests(gate, case, fixtures
     assert len(fixtures.transport.fetched) == fetched_after_first
     # Every path has to say why it did nothing, or "no requests" is indistinguishable from
     # a path that silently did not run.
-    for summary in second.origins:
+    for summary, prior in zip(second.origins, first.origins):
+        if prior.pages == 0:
+            # A path with nothing declared owes no explanation for doing nothing. Every
+            # path that had work on the first run must say why it had none on the second.
+            continue
         assert summary.notes, summary
 
 
@@ -1295,3 +1303,70 @@ def test_the_public_index_host_is_no_longer_in_the_allowance():
     # Refused either way: outside the allowance, or unresolvable on a host with no DNS.
     with pytest.raises((LiveCollectionRefused, UnknownHost)):
         transport.check("https://ahmia.fi/search/?q=ransomware")
+
+
+SELF_PUBLISHED = "juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd"
+
+
+def test_a_self_published_onion_becomes_a_proposal_and_never_a_seed(gate, case, clock):
+    """The publisher declares the pair; the collector records it and proposes the address.
+
+    Nothing here follows the onion. The source is a page describing itself, and a tool that
+    visits whatever a page points at can be walked into a target by a hostile page.
+    """
+    page = "https://publisher.example/where-to-find-us"
+    transport = FixtureTransport(
+        clock=clock,
+        hosts=("publisher.example",),
+        pages={
+            page: Page(
+                body="<html><body>mirror</body></html>",
+                headers={"Onion-Location": f"http://{SELF_PUBLISHED}.onion/"},
+            )
+        },
+    )
+    collector = make_collector(gate, transport, clock)
+    report = collector.collect(
+        case_id=case, principal=OWNER, scope=CollectionScope(clearnet_pages=(page,))
+    )
+
+    assert [proposal.seed for proposal in report.proposals] == [f"{SELF_PUBLISHED}.onion"]
+    assert report.proposals[0].origin == ORIGIN_ONION_LOCATION
+    assert report.proposals[0].discovered_from == page
+
+    stored = [s for s in stored_snapshots(gate) if s["origin"] == ORIGIN_ONION_LOCATION]
+    assert len(stored) == 1
+    assert stored[0]["content"]["onion_address"] == f"{SELF_PUBLISHED}.onion"
+    assert stored[0]["content"]["form"] == "header"
+    assert stored[0]["source_url"] == page
+    # A proposal is not a seed, in either direction.
+    assert gate.cases.get(case).seeds == []
+
+
+def test_an_address_the_case_already_declared_is_evidence_but_not_a_question(
+    gate, case, clock
+):
+    """Asking an analyst to approve an address they already named is what stops a queue being read."""
+    page = "https://publisher.example/where"
+    transport = FixtureTransport(
+        clock=clock,
+        hosts=("publisher.example",),
+        pages={
+            page: Page(
+                body="",
+                headers={"Onion-Location": f"http://{SELF_PUBLISHED}.onion/"},
+            )
+        },
+    )
+    collector = make_collector(gate, transport, clock)
+    report = collector.collect(
+        case_id=case,
+        principal=OWNER,
+        scope=CollectionScope(
+            onion_addresses=(f"{SELF_PUBLISHED}.onion",), clearnet_pages=(page,)
+        ),
+    )
+
+    assert report.proposals == ()
+    stored = [s for s in stored_snapshots(gate) if s["origin"] == ORIGIN_ONION_LOCATION]
+    assert len(stored) == 1, "the advertisement is still evidence"

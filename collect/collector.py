@@ -59,6 +59,7 @@ from gates.errors import GateRefused
 from gates.roles import Principal
 
 from .ahmia import AHMIA_HOST, extract_addresses, parse_results, search_url
+from .onionlocation import advertisements
 from .checkpoints import Checkpoint, CheckpointStore, ProposalStore
 from .clock import Clock
 from .ctlog import CTLOG_HOST, associations, parse_entries, query_url
@@ -93,13 +94,20 @@ from .warc import build_record, stream as warc_stream
 # -- the four kinds of thing this package can collect ------------------------ #
 
 ORIGIN_ONION = "onion_service"
+ORIGIN_ONION_LOCATION = "onion_location"
 ORIGIN_AHMIA = "public_index"
 ORIGIN_CT = "certificate_log"
 ORIGIN_TELEGRAM = "telegram_preview"
 
 #: Run order. Fixed, so a run's checkpoint and audit sequence are reproducible from the
 #: same inputs instead of following a set's iteration order.
-ORIGINS: tuple[str, ...] = (ORIGIN_ONION, ORIGIN_AHMIA, ORIGIN_CT, ORIGIN_TELEGRAM)
+ORIGINS: tuple[str, ...] = (
+    ORIGIN_ONION,
+    ORIGIN_ONION_LOCATION,
+    ORIGIN_AHMIA,
+    ORIGIN_CT,
+    ORIGIN_TELEGRAM,
+)
 
 #: Earliest date each kind of snapshot may be dropped, per origin. This is *not* the case
 #: retention rule -- the case's own ``retention_until`` still governs when the case must
@@ -107,6 +115,9 @@ ORIGINS: tuple[str, ...] = (ORIGIN_ONION, ORIGIN_AHMIA, ORIGIN_CT, ORIGIN_TELEGR
 #: its contents would be, which a case-level field cannot say about one message.
 RETENTION_DAYS: Mapping[str, int] = {
     ORIGIN_ONION: 90,
+    # A self-declared pair is a statement about a moment: operators move onions after a
+    # takedown or a compromise, so an old advertisement is a lead to re-check, not a fact.
+    ORIGIN_ONION_LOCATION: 90,
     ORIGIN_AHMIA: 180,
     ORIGIN_CT: 180,
     ORIGIN_TELEGRAM: 30,
@@ -152,6 +163,8 @@ class CollectionScope:
     """What one run is allowed to ask for. Anything outside it is refused, unsent."""
 
     onion_addresses: tuple[str, ...] = ()
+    #: Clearnet pages the operator named as worth reading for a self-published onion.
+    clearnet_pages: tuple[str, ...] = ()
     search_queries: tuple[str, ...] = ()
     ct_queries: tuple[str, ...] = ()
     telegram_channels: tuple[str, ...] = ()
@@ -159,6 +172,7 @@ class CollectionScope:
     def summary(self) -> tuple[str, ...]:
         return (
             f"onion targets: {len(self.onion_addresses)}",
+            f"clearnet pages: {len(self.clearnet_pages)}",
             f"search queries: {len(self.search_queries)}",
             f"ct queries: {len(self.ct_queries)}",
             f"telegram channels: {len(self.telegram_channels)}",
@@ -167,6 +181,7 @@ class CollectionScope:
     def empty(self) -> bool:
         return not (
             self.onion_addresses
+            or self.clearnet_pages
             or self.search_queries
             or self.ct_queries
             or self.telegram_channels
@@ -363,10 +378,15 @@ def checkpoint_source(origin: str, identifier: str) -> str:
 def allowed_hosts(scope: CollectionScope) -> frozenset[str]:
     """Every host a request may name, given the declared scope.
 
-    Three hosts are fixed infrastructure -- a search query goes to Ahmia, a certificate
-    query to crt.sh, a channel walk to t.me. Naming them here rather than inferring them
-    from the queries is deliberate: the queries are not hostnames, so a query string that
-    happened to contain a host would have no way to widen the set.
+    Two hosts are fixed infrastructure -- a certificate query goes to crt.sh, a channel
+    walk to t.me. Naming them here rather than inferring them from the queries is
+    deliberate: the queries are not hostnames, so a query string that happened to contain
+    a host would have no way to widen the set.
+
+    ``ahmia.fi`` is deliberately absent. It disallows automated search and enforces that
+    with a redirect, so the public-index path ships with no provider rather than with a
+    host that will not answer. Clearnet pages a run reads for a self-published onion are
+    its own declared scope and join the set below.
 
     Everything else must be an address the case declared. This is the collector's half of
     the division of labour described at the top of the module: the gate decides whether the
@@ -375,6 +395,9 @@ def allowed_hosts(scope: CollectionScope) -> frozenset[str]:
     return frozenset(
         {AHMIA_HOST, CTLOG_HOST, PREVIEW_HOST}
         | {address.lower() for address in scope.onion_addresses}
+        # The pages a run reads for a self-published onion are the run's own scope, not
+        # infrastructure: an operator named them, so they are as declared as a seed is.
+        | {(urlsplit(page).hostname or "").lower() for page in scope.clearnet_pages}
     )
 
 
@@ -679,7 +702,100 @@ class Collector:
         )
         return outcome
 
-    # -- path 2: public search engine -------------------------------------- #
+    # -- path 2: words and self-published onion addresses ------------------- #
+
+    def _path_onion_location(
+        self,
+        case_id: str,
+        scope: CollectionScope,
+        checkpoints: CheckpointStore,
+        seen: set[str],
+        budget: Budget | None = None,
+    ) -> _PathOutcome:
+        """Ask each declared clearnet page where its own onion is, and record the answer.
+
+        The finding is the pair, not the page: a snapshot here says "this clearnet host
+        advertised this onion, in this form, at this moment". Nothing follows the onion. A
+        publisher describing itself is the source, and a tool that visits whatever it is
+        told is a tool a hostile page can walk into a target.
+        """
+        summary = OriginSummary(origin=ORIGIN_ONION_LOCATION)
+        outcome = _PathOutcome(summary=summary)
+        budget = budget or Budget(self.policy.politeness, label=ORIGIN_ONION_LOCATION)
+        declared = set(scope.onion_addresses)
+        for page in scope.clearnet_pages:
+            source = checkpoint_source(ORIGIN_ONION_LOCATION, page)
+            prior = checkpoints.load(case_id, source)
+            if prior and prior.completed:
+                summary.notes.append(f"{page}: read at {prior.updated_at}; not re-read")
+                continue
+            pages_before = budget.pages
+            result = self._fetch(
+                page,
+                scope=scope,
+                case_id=case_id,
+                seed_label=f"onion-location:{page}",
+                summary=summary,
+                budget=budget,
+            )
+            if result is None:
+                continue
+            if result.status >= 400:
+                summary.notes.append(
+                    f"{page}: answered {result.status}; nothing recorded and the page is "
+                    "not marked as read, because an error page advertises nothing"
+                )
+                continue
+            found = advertisements(headers=result.headers, body=result.text, source_url=page)
+            summary.notes.append(f"{page}: {len(found)} onion advertisement(s)")
+            for advertisement in found:
+                key = (
+                    f"{ORIGIN_ONION_LOCATION}:{advertisement.onion_address}:"
+                    f"{advertisement.form}"
+                )
+                if key in seen:
+                    summary.skipped_duplicate += 1
+                    continue
+                seen.add(key)
+                outcome.payloads.append(
+                    self._payload(
+                        case_id=case_id,
+                        origin=ORIGIN_ONION_LOCATION,
+                        target=advertisement.onion_address,
+                        dedupe_key=key,
+                        captured_at=result.retrieved_at,
+                        source_url=page,
+                        content=asdict(advertisement),
+                    )
+                )
+                if advertisement.onion_address in declared:
+                    # Already a seed: the advertisement is still evidence and stays stored,
+                    # but asking an analyst to approve an address they already named is what
+                    # makes a review queue stop being read.
+                    continue
+                outcome.proposals.append(
+                    SeedProposal(
+                        seed=advertisement.onion_address,
+                        origin=ORIGIN_ONION_LOCATION,
+                        discovered_from=page,
+                        reason=(
+                            f"{advertisement.form} advertised by "
+                            f"{urlsplit(page).hostname}: the publisher declared it itself"
+                        ),
+                    )
+                )
+            outcome.checkpoints.append(
+                Checkpoint(
+                    case_id=case_id,
+                    source=source,
+                    cursor=None,
+                    pages_fetched=budget.pages - pages_before,
+                    completed=True,
+                )
+            )
+        return outcome
+
+    # -- path 3: public search engine -------------------------------------- #
 
     def _robots_rules(self, url: str, *, scope, case_id, summary, budget) -> str:
         """Quote the host's own disallow rules when it refuses a query.
@@ -1110,6 +1226,7 @@ class Collector:
             )
         paths = {
             ORIGIN_ONION: self._path_onion,
+            ORIGIN_ONION_LOCATION: self._path_onion_location,
             ORIGIN_AHMIA: self._path_ahmia,
             ORIGIN_CT: self._path_ct,
             ORIGIN_TELEGRAM: self._path_telegram,
