@@ -43,11 +43,15 @@ from gates.gate import CollectionGate
 from gates.roles import Permission, Principal, Role, require
 
 from collect.ahmia import ONION_RE, search_url
+from collect.index import index_for_case
 from collect.checkpoints import CheckpointStore, ProposalStore
 from collect.clock import FrozenClock, SystemClock
 from collect.collector import (
     ORIGINS,
     ORIGIN_AHMIA,
+    SEARCH_PROVIDER_AHMIA,
+    SEARCH_PROVIDER_LOCAL,
+    SEARCH_PROVIDERS,
     ORIGIN_CT,
     ORIGIN_ONION,
     ORIGIN_TELEGRAM,
@@ -104,6 +108,7 @@ def _scope_for(args: argparse.Namespace, gate: CollectionGate, case_id: str) -> 
         onion_addresses=onion,
         clearnet_pages=tuple(args.clearnet_page or ()),
         search_queries=tuple(args.search_query or ()),
+        search_provider=getattr(args, "search_provider", SEARCH_PROVIDER_LOCAL),
         ct_queries=tuple(args.ct_query or ()),
         telegram_channels=tuple(args.channel or ()),
     )
@@ -158,7 +163,10 @@ def cmd_targets(args: argparse.Namespace) -> int:
     print("onion services -- the addresses a case would declare as seeds:")
     for address in fixtures.onion_targets:
         print(f"  {address}")
-    print(f"search query : {fixtures.seed_query} -> {search_url(fixtures.seed_query)}")
+    print(
+        f"search query : {fixtures.seed_query} (answered by the local index by default; "
+        f"the public index would be {search_url(fixtures.seed_query)}, and it refuses)"
+    )
     print(f"cert queries : {', '.join(fixtures.ct_queries)}")
     for channel in fixtures.channels:
         pages = fixtures.pages_by_channel.get(channel, 0)
@@ -265,6 +273,15 @@ def cmd_run(args: argparse.Namespace) -> int:
             )
             for address in stale:
                 print(f"    {address}")
+
+    for dataset in getattr(args, "index_import", None) or ():
+        # Imported addresses are case data like anything else: they land in the case's own
+        # index, inside the directory the purge deletes, and a sealed case refuses them.
+        gate.cases.require_collectable(args.case)
+        written, skipped = index_for_case(gate.cases, args.case).ingest_jsonl(dataset)
+        print(
+            f"index import {dataset}: {written} address(es) added, {skipped} line(s) skipped"
+        )
 
     collector = Collector(
         gate=gate,
@@ -482,6 +499,28 @@ def _add_scope_options(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=None,
         help="a search term to run (repeatable); queries are not seeds",
+    )
+    parser.add_argument(
+        "--search-provider",
+        choices=SEARCH_PROVIDERS,
+        default=SEARCH_PROVIDER_LOCAL,
+        help=(
+            "which index answers --search-query. 'local' reads the index this project builds "
+            "from pages it was allowed to collect, so it always answers and every hit names "
+            "the page it came from; 'ahmia' is the public index, which refuses automation and "
+            "records that refusal instead of a ranking"
+        ),
+    )
+    parser.add_argument(
+        "--index-import",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "JSONL of addresses to add to the case's own index before the run "
+            "({'onion': '<56 chars>.onion', 'title': ..., 'source_url': ..., 'context': ...}). "
+            "This is the door for a published dataset, and nothing is imported by default"
+        ),
     )
     parser.add_argument(
         "--ct-query",

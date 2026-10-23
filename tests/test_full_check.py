@@ -177,6 +177,49 @@ def test_a_stage_without_its_precondition_is_skipped_never_passed(tmp_path: Path
     assert stage.notes and "tor_disposable.sh start" in stage.notes[0]
 
 
+def test_a_socket_file_with_no_tor_behind_it_is_a_skip_not_a_failure(tmp_path: Path):
+    """A dead tor leaves its socket behind, and socat's signal number is not a finding.
+
+    This is how two stages reported FAIL once: the bridge was started against a socket whose
+    process had exited, socat died, and the harness printed "exiting on signal 15" as if the
+    environment check had measured something. The socket file proves nothing; one connect
+    attempt does.
+    """
+    import socket as socket_module
+    import tempfile
+
+    # A unix socket path is capped at 108 bytes, and pytest's tmp_path is longer than that
+    # once the test name is in it. This project has already lost an afternoon to that limit.
+    short = Path(tempfile.mkdtemp(dir="/tmp"))
+    stale = short / "stale.sock"
+    listener = socket_module.socket(socket_module.AF_UNIX, socket_module.SOCK_STREAM)
+    listener.bind(str(stale))
+    listener.close()  # the file stays; nothing is listening
+
+    stage = _stage("echo 'VERDICT: 5 of 5 preflight checks proved'", tor=True)
+    harness.run(stage, stale)
+    assert stage.status == "SKIP"
+    assert "nothing behind it" in stage.summary
+    assert stage.notes and "tor_disposable.sh start" in stage.notes[0]
+
+
+def test_a_socket_with_a_listener_behind_it_runs_the_stage(tmp_path: Path):
+    import socket as socket_module
+    import tempfile
+
+    short = Path(tempfile.mkdtemp(dir="/tmp"))
+    live = short / "live.sock"
+    server = socket_module.socket(socket_module.AF_UNIX, socket_module.SOCK_STREAM)
+    server.bind(str(live))
+    server.listen(1)
+    try:
+        stage = _stage("echo 'VERDICT: 5 of 5 preflight checks proved'", tor=True)
+        harness.run(stage, live)
+    finally:
+        server.close()
+    assert stage.status == "PASS"
+
+
 def test_an_unproven_stage_fails_the_run(tmp_path: Path):
     results = [_stage("true"), _stage("echo 'VERDICT: 3 checks passed'")]
     for stage in results:

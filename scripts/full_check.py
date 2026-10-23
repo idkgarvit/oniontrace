@@ -37,6 +37,7 @@ import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import tempfile
 import time
@@ -242,11 +243,36 @@ def _last_line(text: str) -> str:
     return ""
 
 
+def _socket_answers(path: Path) -> bool:
+    """Whether anything is actually listening behind a unix socket.
+
+    A socket file outlives the process that made it. Checking only for the file means a
+    stage runs against a dead bridge, fails inside socat, and reports socat's signal number
+    as if that were a finding. The check is one connect attempt and it costs nothing.
+    """
+    if not path.exists():
+        return False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(1.0)
+            client.connect(str(path))
+        return True
+    except OSError:
+        return False
+
+
 def run(stage: Stage, tor_sock: Path) -> None:
-    if stage.needs_tor and not tor_sock.exists():
+    if stage.needs_tor and not _socket_answers(tor_sock):
         stage.status = "SKIP"
-        stage.summary = f"no Tor socket at {tor_sock}"
-        stage.notes.append("start one with scripts/tor_disposable.sh start")
+        if tor_sock.exists():
+            stage.summary = f"the Tor socket at {tor_sock} has nothing behind it"
+            stage.notes.append(
+                "the file is left over from a tor that exited; start one with "
+                "scripts/tor_disposable.sh start"
+            )
+        else:
+            stage.summary = f"no Tor socket at {tor_sock}"
+            stage.notes.append("start one with scripts/tor_disposable.sh start")
         return
     started = time.monotonic()
     try:

@@ -59,6 +59,7 @@ from gates.errors import GateRefused
 from gates.roles import Principal
 
 from .ahmia import AHMIA_HOST, extract_addresses, parse_results, search_url
+from .index import DEFAULT_INDEX_FILENAME, OnionIndex
 from .onionlocation import advertisements
 from .robots import PRODUCT_TOKEN, rules_for, summarise, verdict
 from .checkpoints import Checkpoint, CheckpointStore, ProposalStore
@@ -99,6 +100,20 @@ ORIGIN_ONION_LOCATION = "onion_location"
 ORIGIN_AHMIA = "public_index"
 ORIGIN_CT = "certificate_log"
 ORIGIN_TELEGRAM = "telegram_preview"
+
+# -- who answers a keyword query -------------------------------------------- #
+
+#: The index this project builds for itself out of pages it was allowed to read. It is the
+#: default because it is the only provider that can be shown working: it needs no network,
+#: asks nobody's permission, and every hit names the page that produced it.
+SEARCH_PROVIDER_LOCAL = "local"
+#: Ahmia, kept as a selectable provider for the record. It answers every request with a
+#: 302 and publishes ``Disallow: /search/``, which was measured three times, so selecting it
+#: records a refusal instead of returning a ranking. Retired from the default for the same
+#: reason ``crt.sh`` was retired: a source that forbids the question cannot be depended on.
+SEARCH_PROVIDER_AHMIA = "ahmia"
+
+SEARCH_PROVIDERS: tuple[str, ...] = (SEARCH_PROVIDER_LOCAL, SEARCH_PROVIDER_AHMIA)
 
 #: Run order. Fixed, so a run's checkpoint and audit sequence are reproducible from the
 #: same inputs instead of following a set's iteration order.
@@ -167,6 +182,10 @@ class CollectionScope:
     #: Clearnet pages the operator named as worth reading for a self-published onion.
     clearnet_pages: tuple[str, ...] = ()
     search_queries: tuple[str, ...] = ()
+    #: Which index answers the keyword queries. ``local`` is the default because it is the
+    #: only provider this project can prove works: it reads an index built from pages the
+    #: collector was allowed to read. ``ahmia`` is kept for the record and refuses.
+    search_provider: str = SEARCH_PROVIDER_LOCAL
     ct_queries: tuple[str, ...] = ()
     telegram_channels: tuple[str, ...] = ()
 
@@ -174,7 +193,7 @@ class CollectionScope:
         return (
             f"onion targets: {len(self.onion_addresses)}",
             f"clearnet pages: {len(self.clearnet_pages)}",
-            f"search queries: {len(self.search_queries)}",
+            f"search queries: {len(self.search_queries)} (index: {self.search_provider})",
             f"ct queries: {len(self.ct_queries)}",
             f"telegram channels: {len(self.telegram_channels)}",
         )
@@ -799,7 +818,142 @@ class Collector:
             )
         return outcome
 
-    # -- path 3: public search engine -------------------------------------- #
+    # -- path 3: keyword discovery ------------------------------------------ #
+
+    def _index(self, case_id: str) -> OnionIndex:
+        """The case's own index, inside the directory ``purge`` deletes."""
+        return OnionIndex(self.gate.cases.derived_dir(case_id) / DEFAULT_INDEX_FILENAME)
+
+    def _path_search(
+        self,
+        case_id: str,
+        scope: CollectionScope,
+        checkpoints: CheckpointStore,
+        seen: set[str],
+        budget: Budget | None = None,
+    ) -> _PathOutcome:
+        """Route a keyword query to whichever index is configured to answer it.
+
+        Two providers exist because the origin has two possible lives. ``local`` is an
+        index this project builds from pages it was allowed to read, so it always answers.
+        ``ahmia`` is the public index the origin was named after, which refuses automation
+        and is kept so that refusal stays recorded rather than forgotten. The choice is
+        explicit in the scope because a query answered by a different index is a different
+        piece of evidence, and the report has to say which one answered it.
+        """
+        if scope.search_provider == SEARCH_PROVIDER_LOCAL:
+            return self._path_local_index(case_id, scope, checkpoints, seen, budget)
+        if scope.search_provider == SEARCH_PROVIDER_AHMIA:
+            return self._path_ahmia(case_id, scope, checkpoints, seen, budget)
+        raise CollectionError(
+            f"unknown search provider {scope.search_provider!r}. The declared providers are "
+            f"{', '.join(SEARCH_PROVIDERS)}."
+        )
+
+    def _path_local_index(
+        self,
+        case_id: str,
+        scope: CollectionScope,
+        checkpoints: CheckpointStore,
+        seen: set[str],
+        budget: Budget | None = None,
+    ) -> _PathOutcome:
+        """Answer keyword queries from the index this project built for itself.
+
+        Nothing leaves the machine on this path: no host to allow, no budget to spend, no
+        server that can refuse. What it can still do is answer with nothing, and that case
+        is stored as a snapshot saying the query was asked on this date and matched zero
+        addresses. An empty answer and a query that was never asked are different claims,
+        and this project cannot afford to confuse them.
+
+        The index is refreshed from the case's stored snapshots before the first query.
+        That is what makes the path useful on a case that has been collected but never
+        indexed, and it keeps the index's contents inside the retention decision: both the
+        index and the snapshots it reads live under the case directory the purge deletes.
+        """
+        summary = OriginSummary(origin=ORIGIN_AHMIA)
+        outcome = _PathOutcome(summary=summary)
+        if budget is not None:
+            # Declared rather than implied: this path visits no host, so a reader comparing
+            # page counts across origins sees a real zero and not a missing field.
+            summary.notes.append("local index: no page budget is spent, because no page is fetched")
+        index = self._index(case_id)
+        written, pages = index.ingest_snapshots(self.gate.cases.read_snapshots(case_id))
+        stats = index.stats()
+        summary.notes.append(
+            f"local index holds {stats['mentions']} mentions of {stats['onions']} addresses "
+            f"from {stats['sources']} pages"
+            + (f", {written} of them added from {pages} stored snapshots on this run" if written else "")
+        )
+        if stats["mentions"] == 0:
+            summary.notes.append(
+                "the index is empty, so a query here can only return nothing. That is an "
+                "empty result, not a refusal: run an onion_service or onion_location pass "
+                "first, or import a dataset with --index-import"
+            )
+        declared = set(scope.onion_addresses)
+        for query in scope.search_queries:
+            source = checkpoint_source(ORIGIN_AHMIA, query)
+            prior = checkpoints.load(case_id, source)
+            if prior and prior.completed:
+                summary.notes.append(
+                    f"{query!r}: searched at {prior.updated_at}; not searched again"
+                )
+                continue
+            hits = index.search(query)
+            summary.notes.append(f"{query!r}: {len(hits)} of {stats['onions']} addresses matched")
+            url = f"oniontrace-index://{case_id}/search?q={quote(query)}"
+            content = {
+                "provider": SEARCH_PROVIDER_LOCAL,
+                "query": query,
+                "candidate_count": len(hits),
+                "candidates": [hit.to_dict() for hit in hits],
+                "index": stats,
+            }
+            key = f"{ORIGIN_AHMIA}:{query}:{content_id(json.dumps(content, sort_keys=True).encode())}"
+            if key in seen:
+                summary.skipped_duplicate += 1
+            else:
+                seen.add(key)
+                outcome.payloads.append(
+                    self._payload(
+                        case_id=case_id,
+                        origin=ORIGIN_AHMIA,
+                        target=query,
+                        dedupe_key=key,
+                        captured_at=self._clock.now().isoformat(),
+                        source_url=url,
+                        content=content,
+                    )
+                )
+            outcome.proposals.extend(
+                SeedProposal(
+                    seed=hit.onion,
+                    origin=ORIGIN_AHMIA,
+                    # The citing page, not the index URI: an analyst checking a proposal
+                    # needs the page that named the address, not the machine that repeated
+                    # it.
+                    discovered_from=hit.source_url or url,
+                    reason=(
+                        f"indexed for query {query!r}: "
+                        f"{(hit.title or hit.context or 'no surrounding text')[:80]}"
+                    ),
+                )
+                for hit in hits
+                if hit.onion not in declared
+            )
+            outcome.checkpoints.append(
+                Checkpoint(
+                    case_id=case_id,
+                    source=source,
+                    cursor=None,
+                    pages_fetched=0,
+                    completed=True,
+                )
+            )
+        return outcome
+
+    # -- path 3b: the public search engine, kept for the record ------------- #
 
     def _robots_text(self, url: str, *, scope, case_id, summary, budget) -> str | None:
         """The host's robots file, fetched at most once per run.
@@ -1269,7 +1423,7 @@ class Collector:
         paths = {
             ORIGIN_ONION: self._path_onion,
             ORIGIN_ONION_LOCATION: self._path_onion_location,
-            ORIGIN_AHMIA: self._path_ahmia,
+            ORIGIN_AHMIA: self._path_search,
             ORIGIN_CT: self._path_ct,
             ORIGIN_TELEGRAM: self._path_telegram,
         }

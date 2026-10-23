@@ -30,6 +30,8 @@ from collect.collector import (
     ORIGIN_ONION_LOCATION,
     ORIGIN_TELEGRAM,
     ORIGINS,
+    SEARCH_PROVIDER_AHMIA,
+    SEARCH_PROVIDER_LOCAL,
     CollectionPolicy,
     CollectionScope,
     Collector,
@@ -106,7 +108,7 @@ def fixtures(farm, clock):
 
 @pytest.fixture
 def scope(fixtures) -> CollectionScope:
-    return CollectionScope(
+    return CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA,
         onion_addresses=fixtures.onion_targets,
         search_queries=(fixtures.seed_query,),
         ct_queries=fixtures.ct_queries,
@@ -362,7 +364,7 @@ def test_search_results_become_proposals_and_are_stored_as_the_ranked_page(
 ):
     """The finding is the ranking, so the page is stored rather than only its addresses."""
     collector = make_collector(gate, fixtures.transport, clock)
-    scope = CollectionScope(search_queries=(fixtures.seed_query,))
+    scope = CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=(fixtures.seed_query,))
     report = collector.collect(case_id=case, principal=OWNER, scope=scope)
 
     assert {proposal.seed for proposal in report.proposals} == set(fixtures.onion_targets)
@@ -386,7 +388,7 @@ def test_an_address_the_case_already_declared_is_not_proposed_back(
     """A queue of things an analyst already decided about stops being read."""
     declared = fixtures.onion_targets[0]
     collector = make_collector(gate, fixtures.transport, clock)
-    scope = CollectionScope(
+    scope = CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA,
         onion_addresses=(declared,), search_queries=(fixtures.seed_query,)
     )
     report = collector.collect(case_id=case, principal=OWNER, scope=scope)
@@ -398,7 +400,7 @@ def test_an_address_the_case_already_declared_is_not_proposed_back(
 
 def test_a_search_that_was_already_run_is_not_run_again(gate, case, fixtures, clock):
     collector = make_collector(gate, fixtures.transport, clock)
-    scope = CollectionScope(search_queries=(fixtures.seed_query,))
+    scope = CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=(fixtures.seed_query,))
     collector.collect(case_id=case, principal=OWNER, scope=scope)
     fetched = len(fixtures.transport.fetched)
 
@@ -789,7 +791,7 @@ def test_the_second_run_rebuilds_its_ledger_from_the_case_not_from_memory(
 def test_proposals_are_merged_by_seed_across_runs(gate, case, fixtures, clock):
     """A queue with three copies of one address is not a queue of undecided things."""
     collector = make_collector(gate, fixtures.transport, clock)
-    scope = CollectionScope(search_queries=(fixtures.seed_query,))
+    scope = CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=(fixtures.seed_query,))
     collector.collect(case_id=case, principal=OWNER, scope=scope)
 
     store = ProposalStore(gate.cases.derived_dir(case), clock=clock)
@@ -809,7 +811,7 @@ def test_proposals_are_merged_by_seed_across_runs(gate, case, fixtures, clock):
     collector.collect(
         case_id=case,
         principal=OWNER,
-        scope=CollectionScope(search_queries=(second_query,)),
+        scope=CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=(second_query,)),
     )
 
     assert len(store.pending()) == first
@@ -843,7 +845,7 @@ def test_a_search_query_with_a_slash_does_not_break_its_checkpoint(gate, case, f
         Page(body=ahmia_results_html(query, []), headers={"Content-Type": "text/html"}),
     )
     collector = make_collector(gate, fixtures.transport, clock)
-    scope = CollectionScope(search_queries=(query,))
+    scope = CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=(query,))
 
     report = collector.collect(case_id=case, principal=OWNER, scope=scope)
 
@@ -940,7 +942,7 @@ def test_the_stored_candidates_are_what_the_ahmia_parser_reads(gate, case, clock
     collector.collect(
         case_id=case,
         principal=OWNER,
-        scope=CollectionScope(search_queries=(query,)),
+        scope=CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=(query,)),
     )
 
     stored = next(s for s in stored_snapshots(gate) if s["origin"] == ORIGIN_AHMIA)
@@ -998,7 +1000,7 @@ def test_an_index_error_is_recorded_but_never_stored_as_a_ranking(gate, case, cl
     )
     collector = make_collector(gate, transport, clock)
     report = collector.collect(
-        case_id=case, principal=OWNER, scope=CollectionScope(search_queries=("marketplace",))
+        case_id=case, principal=OWNER, scope=CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=("marketplace",))
     )
 
     assert summary_for(report, ORIGIN_AHMIA).stored == 0
@@ -1241,7 +1243,7 @@ def test_a_redirect_is_recorded_as_a_refusal_not_as_an_empty_ranking(
         },
     )
     collector = make_collector(gate, transport, clock)
-    scope = CollectionScope(search_queries=(query,))
+    scope = CollectionScope(search_provider=SEARCH_PROVIDER_AHMIA, search_queries=(query,))
     report = collector.collect(case_id=case, principal=OWNER, scope=scope)
 
     summary = next(s for s in report.origins if s.origin == ORIGIN_AHMIA)

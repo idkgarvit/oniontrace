@@ -79,9 +79,17 @@ RUNNER
 cmd_start() {
   need_tools
   unpack
-  if [[ -S "$SOCK" ]]; then
+  # A socket file is not a running tor. When the process dies the file stays behind, and a
+  # start that trusted it would answer "already running" to a bridge that connects to
+  # nothing. The failure then surfaces minutes later as a collector that cannot reach an
+  # onion, which reads like a network problem and is not one.
+  if [[ -S "$SOCK" ]] && pgrep -x tor >/dev/null 2>&1; then
     say "already running: $SOCK"
     return 0
+  fi
+  if [[ -S "$SOCK" ]]; then
+    say "removing a socket with no tor behind it: $SOCK"
+    rm -f "$SOCK"
   fi
   rm -f "$DIR/tor.log"
 

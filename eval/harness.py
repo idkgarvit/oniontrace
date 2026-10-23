@@ -152,6 +152,7 @@ def collection_integrity(farm) -> dict[str, Any]:
     from collect.checkpoints import CheckpointStore
     from collect.clock import FrozenClock
     from collect.collector import (
+        SEARCH_PROVIDER_AHMIA,
         CollectionPolicy,
         CollectionScope,
         Collector,
@@ -188,6 +189,11 @@ def collection_integrity(farm) -> dict[str, Any]:
             )
             scope = CollectionScope(
                 onion_addresses=fixture_set.onion_targets,
+                # The M1 scorer measures the path it was written against, which is the
+                # public index served by the fixture transport. The local index answers the
+                # same queries offline and is the product default; scoring it here would be
+                # scoring a different mechanism under the same name.
+                search_provider=SEARCH_PROVIDER_AHMIA,
                 search_queries=(fixture_set.seed_query,),
                 ct_queries=fixture_set.ct_queries,
                 telegram_channels=fixture_set.channels,

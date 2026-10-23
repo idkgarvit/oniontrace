@@ -611,6 +611,61 @@ Three pairs from nine pages, and the refusals counted separately from the absenc
 those are different facts. A publisher who does not advertise is not a publisher who has no
 onion.
 
+### The keyword origin has a provider again, and it is one this project builds
+
+The `public_index` origin shipped with no provider: the index it was named after refuses
+automated queries, so a keyword search produced a recorded refusal and nothing else. The
+honest fix was not to find another public engine, because there is no other public engine that
+permits the question. It was to build the index locally out of pages the collector is already
+allowed to read.
+
+`collect/index.py` does that. Every collected page can mention other onion addresses, and a
+page that names an address is evidence about it: who linked to it, in what words, on what
+date. Extraction is one regex borrowed from the parser that already existed, so what counts as
+an address cannot drift between the two; the citation is part of the row's primary key, so no
+hit can be stored without the page that produced it.
+
+Two doors fill it. Automatically, from the case's own stored snapshots, refreshed before the
+first query of every run, which is what makes discovery a consequence of collection. And
+deliberately, through `--index-import <file.jsonl>`, one JSON object per line, which is the
+path for a published dataset such as DUTA-10K or a list an analyst is entitled to hold:
+
+```
+{"onion": "<56 chars>.onion", "title": "Escrow marketplace", "source_url": "...", "context": "..."}
+```
+
+The whole path was run end to end on a throwaway gate root, with the fixture transport and no
+socket opened:
+
+```
+  search queries: 1 (index: local)
+index import dataset.jsonl: 3 address(es) added, 0 line(s) skipped
+public_index       pages=0   fetched=0   stored=1   dup=0   out-of-scope=0   errors=0  waited=0.0s
+  - local index: no page budget is spent, because no page is fetched
+  - local index holds 3 mentions of 3 addresses from 1 pages
+  - 'escrow marketplace': 3 of 3 addresses matched
+```
+
+Then a page was stored through the gate carrying one new address, and a fresh query found it:
+`4 mentions of 4 addresses from 2 pages, 1 of them added from 1 stored snapshots on this run`,
+one hit, one proposal, and the proposal cited the page rather than the index
+(`from http://example.invalid/mirror-list-2`). Nothing in the path can turn a proposal into a
+seed, because the proposal store is where it stops.
+
+Three properties are deliberate and tested. The index never ingests its own answers: a
+`public_index` snapshot is skipped on the way in, or the next query would cite the previous
+one and every score would inflate. Words match as whole words, because answering "art" for
+"carte" is the failure mode a keyword index hides best. And both the index and the snapshots it
+reads live inside the case's `derived` directory, so a purge deletes them together; an index
+that outlived its case would be retention with an asterisk.
+
+The limits are real and stated. This can only find addresses that appear in material already
+collected or explicitly imported, and it holds one sentence of context per address rather than
+a copy of the web. It is a discovery aid that gets better as a case collects, not a crawler
+that finds a market nobody pointed at. `--search-provider ahmia` still exists, still runs the
+old path, and still records the refusal, because deleting the evidence that a source was tried
+and said no would be the wrong kind of tidy.
+
 ### Asking the source instead of deciding about it
 
 Removing ahmia for refusing and keeping crt.sh for serving would be two exceptions, not a
@@ -672,8 +727,10 @@ gates/
   cli.py         command-line interface (`python -m gates ...`); `demo` runs the refusals
 collect/
   collector.py   the orchestrator: four paths, budgets, checkpoints, WARC, the run report
-  ahmia.py       the public index parser: ranked results into proposals (no host is
-                 configured, because the index that was configured refuses queries)
+  index.py       the keyword index this project builds from pages it collected, and the
+                 imports that let an operator load a published dataset into it
+  ahmia.py       the public index parser, kept selectable and kept refusing: the index it
+                 was written for answers automated queries with a redirect
   onionlocation.py  self-published pairs: the Onion-Location header and the meta tag
   robots.py      the host's own policy: rules, wildcard matching, and the verdict
   ctlog_direct.py  RFC 6962: operator list, signed tree heads, verified signatures,
@@ -723,7 +780,7 @@ tests/
                   hostile page could put in either of them
   test_ctlog_direct.py 13 tests; each builds its own key and bytes, so a tree head
                   either verifies offline or it does not -- none of them opens a socket
-  test_full_check.py 21 tests; the harness contract -- exit 0 without a verdict is
+  test_full_check.py 23 tests; the harness contract -- exit 0 without a verdict is
                   UNPROVEN, and every claim function is fed the output that defeats it
   test_dependencies.py 3 tests; every third-party import is in requirements.txt, so a
                   fresh clone installs what the code actually imports
@@ -736,6 +793,11 @@ tests/
   test_build_ieee.py 13 tests; the IEEE build holds its contents -- tables wrap inside the
                   column, a 56-character address breaks without gaining a character, and
                   inline code is not escaped twice
+  test_index.py  25 tests; extraction, whole-word matching, ranking, and a guard that the
+                  index never ingests its own answers as evidence for the next answer
+  test_local_index.py 10 tests; the keyword origin answered by the local index -- no socket
+                  opened, every hit citing the page behind it, declared seeds never offered
+                  back, and one query per checkpoint
 ```
 
 ## Base rates are measured, not chosen

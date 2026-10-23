@@ -33,6 +33,10 @@ VIEWER = Principal(principal_id="v.nair", role=Role.VIEWER)
 
 #: The same slice the CLI's defaults build, so a test's expectation and the CLI's addresses
 #: cannot drift apart silently.
+#: ``--search-provider ahmia`` because these tests exercise the path the fixture transport
+#: serves: a ranked results page fetched over the transport. The product default is the local
+#: index, which answers without a fetch and is covered by ``tests/test_local_index.py``.
+PROVIDER_ARGS = ["--search-provider", "ahmia"]
 FIXTURE_ARGS = [
     "--fixtures",
     "--seed",
@@ -170,7 +174,7 @@ def test_targets_prints_the_addresses_a_case_could_declare(capsys):
 def test_a_fixture_run_stores_findings_and_leaves_the_seed_list_to_the_analyst(root, capsys):
     """The demo's whole claim: collection fills the case, decisions do not."""
     gate = gate_at(root)
-    code = run_cli(*run_args(root, *FIXTURE_ARGS, "--search-query", "marketplace"))
+    code = run_cli(*run_args(root, *FIXTURE_ARGS, *PROVIDER_ARGS, "--search-query", "marketplace"))
     out = capsys.readouterr().out
 
     assert code == 0
@@ -191,7 +195,7 @@ def test_a_fixture_run_stores_findings_and_leaves_the_seed_list_to_the_analyst(r
 
 def test_the_proposal_list_offers_no_way_to_accept_one(root, capsys):
     """A CLI with an `accept` on it is one refactor from a self-seeding crawler."""
-    run_cli(*run_args(root, *FIXTURE_ARGS, "--search-query", "marketplace"))
+    run_cli(*run_args(root, *FIXTURE_ARGS, *PROVIDER_ARGS, "--search-query", "marketplace"))
     capsys.readouterr()
     gate = gate_at(root)
 
@@ -227,12 +231,12 @@ def test_the_cli_offers_no_command_that_turns_a_proposal_into_a_seed():
 def test_a_seed_an_analyst_added_is_what_the_next_run_fetches(root, capsys):
     """The seam the demo exists to show: the case decides, the collector executes."""
     gate = gate_at(root)
-    run_cli(*run_args(root, *FIXTURE_ARGS, "--search-query", "marketplace"))
+    run_cli(*run_args(root, *FIXTURE_ARGS, *PROVIDER_ARGS, "--search-query", "marketplace"))
     capsys.readouterr()
 
     address = cli_fixture_set().onion_targets[0]
     gate.add_seed(CASE, address, OWNER)
-    code = run_cli(*run_args(root, *FIXTURE_ARGS, "--search-query", "marketplace"))
+    code = run_cli(*run_args(root, *FIXTURE_ARGS, *PROVIDER_ARGS, "--search-query", "marketplace"))
     out = capsys.readouterr().out
 
     assert code == 0
@@ -268,7 +272,7 @@ def test_the_scope_is_what_the_case_declared_and_is_printed(root, capsys):
     gate = gate_at(root)
     gate.add_seed(CASE, cli_fixture_set().onion_targets[0], OWNER)
 
-    run_cli(*run_args(root, *FIXTURE_ARGS, "--search-query", "marketplace"))
+    run_cli(*run_args(root, *FIXTURE_ARGS, *PROVIDER_ARGS, "--search-query", "marketplace"))
     out = capsys.readouterr().out
 
     assert "onion targets: 1" in out
@@ -286,7 +290,7 @@ def test_a_sealed_case_makes_run_exit_non_zero_with_the_reason(root, capsys):
     gate = gate_at(root)
     gate.cases.seal(CASE)
 
-    code = run_cli(*run_args(root, *FIXTURE_ARGS, "--search-query", "marketplace"))
+    code = run_cli(*run_args(root, *FIXTURE_ARGS, *PROVIDER_ARGS, "--search-query", "marketplace"))
     out = capsys.readouterr().out
 
     assert code == 1
@@ -319,7 +323,7 @@ def test_status_shows_where_each_walk_stopped_and_records_the_read(root, capsys)
 
 
 def test_a_viewer_cannot_read_case_status_or_proposals(root, capsys):
-    run_cli(*run_args(root, *FIXTURE_ARGS, "--search-query", "marketplace"))
+    run_cli(*run_args(root, *FIXTURE_ARGS, *PROVIDER_ARGS, "--search-query", "marketplace"))
     capsys.readouterr()
 
     for command in ("status", "proposals"):
