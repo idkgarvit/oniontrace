@@ -134,3 +134,18 @@ def summarise(rules: Iterable[str]) -> str:
     """A short, quotable rendering of the rules that apply, for a note or an audit entry."""
     listed = [rule for rule in rules if rule]
     return "; ".join(f"Disallow: {rule}" for rule in listed[:4]) or "no disallow rules"
+
+_CRAWL_DELAY_RE = re.compile(r"crawl-delay\s*:\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+
+
+def crawl_delay(text: str, *, user_agent: str = PRODUCT_TOKEN) -> float | None:
+    """The host's requested delay between requests, when it states one.
+
+    ``Crawl-delay`` is not part of the robots standard any more, and a site that states it is
+    asking anyway. The largest value in the file is honoured: a policy that applies to other
+    agents and not to this one still describes how the host wants to be read, and reading it
+    faster than asked because the rule does not strictly bind is a choice a collector should
+    not make on its own.
+    """
+    values = [float(match) for match in _CRAWL_DELAY_RE.findall(text)]
+    return max(values) if values else None

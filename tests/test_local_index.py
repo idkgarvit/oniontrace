@@ -258,6 +258,37 @@ def test_the_checkpoint_names_the_query_not_the_whole_scope(gate, clock):
     assert mirrors is not None and mirrors.completed
 
 
+def test_a_query_is_asked_again_when_the_index_has_grown(gate, clock):
+    """The empty answer was true of an empty index, not forever.
+
+    Without this, the first run marks the query done against no corpus at all and the case
+    can fill up with evidence that the query will never look at again.
+    """
+    collector = make_collector(gate, RefusingTransport(), clock)
+    scope = CollectionScope(search_queries=("market",))
+    collector.collect(case_id=CASE, principal=OWNER, scope=scope)
+
+    seed_snapshot(gate, excerpt="mirrors for the market: " + FOUND)
+    second = collector.collect(case_id=CASE, principal=OWNER, scope=scope)
+
+    assert [proposal.seed for proposal in second.proposals] == [FOUND]
+    assert any(
+        "asked again" in note for note in summary_for(second, ORIGIN_AHMIA).notes
+    )
+
+
+def test_a_query_is_not_asked_again_against_an_index_of_the_same_size(gate, clock):
+    seed_snapshot(gate, excerpt="mirrors for the market: " + FOUND)
+    collector = make_collector(gate, RefusingTransport(), clock)
+    scope = CollectionScope(search_queries=("market",))
+    collector.collect(case_id=CASE, principal=OWNER, scope=scope)
+
+    again = collector.collect(case_id=CASE, principal=OWNER, scope=scope)
+
+    assert summary_for(again, ORIGIN_AHMIA).stored == 0
+    assert any("not searched again" in note for note in summary_for(again, ORIGIN_AHMIA).notes)
+
+
 def test_the_run_report_says_which_index_answered(gate, clock):
     collector = make_collector(gate, RefusingTransport(), clock)
     scope = CollectionScope(search_queries=("market",))

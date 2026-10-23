@@ -300,3 +300,24 @@ def test_a_snapshot_stored_by_the_gate_is_readable_too(index):
     hit = index.search("links")[0]
     assert hit.onion == A
     assert hit.source_url == "http://example.invalid/demo"
+
+
+def test_a_recorded_address_is_indexed_even_when_the_excerpt_was_cut_before_it(index):
+    """The live directory walk found this: the address sat past the 4000-char excerpt.
+
+    The snapshot recorded it in ``onions``, and an index that only read the excerpt counted
+    that page as having found nothing. One page, two onions, zero mentions is a silent
+    negative, which is the one kind of wrong answer this project cannot ship.
+    """
+    payload = {
+        "origin": "onion_location",
+        "source_url": "https://publisher.invalid/directory/org/",
+        "content": {
+            "title": "Org AS",
+            "excerpt": "<html><body>" + ("filler " * 700) + "</body></html>",
+            "onions": [A, B],
+        },
+    }
+    assert index.ingest_payload(payload) == 2
+    assert {hit.onion for hit in index.search("org")} == {A, B}
+    assert index.search("org")[0].context  # the title stands in for the missing sentence

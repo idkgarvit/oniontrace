@@ -107,6 +107,7 @@ def _scope_for(args: argparse.Namespace, gate: CollectionGate, case_id: str) -> 
     return CollectionScope(
         onion_addresses=onion,
         clearnet_pages=tuple(args.clearnet_page or ()),
+        directories=tuple(args.directory or ()),
         search_queries=tuple(args.search_query or ()),
         search_provider=getattr(args, "search_provider", SEARCH_PROVIDER_LOCAL),
         ct_queries=tuple(args.ct_query or ()),
@@ -148,7 +149,10 @@ def _live_transport(args: argparse.Namespace, clock, case_id: str, gate: Collect
         # join the allowance the same way onion seeds do. They are still checked by the
         # SSRF guard first: being named by an operator is not the same as being safe.
         extra_hosts=_onion_seeds(gate, case_id)
-        + tuple(_host_of(page) for page in (args.clearnet_page or ())),
+        + tuple(_host_of(page) for page in (args.clearnet_page or ()))
+        # A directory is a declared read like any other, and its host has to be in the
+        # allowance for the walk to be possible at all.
+        + tuple(_host_of(page) for page in (args.directory or ())),
     )
 
 
@@ -492,6 +496,18 @@ def _add_scope_options(parser: argparse.ArgumentParser) -> None:
             "a clearnet page to read for its self-published onion address (repeatable). "
             "The finding is the pair the publisher declared, not the page; the onion is "
             "never followed from here"
+        ),
+    )
+    parser.add_argument(
+        "--directory",
+        action="append",
+        default=None,
+        metavar="URL",
+        help=(
+            "a publisher page that lists many entries (a directory index or a sitemap "
+            "URL), walked once, same host only, capped, and slowed to whatever its robots.txt "
+            "asks for (repeatable). Every page read is evidence; every address found is a "
+            "proposal, never a seed"
         ),
     )
     parser.add_argument(

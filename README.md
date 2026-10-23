@@ -666,6 +666,64 @@ that finds a market nobody pointed at. `--search-provider ahmia` still exists, s
 old path, and still records the refusal, because deleting the evidence that a source was tried
 and said no would be the wrong kind of tidy.
 
+### What the web actually offers, measured rather than assumed
+
+Before building anything, the obvious question was whether some public index would simply
+answer automated queries. Five were tried from a real browser on 2026-10-24, and the answer
+was no in four different ways:
+
+| Source | What it says to an automated reader |
+| --- | --- |
+| `ahmia.fi` | `Disallow: /search/` and `Disallow: /*?`, enforced with a 302 |
+| `darksearch.io` | the certificate does not validate; the service is gone |
+| `searx.be` | "Verifying your browser", a bot challenge |
+| `onionsearchengine.com` | "Sorry, you have been blocked" |
+| `tor.taxi`, `dark.fail` | robots allows reading, but these are curated lists of marketplaces, which this project does not touch |
+
+So the index stayed local, and the question became where a lawful crawler can find addresses
+at all. The answer is publishers who list their own: `securedrop.org` publishes a directory of
+newsrooms, its robots file is `Disallow:` with nothing after it and `Crawl-delay: 10`, and its
+sitemap names 316 URLs of which 55 are directory entries.
+
+`collect/directory.py` walks that. `--directory URL` reads one page, takes the pages under it
+from the sitemap or from the links, keeps the same host, orders distinct paths ahead of facet
+links such as `?country=3`, and spends the run's page budget like every other path.
+
+The crawl delay is honoured, and that is not a detail. A host that states ten seconds between
+requests has stated how it wants to be read; a walk that ignores it is not a polite crawler
+with a bug, it is a crawler reading on terms the publisher did not offer.
+
+Run live through the jail and Tor on 2026-10-24, ten-page budget:
+
+```
+  - https://securedrop.org/directory/: its robots.txt asks for 10s between requests, and
+    this walk waits that long rather than the run's own setting
+  - the page budget ran out mid-walk; the directory is not marked as read, so a later run
+    finishes it instead of believing it was done
+2 proposal(s) written to the case's queue:
+  sdolvtfhatvsysc6l34d65ymdwxcujausv7k5jk4cy5ttzhjoi6fzvyd.onion  (site-wide)
+  tiykfvhb562gheutfnedysnhrxpxoztyszkqyroloyepwzxmxien77id.onion  (Aftenposten's own)
+```
+
+Eight pages read, eight snapshots stored, two addresses found, and one of them is an
+organisation's own onion that no `Onion-Location` header on the front page would have shown.
+Both became proposals, because nothing in this package can do more than that.
+
+Then the index, on the same case, with no socket opened:
+
+```
+  - local index holds 9 mentions of 2 addresses from 8 pages
+  - 'aftenposten': 2 of 2 addresses matched
+2 proposal(s) ... (public_index, from https://securedrop.org/directory/aftenposten-as/)
+```
+
+Two defects came out of running it for real, and both were the kind a fixture never shows.
+The index read only the page's 4000-character excerpt, and the address sat past the cut, so a
+page that found two onions indexed as if it had found none; it now reads the addresses the path
+recorded. And a query checkpoint meant "asked once", so the first empty answer would have been
+final while the case filled up underneath it; the checkpoint now carries the index's size, and
+a grown corpus makes the question new again.
+
 ### Asking the source instead of deciding about it
 
 Removing ahmia for refusing and keeping crt.sh for serving would be two exceptions, not a
@@ -729,6 +787,8 @@ collect/
   collector.py   the orchestrator: four paths, budgets, checkpoints, WARC, the run report
   index.py       the keyword index this project builds from pages it collected, and the
                  imports that let an operator load a published dataset into it
+  directory.py   the walk under a publisher's index: same host, capped, and the pages it
+                 points at rather than the pages it happens to show
   ahmia.py       the public index parser, kept selectable and kept refusing: the index it
                  was written for answers automated queries with a redirect
   onionlocation.py  self-published pairs: the Onion-Location header and the meta tag
@@ -793,11 +853,14 @@ tests/
   test_build_ieee.py 13 tests; the IEEE build holds its contents -- tables wrap inside the
                   column, a 56-character address breaks without gaining a character, and
                   inline code is not escaped twice
-  test_index.py  25 tests; extraction, whole-word matching, ranking, and a guard that the
+  test_index.py  26 tests; extraction, whole-word matching, ranking, and a guard that the
                   index never ingests its own answers as evidence for the next answer
-  test_local_index.py 10 tests; the keyword origin answered by the local index -- no socket
+  test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
                   opened, every hit citing the page behind it, declared seeds never offered
-                  back, and one query per checkpoint
+                  back, and a query asked again only when the index has actually grown
+  test_directory_walk.py 14 tests; a directory walk that stays on its host, keeps the cap,
+                  waits the delay robots.txt asks for, and never mistakes a facet link for
+                  an entry
 ```
 
 ## Base rates are measured, not chosen

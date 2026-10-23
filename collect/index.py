@@ -216,6 +216,19 @@ class OnionIndex:
         # addresses. Scan the raw text too, and keep the readable window where we have one.
         for address, context in addresses_with_context(text).items():
             found.setdefault(address, context)
+        return self._ingest_addresses(
+            found, source_url=source_url, title=title, captured_at=captured_at
+        )
+
+    def _ingest_addresses(
+        self,
+        found: Mapping[str, str],
+        *,
+        source_url: str,
+        title: str,
+        captured_at: str,
+    ) -> int:
+        """Write address/context pairs for one page, updating rather than duplicating."""
         short_title = " ".join(title.split())[:MAX_TITLE_CHARS]
         rows = [
             (
@@ -228,6 +241,8 @@ class OnionIndex:
             )
             for address, context in found.items()
         ]
+        if not rows:
+            return 0
         with self._connect() as connection:
             connection.executemany(
                 """
@@ -275,11 +290,24 @@ class OnionIndex:
             return 0
         raw_title = content.get("title")
         title = raw_title if isinstance(raw_title, str) else ""
-        return self.ingest_text(
-            text=excerpt,
-            source_url=str(payload.get("source_url") or ""),
-            title=title,
-            captured_at=str(payload.get("captured_at") or ""),
+        source_url = str(payload.get("source_url") or "")
+        captured_at = str(payload.get("captured_at") or "")
+        found = addresses_with_context(readable_text(excerpt))
+        # A snapshot may also carry the addresses its path already extracted. That is not
+        # redundant with the excerpt: the excerpt is cut at 4000 characters, and on a real
+        # directory page the address sat past the cut, so a page that found two onions
+        # indexed as if it had found none. The structured field is the finding; the text is
+        # the context around it.
+        recorded = content.get("onions")
+        if isinstance(recorded, (list, tuple)):
+            for address in recorded:
+                if not isinstance(address, str):
+                    continue
+                cleaned = address.strip().lower()
+                if cleaned and cleaned not in found:
+                    found[cleaned] = title or "listed on " + source_url
+        return self._ingest_addresses(
+            found, source_url=source_url, title=title, captured_at=captured_at
         )
 
     def ingest_snapshots(self, payloads: Iterable[Mapping[str, Any]]) -> tuple[int, int]:

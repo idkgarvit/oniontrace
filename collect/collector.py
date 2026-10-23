@@ -59,9 +59,10 @@ from gates.errors import GateRefused
 from gates.roles import Principal
 
 from .ahmia import AHMIA_HOST, extract_addresses, parse_results, search_url
+from .directory import DEFAULT_PAGE_CAP, child_pages, onions_in
 from .index import DEFAULT_INDEX_FILENAME, OnionIndex
 from .onionlocation import advertisements
-from .robots import PRODUCT_TOKEN, rules_for, summarise, verdict
+from .robots import PRODUCT_TOKEN, crawl_delay, rules_for, summarise, verdict
 from .checkpoints import Checkpoint, CheckpointStore, ProposalStore
 from .clock import Clock
 from .ctlog import CTLOG_HOST, associations, parse_entries, query_url
@@ -181,6 +182,10 @@ class CollectionScope:
     onion_addresses: tuple[str, ...] = ()
     #: Clearnet pages the operator named as worth reading for a self-published onion.
     clearnet_pages: tuple[str, ...] = ()
+    #: Publisher pages that list many entries (a sitemap, a directory index). The walk stays
+    #: on the host it was given and is capped, because a sitemap is a list of everything a
+    #: publisher ever wrote and following it whole is a crawl nobody asked for.
+    directories: tuple[str, ...] = ()
     search_queries: tuple[str, ...] = ()
     #: Which index answers the keyword queries. ``local`` is the default because it is the
     #: only provider this project can prove works: it reads an index built from pages the
@@ -193,6 +198,7 @@ class CollectionScope:
         return (
             f"onion targets: {len(self.onion_addresses)}",
             f"clearnet pages: {len(self.clearnet_pages)}",
+            f"directories: {len(self.directories)}",
             f"search queries: {len(self.search_queries)} (index: {self.search_provider})",
             f"ct queries: {len(self.ct_queries)}",
             f"telegram channels: {len(self.telegram_channels)}",
@@ -202,6 +208,7 @@ class CollectionScope:
         return not (
             self.onion_addresses
             or self.clearnet_pages
+            or self.directories
             or self.search_queries
             or self.ct_queries
             or self.telegram_channels
@@ -418,6 +425,9 @@ def allowed_hosts(scope: CollectionScope) -> frozenset[str]:
         # The pages a run reads for a self-published onion are the run's own scope, not
         # infrastructure: an operator named them, so they are as declared as a seed is.
         | {(urlsplit(page).hostname or "").lower() for page in scope.clearnet_pages}
+        # A directory is the same kind of declaration, and the walk stays on its host, so
+        # naming the directory is enough to authorise the pages beneath it.
+        | {(urlsplit(page).hostname or "").lower() for page in scope.directories}
     )
 
 
@@ -816,7 +826,153 @@ class Collector:
                     completed=True,
                 )
             )
+        for directory in scope.directories:
+            self._walk_directory(
+                case_id, directory, scope, checkpoints, seen, budget, outcome, summary
+            )
         return outcome
+
+    def _walk_directory(
+        self,
+        case_id: str,
+        directory_url: str,
+        scope: CollectionScope,
+        checkpoints: CheckpointStore,
+        seen: set[str],
+        budget: Budget,
+        outcome: _PathOutcome,
+        summary: OriginSummary,
+    ) -> None:
+        """Read a publisher's own index, then the pages under it that carry its onions.
+
+        A newsroom does not advertise its SecureDrop onion on every page of its site. It
+        advertises it on one page, and lists that page in a sitemap. Asking an analyst to
+        find each of those by hand is how a discovery path quietly stops being used, so the
+        walk happens here, with the constraints it needs to stay lawful: the same host, the
+        run's page budget, the host's robots policy, and the delay the host asked for.
+
+        The crawl delay is the part that cannot be skipped. securedrop.org states ten
+        seconds between requests; a walk that ignored it would be reading a site that said
+        how it wants to be read and deciding that did not apply. Where a host states no
+        delay the run's own politeness setting governs, as it does everywhere else.
+        """
+        source = checkpoint_source(ORIGIN_ONION_LOCATION, directory_url)
+        prior = checkpoints.load(case_id, source)
+        if prior and prior.completed:
+            summary.notes.append(
+                f"{directory_url}: walked at {prior.updated_at}; not walked again"
+            )
+            return
+        pages_before = budget.pages
+        index_result = self._fetch(
+            directory_url,
+            scope=scope,
+            case_id=case_id,
+            seed_label=f"directory:{directory_url}",
+            summary=summary,
+            budget=budget,
+        )
+        if index_result is None:
+            return
+        if index_result.status >= 400:
+            summary.notes.append(
+                f"{directory_url}: answered {index_result.status}; nothing walked and the "
+                "directory is not marked as read, because an error page lists nothing"
+            )
+            return
+        remaining = max(0, budget.politeness.max_pages_per_source - budget.pages)
+        cap = min(DEFAULT_PAGE_CAP, remaining)
+        children = child_pages(index_result.text, base_url=directory_url, limit=cap)
+        summary.notes.append(
+            f"{directory_url}: {len(children)} page(s) under it, cap {cap} for this run"
+        )
+        delay = crawl_delay(
+            self._robots_text(
+                directory_url, scope=scope, case_id=case_id, summary=summary, budget=budget
+            )
+            or ""
+        )
+        if delay:
+            summary.notes.append(
+                f"{directory_url}: its robots.txt asks for {delay:g}s between requests, and "
+                "this walk waits that long rather than the run's own setting"
+            )
+        declared = set(scope.onion_addresses)
+        carried = 0
+        for child in children:
+            if budget.exhausted:
+                summary.notes.append(
+                    "the page budget ran out mid-walk; the directory is not marked as read, "
+                    "so a later run finishes it instead of believing it was done"
+                )
+                return
+            if delay:
+                summary.seconds_waited += self._sleeper.sleep(delay)
+            result = self._fetch(
+                child,
+                scope=scope,
+                case_id=case_id,
+                seed_label=f"directory-page:{child}",
+                summary=summary,
+                budget=budget,
+            )
+            if result is None:
+                continue
+            if result.status >= 400:
+                summary.notes.append(f"{child}: answered {result.status}; nothing recorded")
+                continue
+            addresses = onions_in(result.text)
+            if not addresses:
+                continue
+            carried += len(addresses)
+            inventory = page_title(result.text) or child
+            key = f"{ORIGIN_ONION_LOCATION}:{directory_url}:{child}"
+            if key in seen:
+                summary.skipped_duplicate += 1
+                continue
+            seen.add(key)
+            outcome.payloads.append(
+                self._payload(
+                    case_id=case_id,
+                    origin=ORIGIN_ONION_LOCATION,
+                    target=inventory,
+                    dedupe_key=key,
+                    captured_at=result.retrieved_at,
+                    source_url=child,
+                    content={
+                        "directory": directory_url,
+                        "title": inventory,
+                        "excerpt": result.text[:EXCERPT_CHARS],
+                        "onions": list(addresses),
+                    },
+                )
+            )
+            for address in addresses:
+                if address in declared:
+                    continue
+                outcome.proposals.append(
+                    SeedProposal(
+                        seed=address,
+                        origin=ORIGIN_ONION_LOCATION,
+                        discovered_from=child,
+                        reason=(
+                            f"listed on {urlsplit(child).hostname} under the directory "
+                            f"{urlsplit(directory_url).hostname}"
+                        ),
+                    )
+                )
+        summary.notes.append(
+            f"{directory_url}: {carried} address(es) across {len(children)} page(s)"
+        )
+        outcome.checkpoints.append(
+            Checkpoint(
+                case_id=case_id,
+                source=source,
+                cursor=None,
+                pages_fetched=budget.pages - pages_before,
+                completed=True,
+            )
+        )
 
     # -- path 3: keyword discovery ------------------------------------------ #
 
@@ -892,14 +1048,25 @@ class Collector:
                 "first, or import a dataset with --index-import"
             )
         declared = set(scope.onion_addresses)
+        # What the index held when a query was answered. A checkpoint that only recorded
+        # "asked" would keep answering from the corpus of that moment: an empty index on the
+        # first run, then silence forever after, while the case filled up around it. The
+        # fingerprint is the index's shape, so a grown corpus makes the question new again.
+        fingerprint = f"{stats['mentions']}:{stats['onions']}:{stats['sources']}"
         for query in scope.search_queries:
             source = checkpoint_source(ORIGIN_AHMIA, query)
             prior = checkpoints.load(case_id, source)
-            if prior and prior.completed:
+            if prior and prior.completed and prior.cursor == fingerprint:
                 summary.notes.append(
-                    f"{query!r}: searched at {prior.updated_at}; not searched again"
+                    f"{query!r}: searched at {prior.updated_at} against an index of the same "
+                    f"size ({fingerprint}); not searched again"
                 )
                 continue
+            if prior and prior.completed:
+                summary.notes.append(
+                    f"{query!r}: asked again, because the index grew from "
+                    f"{prior.cursor or 'unknown'} to {fingerprint}"
+                )
             hits = index.search(query)
             summary.notes.append(f"{query!r}: {len(hits)} of {stats['onions']} addresses matched")
             url = f"oniontrace-index://{case_id}/search?q={quote(query)}"
@@ -946,7 +1113,7 @@ class Collector:
                 Checkpoint(
                     case_id=case_id,
                     source=source,
-                    cursor=None,
+                    cursor=fingerprint,
                     pages_fetched=0,
                     completed=True,
                 )
