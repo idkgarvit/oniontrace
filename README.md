@@ -693,7 +693,11 @@ The crawl delay is honoured, and that is not a detail. A host that states ten se
 requests has stated how it wants to be read; a walk that ignores it is not a polite crawler
 with a bug, it is a crawler reading on terms the publisher did not offer.
 
-Run live through the jail and Tor on 2026-10-24, ten-page budget:
+Run live through the jail and Tor on 2026-10-24, ten-page budget. The first attempt found
+nothing and was not a bug: `securedrop.org` answers through Tor in 19.8 seconds, which is the
+live transport's default timeout to the tenth of a second, so the fetch died at the boundary
+and the run recorded `errors=1` rather than a directory with no addresses in it. The retry
+used `--timeout 60`, which is what a clearnet host behind Tor needs:
 
 ```
   - https://securedrop.org/directory/: its robots.txt asks for 10s between requests, and
