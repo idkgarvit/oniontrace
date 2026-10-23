@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from gates.environment import DEFAULT_TOR_ENDPOINT
 from gates.gate import CollectionGate
 from gates.roles import Permission, Principal, Role, require
 
@@ -53,6 +54,8 @@ from collect.collector import (
     CollectionScope,
     Collector,
 )
+from collect.errors import LiveCollectionRefused
+from collect.preflight import check_environment
 from collect.fixtures import build_fixtures
 from collect.live import LiveSettings, LiveTransport, describe_gates
 from collect.schedule import ClockSleeper, Politeness, RecordingSleeper
@@ -162,6 +165,48 @@ def cmd_targets(args: argparse.Namespace) -> int:
     return 0
 
 
+class _EnvironmentGatedTransport:
+    """The last guard before the first byte leaves the process.
+
+    The transport's own guards answer "is this URL allowed?". This one answers a different
+    question -- "is this process safe to send it from?" -- and it runs *after* them, so a
+    run refused for lacking authorisation, or for having no SOCKS proxy, keeps its original
+    reason instead of being reported as an environment problem it never reached.
+
+    The result is memoised: the preflight opens a socket and sleeps on a timeout, and one
+    verdict per run is the unit that makes sense. A passing verdict is not re-tested for
+    every URL, and a failing one keeps failing.
+    """
+
+    def __init__(self, inner, *, report_factory) -> None:
+        self._inner = inner
+        self._report_factory = report_factory
+        self._report = None
+
+    @property
+    def name(self) -> str:
+        """Keeps the wrapped transport's name so a report says where the bytes came from."""
+
+        return getattr(self._inner, "name", "environment-gated")
+
+    def check(self, url: str, headers: dict[str, str] | None = None) -> None:
+        self._inner.check(url, headers)
+        if self._report is not None and self._report.ok:
+            return
+        report = self._report_factory()
+        self._report = report
+        if not report.ok:
+            lines = "; ".join(f"{c.name}: {c.detail}" for c in report.failures)
+            raise LiveCollectionRefused(
+                f"environment is not safe for live collection -- {lines}. "
+                "Run under scripts/run_isolated.sh with Tor listening on a unix socket."
+            )
+
+    def fetch(self, url: str, headers: dict[str, str] | None = None):
+        self.check(url, headers)
+        return self._inner.fetch(url, headers)
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     gate = _gate(args)
     principal = _principal(args)
@@ -190,7 +235,17 @@ def cmd_run(args: argparse.Namespace) -> int:
                 "until a human says otherwise."
             )
         sleeper = ClockSleeper()
-        transport = _live_transport(args, clock, args.case, gate)
+        transport = _EnvironmentGatedTransport(
+            _live_transport(args, clock, args.case, gate),
+            report_factory=lambda: check_environment(
+                tor_endpoint=(
+                    f"{args.socks_host}:{args.socks_port}"
+                    if args.socks_host
+                    else DEFAULT_TOR_ENDPOINT
+                ),
+                case_root=gate.cases.derived_dir(args.case),
+            ),
+        )
     else:
         sleeper = RecordingSleeper()
         fixtures, transport = _fixture_transport(args, clock)

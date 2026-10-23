@@ -387,6 +387,52 @@ write, which this tool does not have. `verify` reports `anchored: False` rather 
 bill when there is no anchor to check against, so a chain-only pass cannot be mistaken for a
 complete one.
 
+## The execution environment (workflow phase 1)
+
+Isolation is the first phase of every published investigation workflow and the one most
+often asserted. A launcher that says `--unshare-net` isolates nothing if the operator runs
+the collector without it, and a collector that reaches the open internet from a workstation
+has already made the mistake the isolation existed to prevent. So the environment is checked
+by observation and collection refuses when the check fails.
+
+```bash
+python -m oniontrace env                          # preflight, wherever you are
+scripts/run_isolated.sh --self-test               # preflight, inside the jail
+scripts/run_isolated.sh -- python -m collect run --case C1 --live --authorised-mode
+```
+
+| Check | How it is answered | Why not the obvious way |
+|---|---|---|
+| own network namespace | enumerates interfaces; a fresh namespace has `lo` only | comparing `/proc/1/ns/net` passes wrongly inside a PID namespace, where PID 1 is the jail's own init |
+| direct egress blocked | opens a TCP connection to a routable address; success **fails** the check | a firewall listing can be correct about rules on a different machine |
+| Tor reachable | SOCKS5 greeting, reads the method-selection reply | an open port says nothing about what is listening; an HTTP proxy on the SOCKS port would collect clearnet traffic and call it Tor |
+| case directory writable | writes a file and removes it | a permission bit is not a filesystem |
+
+**The jail has no network namespace at all** — not a firewall rule, not a proxy environment
+variable. Its only route out is a unix socket bind-mounted from the host where Tor listens,
+because a unix socket is a filesystem object and crosses a namespace boundary that an IP
+socket cannot. That turns "the collector is configured to use Tor" into "the collector has
+no other option".
+
+The difference is measurable, and the test suite measures it rather than describing it.
+Inside the jail the probe prints `BLOCKED` and `IFACES ['lo']`; with `--unshare-all` removed
+from the launcher it prints `CONNECTED` and `IFACES ['eth0', 'lo', 'virbr0', 'wlan0']`. The
+launcher therefore has its own test: dropping the flag fails the suite rather than quietly
+shipping an unsandboxed wrapper.
+
+The gate also sits in front of live collection as the last guard, after authorisation and
+after the per-URL checks, so a run refused for lacking authorisation keeps that reason
+instead of being told its problem is the environment.
+
+**Not installed here:** this machine has no `tor` binary, so `--live` cannot run on it. The
+preflight reports the missing socket and the collector refuses, which is the intended
+behaviour rather than a limitation of the check.
+
+The refusal is a `GateRefused` (`E2.6` namespace, `E2.7` egress, `E2.8` Tor) and names
+every failing check at once. The probes live in `collect/preflight.py`, not in `gates/`,
+because the gates package is required to have no network or subprocess capability;
+`gates/environment.py` holds only the verdict.
+
 ## Layout
 
 ```
@@ -442,7 +488,7 @@ dashboard/
 oniontrace/
   pipeline.py    the six stages, a manifest that records failure, no silent half-runs
   report.py      generated Markdown that names the limit of each section
-  cli.py         `run` and `show`; exit code 1 when any stage failed
+  cli.py         `run`, `show` and `env`; exit code 1 when any stage failed or the preflight failed
 tests/
   test_pipeline.py 13 tests; pins stage failure recording, reproducibility, per-case run dirs
   test_graph.py  27 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
@@ -456,6 +502,8 @@ tests/
                   figures above 200 dpi, and refuses to build without diagrams or capture
   test_collect.py 69 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
+  test_environment.py 20 tests; each pins one check, one refusal, or that the shipped
+                  launcher really isolates -- two of them start a real bwrap jail
 ```
 
 ## Reproducibility
@@ -529,7 +577,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (387 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (407 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and

@@ -18,6 +18,7 @@ import json
 import sys
 from pathlib import Path
 
+from gates.environment import DEFAULT_TOR_ENDPOINT
 from oniontrace.pipeline import run_pipeline
 
 
@@ -58,6 +59,22 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0 if data["ok"] else 1
 
 
+def cmd_env(args: argparse.Namespace) -> int:
+    """Preflight for live collection: prove the environment before trusting it."""
+
+    from collect.preflight import check_environment
+
+    report = check_environment(
+        tor_endpoint=args.tor_socks,
+        case_root=Path(args.case_root) if args.case_root else None,
+    )
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(report.summary())
+    return 0 if report.ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m oniontrace", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -77,6 +94,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("show", help="print a previous run's stage table")
     s.add_argument("--run-dir", required=True)
     s.set_defaults(func=cmd_show)
+
+    e = sub.add_parser("env", help="preflight the execution environment before live collection")
+    e.add_argument("--tor-socks", default=DEFAULT_TOR_ENDPOINT,
+                   help=f"Tor SOCKS endpoint; a unix socket by default ({DEFAULT_TOR_ENDPOINT})")
+    e.add_argument("--case-root", default=None,
+                   help="directory the run must be able to write to")
+    e.add_argument("--json", action="store_true", help="machine-readable report")
+    e.set_defaults(func=cmd_env)
     return p
 
 
