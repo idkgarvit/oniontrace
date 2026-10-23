@@ -261,6 +261,7 @@ def main() -> int:
     print(f"all {checked} checks passed")
     if strict:
         print("(strict mode: nothing extra to add)")
+    print(f"VERDICT: {checked} checks passed on the paper, its source and its citations")
     return 0
 
 

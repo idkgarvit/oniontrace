@@ -74,6 +74,13 @@ def cmd_env(args: argparse.Namespace) -> int:
         print(json.dumps(report.to_dict(), indent=2))
     else:
         print(report.summary())
+        proved = sum(1 for check in report.checks if check.ok)
+        unproved = [check.name for check in report.checks if not check.ok]
+        print(
+            f"VERDICT: {proved} of {len(report.checks)} preflight checks proved"
+            + (f", not proved: {', '.join(unproved)}" if unproved else
+               ", no route out and a circuit in")
+        )
     return 0 if report.ok else 1
 
 

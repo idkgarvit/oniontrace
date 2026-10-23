@@ -76,6 +76,10 @@ def main() -> int:
             time.sleep(2.0)
     if entries is None:
         print("\nno log served entries on this path; the signature check above still stands")
+        print(
+            f"VERDICT: {len(verified)} of 4 tree heads verified against their published "
+            "keys, no entries readable on this network path"
+        )
         return 0
 
     client, first, leaves = entries
@@ -86,6 +90,10 @@ def main() -> int:
         shown = ", ".join(names[:3]) if names else "(no names readable in the leaf)"
         print(f"  {first + offset}: {kind}, {len(names)} name(s): {shown}")
 
+    print(
+        f"VERDICT: {len(verified)} of 4 tree heads verified against their published keys, "
+        f"{len(leaves)} entries read from {client.log.description}"
+    )
     return 0
 
 

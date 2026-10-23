@@ -669,6 +669,8 @@ tests/
                   hostile page could put in either of them
   test_ctlog_direct.py 13 tests; each builds its own key and bytes, so a tree head
                   either verifies offline or it does not -- none of them opens a socket
+  test_full_check.py 21 tests; the harness contract -- exit 0 without a verdict is
+                  UNPROVEN, and every claim function is fed the output that defeats it
 ```
 
 ## Reproducibility
@@ -742,7 +744,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (460 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (481 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
@@ -847,12 +849,40 @@ transparency against real logs. Exit code is 0 only when every stage passed, and
 precondition is absent reports SKIP rather than PASS, because an unrun check that reports
 success is the failure mode the script exists to catch.
 
-It caught one while being written. `scripts/verify_diagrams.py` launched Chromium on a fixed
-port; a browser left running from an earlier session held it, the verifier's own browser
-failed to bind, and the debugger URL answered for the *old* window. That page has no width on
-its svg, so all 525 labels measured as off-canvas -- confident, meaningless numbers. The port
-is now chosen free at runtime, the target is checked to be the file this run opened, and a
-zero-sized canvas is an error instead of a verdict. All five diagrams are clean.
+### The stage has to say it passed
+
+Each stage ends by printing its own verdict on the last line of standard output:
+
+```
+VERDICT: 5 diagrams measured in a browser, 0 layout problems
+```
+
+A stage that exits 0 without printing one is **UNPROVEN**, never PASS, and an unproven stage
+fails the run. A return code says a program finished. It does not say the program measured
+anything, and this repository has twice shipped a stage that exited 0 while reporting a
+refusal as an empty result. Success is therefore a claim the stage makes, not a conclusion the
+harness draws from `$?`.
+
+Two stages keep their own format. The test suite is read from pytest's summary line, strictly:
+a failure count anywhere in the output, or fewer than 440 tests collected, means no verdict, so
+a suite that silently shrank cannot pass. The pipeline is read from `manifest.json` on disk
+rather than from what it prints, because the last line of its console output is a closing
+brace.
+
+`tests/test_full_check.py` pins this from both sides, including the case that matters: `true`
+exits 0, and the harness must call it UNPROVEN.
+
+### It found two things while being written
+
+`scripts/verify_diagrams.py` launched Chromium on a fixed port; a browser left running from an
+earlier session held it, the verifier's own browser failed to bind, and the debugger URL
+answered for the *old* window. That page has no width on its svg, so all 525 labels measured as
+off-canvas -- confident, meaningless numbers. The port is now chosen free at runtime, the
+target is checked to be the file this run opened, and a zero-sized canvas or a page with no
+text at all is an error instead of a verdict.
+
+It also caught the harness's own omission: after the contract landed, the diagram stage came
+back UNPROVEN because its verdict line had not been written yet. That is the check working.
 
 
 ## Browser QA of the console

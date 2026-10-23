@@ -127,7 +127,8 @@ async def measure(path: Path) -> dict:
 
 async def main() -> int:
     problems = 0
-    for svg in sorted(FIG.glob("*.svg")):
+    diagrams = sorted(FIG.glob("*.svg"))
+    for svg in diagrams:
         try:
             d = await measure(svg)
         except RuntimeError as failure:
@@ -136,6 +137,11 @@ async def main() -> int:
             continue
         off = [t for t in d["texts"] if t["outL"] or t["outR"] or t["outT"] or t["outB"]]
         print(f"\n{svg.name}  {d['W']}x{d['H']}  {d['count']} text elements")
+        if d["count"] == 0:
+            # A page that rendered nothing measures as a clean canvas. That is not a pass.
+            print("   NOTHING MEASURED: the page reported no text at all")
+            problems += 1
+            continue
         if off:
             problems += len(off)
             for t in off:
@@ -149,7 +155,13 @@ async def main() -> int:
             print(f"   clean · widest text ends at x={widest['x'] + widest['w']} of {d['W']}")
 
     print(f"\n{problems} layout problem(s)")
-    return 1 if problems else 0
+    if problems:
+        return 1
+    if not diagrams:
+        print(f"VERDICT: no diagrams found under {FIG}, so nothing was measured")
+        return 1
+    print(f"VERDICT: {len(diagrams)} diagrams measured in a browser, 0 layout problems")
+    return 0
 
 
 if __name__ == "__main__":

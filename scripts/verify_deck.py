@@ -133,6 +133,13 @@ def main(path: str) -> int:
             print(f"  - {p}")
         return 1
     print("no layout problems: everything inside the slide, no clipped text, no overlaps")
+    with_notes = sum(
+        1 for slide in prs.slides if slide.notes_slide.notes_text_frame.text.strip()
+    )
+    print(
+        f"VERDICT: {len(prs.slides)} slides at {SW:.2f}x{SH:.2f} in, "
+        f"{with_notes} with speaker notes, nothing clipped or overlapping"
+    )
     return 0
 
 

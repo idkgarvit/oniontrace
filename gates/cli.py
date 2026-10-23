@@ -281,6 +281,11 @@ def cmd_demo(args: argparse.Namespace) -> int:
     ]
     print(f"  {len(refusals)} refusal(s) on the trail for this case")
     print(f"  audit head: {verification.get('head_hash', '')[:16]}...")
+    print(
+        f"VERDICT: {len(refusals)} refusals recorded, audit trail verified over "
+        f"{verification['entries_checked']} entries and anchored, "
+        f"head {verification.get('head_hash', '')[:16]}"
+    )
     return 0
 
 
