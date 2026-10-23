@@ -1275,3 +1275,23 @@ def test_an_allowlisted_name_that_cannot_resolve_here_is_still_permitted():
 
     with pytest.raises(LiveCollectionRefused):
         transport.check("https://not-allowlisted.invalid/search/?q=x")
+
+
+def test_the_public_index_host_is_no_longer_in_the_allowance():
+    """ahmia.fi was removed on 2026-10-23 after it refused every query.
+
+    It publishes ``Disallow: /search/`` and ``Disallow: /*?`` and then enforces that with a
+    302 to the root for any user agent. Measured three separate live runs, same answer each
+    time. This test exists so re-adding the host has to be a deliberate edit that also
+    updates the record, rather than a one-line "fix" to make an origin stop complaining.
+    """
+    from collect.errors import LiveCollectionRefused, UnknownHost
+    from collect.live import CLEARNET_ALLOWANCE, LiveSettings, LiveTransport
+
+    assert "ahmia.fi" not in CLEARNET_ALLOWANCE
+    transport = LiveTransport(
+        authorised_mode=True, settings=LiveSettings(socks_host="127.0.0.1")
+    )
+    # Refused either way: outside the allowance, or unresolvable on a host with no DNS.
+    with pytest.raises((LiveCollectionRefused, UnknownHost)):
+        transport.check("https://ahmia.fi/search/?q=ransomware")

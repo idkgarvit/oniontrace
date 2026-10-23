@@ -41,8 +41,21 @@ from urllib.parse import urlsplit
 from .errors import LiveCollectionRefused, TransportUnavailable, UnknownHost
 from .transport import FetchResult
 
-#: The only clearnet hosts live collection may ever contact. Anything else is scope creep.
-CLEARNET_ALLOWANCE: tuple[str, ...] = ("t.me", "ahmia.fi", "crt.sh")
+#: Clearnet hosts the live transport will talk to without an operator adding more. Anything
+#: else is scope creep.
+#:
+#: ``ahmia.fi`` was here and is deliberately gone: it publishes ``Disallow: /search/`` and
+#: ``Disallow: /*?`` and then enforces that with a 302 to the root on every query, whatever
+#: the user agent. Measured three times on 2026-10-23 (CASE-LIVE-1, -2, -3), each time the
+#: same. A host that will not answer is not a host to leave in an allowance, because the
+#: allowance is a statement about what the tool may do, and the tool may no longer do this.
+#:
+#: The ``public_index`` origin is kept rather than deleted: keyword discovery is a real
+#: capability and the parser is not specific to any one index. It ships with no provider
+#: configured, so it fails loudly instead of quietly returning nothing. Pointing it at an
+#: index that permits automated querying is an operator decision, made through
+#: ``extra_hosts``, and it belongs on the record.
+CLEARNET_ALLOWANCE: tuple[str, ...] = ("t.me", "crt.sh")
 
 #: Names that always resolve to the local host, whatever the resolver says.
 _LOCAL_NAMES = frozenset({
@@ -255,11 +268,21 @@ class LiveTransport:
             if blocked and allowlisted and why.startswith("unresolvable"):
                 blocked = False
             if blocked:
-                raise LiveCollectionRefused(
-                    f"refusing {host!r}: {why}. Live collection is public, "
-                    "unauthenticated preview only, and must never reach localhost, "
-                    "link-local, or private address space."
-                )
+                # Two different refusals share this raise, so the second sentence has to
+                # follow the reason: telling an operator about private address space when
+                # the name simply did not resolve sends them looking in the wrong place.
+                if why.startswith("unresolvable"):
+                    remedy = (
+                        "Live collection resolves every host before fetching it, and a name "
+                        "that cannot be resolved here cannot be checked. Hosts outside the "
+                        "allowance are not exempt from that."
+                    )
+                else:
+                    remedy = (
+                        "Live collection is public, unauthenticated preview only, and must "
+                        "never reach localhost, link-local, or private address space."
+                    )
+                raise LiveCollectionRefused(f"refusing {host!r}: {why}. {remedy}")
         if not host.endswith(".onion") and host not in self._hosts:
             raise UnknownHost(
                 f"{host!r} is outside the declared allowance {self._hosts}. Widening "

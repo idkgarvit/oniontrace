@@ -473,7 +473,7 @@ different facts and only one of them is about the world.
 
 | Source | Answer | What the collector recorded |
 | --- | --- | --- |
-| `ahmia.fi` search | `302` to `/`, on every query, with any user agent | A refusal, not a ranking with zero results. The note quotes the host's own `robots.txt` (`Disallow: /search/`, `Disallow: /*?`) and keeps the `Onion-Location` header the refusal carried |
+| `ahmia.fi` search | `302` to `/`, on every query, with any user agent | A refusal, not a ranking with zero results. The note quotes the host's own `robots.txt` (`Disallow: /search/`, `Disallow: /*?`) and keeps the `Onion-Location` header the refusal carried. **Removed from the allowance on 2026-10-23**: measured three times, same answer, so the tool no longer names the host |
 | `crt.sh` | `429` | Nothing parsed, and the query deliberately left un-checkpointed so a re-run retries it instead of treating throttling as an empty result |
 
 Two things this changed in the code. A `3xx` used to fall through to the parser, so the run
@@ -486,8 +486,44 @@ private, loopback, link-local or IP-literal verdict still refuses even when allo
 The practical consequence is a source problem, not a tool problem: ahmia.fi publishes a
 machine-readable refusal and then enforces it, and crt.sh fronts data whose authoritative
 source is the CT log servers themselves. Reading certificate transparency at the log rather
-than through a mirror that would rather not be queried is the honest fix, and it is not
-built yet.
+than through a mirror that would rather not be queried is the honest fix, and it is built:
+see the next subsection.
+
+### Certificate transparency at the source
+
+`collect/ctlog_direct.py` reads the logs themselves instead of a mirror. Every public log
+serves RFC 6962 without credentials, and a log's signed tree head is a cryptographic
+commitment: the operator's key signs `sha256_root_hash` and `tree_size`, so a head that
+verifies is evidence a mirror cannot fake.
+
+Measured from inside the isolation jail on 2026-10-23, through Tor:
+
+```
+operator list: 21 usable logs
+  ok   Google Argon2026h2: tree_size=3,453,420,667 signature verified
+  ok   Google Argon2027h1: tree_size=661,236,563 signature verified
+  ok   Google Xenon2026h2: tree_size=2,986,793,766 signature verified
+  ok   Google Xenon2027h1: tree_size=533,197,054 signature verified
+4 of 4 tree heads verified against their published keys
+  reading entries 3453420664..3453420666 of Google Argon2026h2
+  3453420664: precert, 0 name(s): (no names readable in the leaf)
+  3453420665: x509, 1 name(s): portal.foresite.tech
+  3453420666: x509, 1 name(s): x.clio.alterspective.com.au
+```
+
+Verification checks two things, and the second is the one that matters: the ECDSA signature
+over the RFC 6962 `TreeHeadSignature` bytes, **and** that the key in the operator list
+hashes to that log's published `log_id`. Without the second check a substituted key would
+verify a substituted head perfectly well.
+
+Run it with `python3 scripts/ct_log_check.py` inside the jail.
+
+The honest limit: **this is verification, not search.** A log is append-only and indexed by
+sequence number, not by name, and SSLMate's own documentation puts the public logs at over
+4 billion entries and 17TB. There is no way to ask a log "find every certificate naming a
+.ONION address" — that is a query a mirror provides and a log does not. Discovery therefore
+comes from sources that invite it: the `Onion-Location` headers publishers put on their own
+clearnet sites, which the collector already captures.
 
 ## Layout
 
@@ -520,7 +556,10 @@ gates/
   cli.py         command-line interface (`python -m gates ...`); `demo` runs the refusals
 collect/
   collector.py   the orchestrator: four paths, budgets, checkpoints, WARC, the run report
-  ahmia.py       the public index: ranked results parsed into proposals
+  ahmia.py       the public index parser: ranked results into proposals (no host is
+                 configured, because the index that was configured refuses queries)
+  ctlog_direct.py  RFC 6962: operator list, signed tree heads, verified signatures,
+                 Merkle leaves -- certificate transparency read at the source
   ctlog.py       certificate transparency: onion/clearnet associations, and their caveat
   telegram.py    public previews: backward history walks, message ledger, cursor safety
   transport.py   the fetch protocol, plus the fixture transport every test runs against
@@ -556,10 +595,12 @@ tests/
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
-  test_collect.py 71 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 72 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
   test_environment.py 25 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
+  test_ctlog_direct.py 13 tests; each builds its own key and bytes, so a tree head
+                  either verifies offline or it does not -- none of them opens a socket
 ```
 
 ## Reproducibility
@@ -633,7 +674,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (414 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (428 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
