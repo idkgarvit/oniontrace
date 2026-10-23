@@ -659,7 +659,7 @@ tests/
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
-  test_collect.py 76 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 77 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
   test_environment.py 25 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
