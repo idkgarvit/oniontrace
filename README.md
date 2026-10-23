@@ -713,6 +713,12 @@ Eight pages read, eight snapshots stored, two addresses found, and one of them i
 organisation's own onion that no `Onion-Location` header on the front page would have shown.
 Both became proposals, because nothing in this package can do more than that.
 
+The run stopped at its page ceiling, and the first version of that was a trap: the directory
+carried no cursor, so the next run started at the top of the same nine pages and stopped in
+the same place, forever. Progress is now recorded per page, so a capped walk continues from
+where it stopped. That is also what the note above means when it says the directory is not
+marked as read: the pages read are remembered, the list is not.
+
 Then the index, on the same case, with no socket opened:
 
 ```
@@ -862,9 +868,9 @@ tests/
   test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
                   opened, every hit citing the page behind it, declared seeds never offered
                   back, and a query asked again only when the index has actually grown
-  test_directory_walk.py 14 tests; a directory walk that stays on its host, keeps the cap,
-                  waits the delay robots.txt asks for, and never mistakes a facet link for
-                  an entry
+  test_directory_walk.py 15 tests; a directory walk that stays on its host, keeps the cap,
+                  waits the delay robots.txt asks for, resumes per page when the budget
+                  stops it, and never mistakes a facet link for an entry
 ```
 
 ## Base rates are measured, not chosen

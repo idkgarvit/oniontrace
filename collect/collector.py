@@ -900,10 +900,20 @@ class Collector:
         declared = set(scope.onion_addresses)
         carried = 0
         for child in children:
+            child_source = checkpoint_source(ORIGIN_ONION_LOCATION, child)
+            child_prior = checkpoints.load(case_id, child_source)
+            if child_prior and child_prior.completed:
+                # Progress has to be per page, not per directory. A capped walk that always
+                # starts at the top of the list re-reads the same first pages on every run
+                # and never reaches the rest of the sitemap, which looks like a directory
+                # that never grows.
+                summary.notes.append(f"{child}: read at {child_prior.updated_at}; not re-read")
+                continue
             if budget.exhausted:
                 summary.notes.append(
-                    "the page budget ran out mid-walk; the directory is not marked as read, "
-                    "so a later run finishes it instead of believing it was done"
+                    "the page budget ran out mid-walk; the pages read are remembered "
+                    "individually, so a later run continues from here instead of starting "
+                    "over, and the directory is still not marked as done"
                 )
                 return
             if delay:
@@ -921,6 +931,15 @@ class Collector:
             if result.status >= 400:
                 summary.notes.append(f"{child}: answered {result.status}; nothing recorded")
                 continue
+            outcome.checkpoints.append(
+                Checkpoint(
+                    case_id=case_id,
+                    source=child_source,
+                    cursor=None,
+                    pages_fetched=1,
+                    completed=True,
+                )
+            )
             addresses = onions_in(result.text)
             if not addresses:
                 continue

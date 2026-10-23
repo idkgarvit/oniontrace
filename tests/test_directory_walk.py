@@ -249,6 +249,52 @@ def test_the_delay_the_host_asked_for_is_the_delay_the_walk_waits(gate, clock):
     assert any("robots.txt asks for 10s" in note for note in summary.notes)
 
 
+def test_a_capped_walk_resumes_where_it_stopped(gate, clock):
+    """A budget that stops at the top of the list must not make the list unwalkable.
+
+    This is how the live run behaved before the fix: it read nine pages, ran out of budget,
+    saved no cursor, and the next run read the same nine and stopped in the same place. Per
+    page progress is what turns a capped walk into a walk that finishes.
+    """
+    pages = {
+        BASE: Page(
+            body="<html><body>"
+            '<a href="/directory/one/">One</a>'
+            '<a href="/directory/two/">Two</a>'
+            '<a href="/directory/three/">Three</a>'
+            "</body></html>"
+        ),
+        f"{BASE}one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+        f"{BASE}two/": Page(body=f'<a href="http://{SECOND}/">two</a>'),
+        f"{BASE}three/": Page(body=f'<a href="http://{THIRD}/">three</a>'),
+    }
+    transport = make_transport(clock, pages)
+    collector = Collector(
+        gate=gate,
+        transport=transport,
+        clock=clock,
+        policy=CollectionPolicy(
+            politeness=Politeness(min_host_delay_seconds=0.0, max_pages_per_source=4)
+        ),
+    )
+    scope = CollectionScope(directories=(BASE,))
+
+    collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
+    first_run = list(transport.requested)
+    transport.requested.clear()
+
+    collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
+    second_run = list(transport.requested)
+
+    # Run one spends its four pages on the directory, its robots file, and two entries.
+    assert f"{BASE}one/" in first_run and f"{BASE}two/" in first_run
+    assert f"{BASE}three/" not in first_run
+    # Run two skips what was already read and moves on to the entry it never reached.
+    assert f"{BASE}three/" in second_run
+    assert f"{BASE}one/" not in second_run, "the page already read was read again"
+    assert f"{BASE}two/" not in second_run
+
+
 def test_a_walked_directory_is_not_walked_again(gate, clock):
     transport = make_transport(clock, directory_pages())
     collector = collector_for(gate, transport, clock)
