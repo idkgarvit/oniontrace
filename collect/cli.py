@@ -270,6 +270,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         gate=gate,
         transport=transport,
         clock=clock,
+        accept_source_policy=getattr(args, "accept_source_policy", False),
         policy=CollectionPolicy(
             politeness=Politeness(
                 min_host_delay_seconds=args.min_delay,
@@ -438,6 +439,14 @@ def _add_live_options(parser: argparse.ArgumentParser) -> None:
         "--authorised-mode",
         action="store_true",
         help="assert authorisation for a live target; the transport refuses without it",
+    )
+    parser.add_argument(
+        "--accept-source-policy",
+        action="store_true",
+        help=(
+            "query a source whose robots.txt disallows the path anyway, for a lawful reason "
+            "a human holds. Recorded in the run's notes: the decision is never silent"
+        ),
     )
     parser.add_argument("--socks-host", default=None, help="SOCKS proxy host for .onion")
     parser.add_argument("--socks-port", type=int, default=9050)

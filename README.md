@@ -557,6 +557,36 @@ Three pairs from nine pages, and the refusals counted separately from the absenc
 those are different facts. A publisher who does not advertise is not a publisher who has no
 onion.
 
+### Asking the source instead of deciding about it
+
+Removing ahmia for refusing and keeping crt.sh for serving would be two exceptions, not a
+policy. So the collector asks: it fetches `robots.txt` once per host, evaluates the rule
+against the exact path and query it intends to use, and refuses when the answer is no.
+
+Measured live on 2026-10-23, one run, one query:
+
+```
+certificate_log    pages=0  fetched=0  stored=0  errors=0  BLOCKED
+  - crt.sh: robots.txt says Disallow: /. Nothing was requested.
+    --accept-source-policy records a human decision to use the source anyway,
+    and repeats it in this run's notes
+BUDGET             pages=1/50 bytes=26/8388608
+```
+
+Twenty-six bytes is the robots file itself. The query was never sent.
+
+`--accept-source-policy` exists because a lawful reason to use a source whose crawler policy
+is wider than its API policy is a real thing, and it should be somebody's decision rather
+than a line of code that quietly stopped checking. The flag puts that decision in the run's
+notes every time it is used.
+
+Three details that are easy to get wrong, and have tests: `/*?` is a real rule meaning "any
+URL with a query string", so matching is a wildcard conversion rather than ``startswith``; an
+absent robots file is a host that stated no policy, not a ban, while a `401` or `403` on the
+file is the standard's "assume everything is disallowed"; and `Allow` directives are ignored,
+which over-blocks rather than under-blocks, because arguing precedence with a stranger's file
+is not this tool's job.
+
 ## Layout
 
 ```
@@ -591,6 +621,7 @@ collect/
   ahmia.py       the public index parser: ranked results into proposals (no host is
                  configured, because the index that was configured refuses queries)
   onionlocation.py  self-published pairs: the Onion-Location header and the meta tag
+  robots.py      the host's own policy: rules, wildcard matching, and the verdict
   ctlog_direct.py  RFC 6962: operator list, signed tree heads, verified signatures,
                  Merkle leaves -- certificate transparency read at the source
   ctlog.py       certificate transparency: onion/clearnet associations, and their caveat
@@ -628,10 +659,12 @@ tests/
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
-  test_collect.py 74 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 76 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
   test_environment.py 25 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
+  test_robots.py 14 tests; said no, said nothing, said it in a way this has to
+                  interpret -- including the two real files that started this
   test_onionlocation.py 14 tests; the two published forms, and every malformed value a
                   hostile page could put in either of them
   test_ctlog_direct.py 13 tests; each builds its own key and bytes, so a tree head
@@ -709,7 +742,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (444 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (460 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and

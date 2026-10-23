@@ -60,6 +60,7 @@ from gates.roles import Principal
 
 from .ahmia import AHMIA_HOST, extract_addresses, parse_results, search_url
 from .onionlocation import advertisements
+from .robots import PRODUCT_TOKEN, rules_for, summarise, verdict
 from .checkpoints import Checkpoint, CheckpointStore, ProposalStore
 from .clock import Clock
 from .ctlog import CTLOG_HOST, associations, parse_entries, query_url
@@ -414,6 +415,7 @@ class Collector:
         sleeper: Sleeper | None = None,
         warc_dir=None,
         revisit: RevisitPlanner | None = None,
+        accept_source_policy: bool = False,
     ) -> None:
         self.gate = gate
         self.policy = (policy or CollectionPolicy()).validated()
@@ -426,10 +428,12 @@ class Collector:
         )
         self._warc_dir = warc_dir
         self._revisit = revisit or RevisitPlanner()
-        #: robots.txt rules per host, fetched at most once per run and only when a source
-        #: refuses a query. A diagnostic, so a failure here is stored as an empty string
-        #: rather than allowed to break the run it is explaining.
-        self._robots_cache: dict[str, str] = {}
+        #: robots.txt body per host, fetched at most once per run. ``None`` means the host
+        #: served nothing, which is not a refusal: a host with no file has stated no policy.
+        self._robots_cache: dict[str, str | None] = {}
+        #: A human can accept a source whose robots policy is narrower than its published
+        #: interface. The decision is recorded on every run it affects, never assumed.
+        self.accept_source_policy = bool(accept_source_policy)
 
     # -- plumbing ---------------------------------------------------------- #
 
@@ -797,38 +801,51 @@ class Collector:
 
     # -- path 3: public search engine -------------------------------------- #
 
-    def _robots_rules(self, url: str, *, scope, case_id, summary, budget) -> str:
-        """Quote the host's own disallow rules when it refuses a query.
+    def _robots_text(self, url: str, *, scope, case_id, summary, budget) -> str | None:
+        """The host's robots file, fetched at most once per run.
 
-        Called only on a refusal, so a normal run costs no extra requests, and cached per
-        host because a run asks the same question once per source at most. A failure here
-        is swallowed on purpose: this is the explanation for a refusal, and an explanation
-        that crashes the run it was written to describe is worse than no explanation.
+        ``None`` means the host served nothing usable, and that is deliberately different
+        from an empty file: a 404 is a host that has stated no policy, while a 401 or 403 is
+        the standard's "this file cannot be read, assume everything is disallowed".
+
+        A failure here is swallowed. This is context for a decision about one source, and an
+        explanation that crashes the run it was written to describe is worse than none.
         """
         host = (urlsplit(url).hostname or "").lower()
         if host in self._robots_cache:
             return self._robots_cache[host]
-        rules = ""
+        text: str | None = None
+        # Its own tally: a robots fetch is a diagnostic, not a query, and adding it to the
+        # origin's page count would make every "pages" figure in a report one too high in a
+        # way a reader cannot see. The budget still pays for the request, because it is one.
+        probe = OriginSummary(origin=f"{ORIGIN_CT}:robots")
         try:
             result = self._fetch(
                 f"https://{host}/robots.txt",
                 scope=scope,
                 case_id=case_id,
                 seed_label="robots",
-                summary=summary,
+                summary=probe,
                 budget=budget,
             )
             if result is not None and result.status == 200:
-                disallow = [
-                    line.strip()
-                    for line in result.text.splitlines()
-                    if line.strip().lower().startswith("disallow:")
-                ]
-                rules = "; ".join(disallow[:4])
+                text = result.text
+            elif result is not None and result.status in (401, 403):
+                text = "User-agent: *\nDisallow: /"
         except Exception:  # noqa: BLE001 - see the docstring
-            rules = ""
-        self._robots_cache[host] = rules
-        return rules
+            text = None
+        self._robots_cache[host] = text
+        return text
+
+    def _robots_rules(self, url: str, *, scope, case_id, summary, budget) -> str:
+        """A short quoting of the disallow rules, for a note explaining a refusal."""
+        text = self._robots_text(
+            url, scope=scope, case_id=case_id, summary=summary, budget=budget
+        )
+        if text is None:
+            return ""
+        rules = rules_for(text, user_agent=PRODUCT_TOKEN)
+        return summarise(rules) if rules else ""
 
     def _path_ahmia(
         self,
@@ -978,6 +995,31 @@ class Collector:
                 summary.notes.append(f"{query}: queried at {prior.updated_at}; not re-queried")
                 continue
             url = query_url(query)
+            # Ask the host before asking it for data. crt.sh publishes "Disallow: /" for
+            # every agent and serves JSON anyway, which is not the same situation as ahmia
+            # enforcing its refusal -- but it is still the host stating a preference, so the
+            # decision to query it belongs to a human and goes on the record.
+            parts = urlsplit(url)
+            allowed, why = verdict(
+                self._robots_text(
+                    url, scope=scope, case_id=case_id, summary=summary, budget=budget
+                ),
+                parts.path + (f"?{parts.query}" if parts.query else ""),
+                user_agent=PRODUCT_TOKEN,
+            )
+            if not allowed:
+                if not self.accept_source_policy:
+                    summary.blocked_by_policy = True
+                    summary.notes.append(
+                        f"{parts.hostname}: {why}. Nothing was requested. "
+                        "--accept-source-policy records a human decision to use the source "
+                        "anyway, and repeats it in this run's notes"
+                    )
+                    return outcome
+                summary.notes.append(
+                    f"{parts.hostname}: {why}; continuing because a human accepted the "
+                    "source policy for this run"
+                )
             pages_before = budget.pages
             result = self._fetch(
                 url,

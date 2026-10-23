@@ -1370,3 +1370,60 @@ def test_an_address_the_case_already_declared_is_evidence_but_not_a_question(
     assert report.proposals == ()
     stored = [s for s in stored_snapshots(gate) if s["origin"] == ORIGIN_ONION_LOCATION]
     assert len(stored) == 1, "the advertisement is still evidence"
+
+
+def test_a_source_that_disallows_the_path_is_not_queried(gate, case, clock):
+    """crt.sh says ``Disallow: /`` for every agent. The collector asks before asking for data.
+
+    This is the difference between a project that removed one host for refusing and a project
+    that has a policy: the host is still configured, the tool consults the host, and it stops.
+    """
+    query = "svcf0dc4b.example-clear.net"
+    transport = FixtureTransport(
+        clock=clock,
+        hosts=(CTLOG_HOST,),
+        pages={
+            f"https://{CTLOG_HOST}/robots.txt": Page(
+                body="User-agent: *\nDisallow: /\n"
+            )
+        },
+    )
+    collector = make_collector(gate, transport, clock)
+    report = collector.collect(
+        case_id=case, principal=OWNER, scope=CollectionScope(ct_queries=(query,))
+    )
+
+    summary = summary_for(report, ORIGIN_CT)
+    assert summary.blocked_by_policy, "the path is blocked, not merely empty"
+    assert any("Disallow: /" in note for note in summary.notes)
+    assert report.snapshots_stored == 0
+    # The query itself was never sent. Only the robots file was read.
+    assert query_url(query) not in transport.fetched
+
+
+def test_a_human_can_accept_the_source_policy_and_the_run_says_so(gate, case, clock):
+    """An override is a decision with a name on it, not a line of code that stopped checking."""
+    query = "svcf0dc4b.example-clear.net"
+    transport = FixtureTransport(
+        clock=clock,
+        hosts=(CTLOG_HOST,),
+        pages={
+            f"https://{CTLOG_HOST}/robots.txt": Page(body="User-agent: *\nDisallow: /\n"),
+            query_url(query): Page(body="[]"),
+        },
+    )
+    collector = Collector(
+        gate=gate,
+        transport=transport,
+        clock=clock,
+        policy=CollectionPolicy(politeness=FAST),
+        accept_source_policy=True,
+    )
+    report = collector.collect(
+        case_id=case, principal=OWNER, scope=CollectionScope(ct_queries=(query,))
+    )
+
+    summary = summary_for(report, ORIGIN_CT)
+    assert not summary.blocked_by_policy
+    assert any("accepted the source policy" in note for note in summary.notes)
+    assert query_url(query) in transport.fetched
