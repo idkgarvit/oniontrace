@@ -671,6 +671,8 @@ tests/
                   either verifies offline or it does not -- none of them opens a socket
   test_full_check.py 21 tests; the harness contract -- exit 0 without a verdict is
                   UNPROVEN, and every claim function is fed the output that defeats it
+  test_dependencies.py 3 tests; every third-party import is in requirements.txt, so a
+                  fresh clone installs what the code actually imports
 ```
 
 ## Reproducibility
@@ -744,7 +746,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (481 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (484 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and

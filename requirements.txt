@@ -1,9 +1,13 @@
 # ONIONTRACE runtime
 # farm/, eval/, gates/, graph/ and the fixture path of collect/ import nothing outside
-# the standard library. Only live collection, the dashboard and the tests need extras.
+# the standard library. Only live collection, certificate transparency, the dashboard and
+# the tooling need extras.
 
 # --- live collection (optional; only when --live is passed) ---
 requests>=2.31
+
+# --- certificate transparency (collect/ctlog_direct.py, scripts/ct_log_check.py) ---
+cryptography>=42                # ECDSA over a log's signed tree head, and SPKI hashing
 
 # --- dashboard (M6-lite) ---
 fastapi>=0.110
@@ -14,5 +18,9 @@ weasyprint>=70                  # one-click evidence pack (HTML -> PDF); 70 is t
                                 # release without the url_fetcher bypass and the
                                 # Pillow->Ghostscript image dispatch advisories
 
-# --- development ---
+# --- build and verification tooling (scripts/, tests/) ---
 pytest>=8.0
+websockets>=12                 # CDP client: diagram measurement and console QA
+python-pptx>=1.0               # deck build, and the verifier that reads it back
+pillow>=10.0                   # rasterise slides to measure where the text actually lands
+numpy>=1.26                    # slide analysis statistics
