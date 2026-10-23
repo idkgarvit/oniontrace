@@ -55,7 +55,18 @@ from .transport import FetchResult
 #: configured, so it fails loudly instead of quietly returning nothing. Pointing it at an
 #: index that permits automated querying is an operator decision, made through
 #: ``extra_hosts``, and it belongs on the record.
-CLEARNET_ALLOWANCE: tuple[str, ...] = ("t.me", "crt.sh")
+#:
+#: ``crt.sh`` is gone for a different and more interesting reason. It is not that the host
+#: refuses; it is that no certificate log can answer the question this origin asks. A log is
+#: append-only and ordered by sequence number, so there is no way to ask it "which
+#: certificates name this onion" without an index to search. The question needs a database of
+#: parsed logs, which is what crt.sh is, and a database that publishes ``Disallow: /`` for
+#: every agent is a source this tool should not depend on. The capability moved rather than
+#: disappeared: ``collect/ctlog_direct.py`` reads a log at the source and verifies its signed
+#: tree head, which is a cryptographic claim instead of a query, and that work runs as its own
+#: stage. The ``certificate_log`` origin is kept, with no provider, so a run that expects it to
+#: find something stops and says why.
+CLEARNET_ALLOWANCE: tuple[str, ...] = ("t.me",)
 
 #: Names that always resolve to the local host, whatever the resolver says.
 _LOCAL_NAMES = frozenset({

@@ -203,6 +203,13 @@ def stages(tor_sock: Path) -> list[Stage]:
             timeout=180,
         ),
         Stage(
+            name="CT ground truth",
+            command="python3 scripts/ct_ground_truth.py",
+            why="real operator groupings from certificates, scored against certificate fields alone",
+            claim=verdict_line,
+            timeout=180,
+        ),
+        Stage(
             name="Gate refusals",
             command=f"python3 -m gates --root {shlex.quote(str(Path(tmp) / 'refusals'))} demo",
             why="every gate refuses what it should, and the refusal lands in the audit chain",

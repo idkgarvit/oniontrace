@@ -72,6 +72,19 @@ def find(text: str, phrase: str) -> bool:
     return re.search(r"\s+".join(words), text, re.IGNORECASE) is not None
 
 
+def find_number(text: str, number: str) -> bool:
+    """True if the number occurs as a number, not as a digit run inside another one.
+
+    The drift guard audits figures like 688 by looking for their off-by-one neighbours
+    nearby. A plain substring test makes that guard lie in the other direction: the recall
+    value 0.678 contains "678", which the guard read as a drifted 688 and failed the paper
+    for reporting its own result correctly. A figure is only present, or only a neighbour,
+    when it stands on its own, so a leading decimal point or digit disqualifies a match.
+    """
+    pattern = rf"(?<![\d.]){re.escape(number)}(?![\d])"
+    return re.search(pattern, text) is not None
+
+
 def load(path: Path) -> dict:
     return json.loads(path.read_text())
 
@@ -80,6 +93,13 @@ def main() -> int:
     strict = "--strict" in sys.argv
     raw = pdf_text()
     flat = re.sub(r"\s+", " ", raw)
+    # Tables now wrap their cells, and a narrow cell hyphenates a long word: the PDF prints
+    # "pos-" at the end of one line and "itives" at the start of the next, so the phrase the
+    # paper contains is no longer contiguous in the extracted text. Undo the line break before
+    # comparing, because a hyphenation break changes where a word sits and not which word the
+    # paper prints. A word that lost or gained a character still fails these checks.
+    joined = re.sub(r"(?<=[a-z])-[ \t]*\n[ \t]*(?=[a-z])", "", raw)
+    tight = re.sub(r"\s+", "", joined)
 
     failures: list[str] = []
     checked = 0
@@ -116,18 +136,18 @@ def main() -> int:
         comma-grouped or otherwise specific enough that a neighbour would be a real
         alternative value rather than an unrelated number.
         """
-        present = find(flat, needle)
+        present = find_number(flat, needle)
         neighbours: list[str] = []
         if re.fullmatch(r"\d{1,3},\d{3}", needle):
             value = int(needle.replace(",", ""))
             candidates = {f"{value + 1:,}", f"{value - 1:,}",
                           f"{value + 10:,}", f"{value - 10:,}"}
-            neighbours = sorted(c for c in candidates if find(flat, c))
+            neighbours = sorted(c for c in candidates if find_number(flat, c))
         elif re.fullmatch(r"\d{3,}", needle):
             value = int(needle)
             candidates = {str(value + 1), str(value - 1),
                           str(value + 10), str(value - 10)}
-            neighbours = sorted(c for c in candidates if find(flat, c))
+            neighbours = sorted(c for c in candidates if find_number(flat, c))
 
         if not ok_evidence:
             check(f"{needle} matches its evidence file", False, why or "source disagrees")
@@ -159,17 +179,28 @@ def main() -> int:
 
     print("\nreal onion services (real_onion_service.json)")
     s = on["summary"]
+    # Read this one from the LaTeX source rather than from extracted PDF text. A wrapped table
+    # cell is laid out beside its neighbours, so pdftotext returns "0 findings, 0 false pos-",
+    # then the next column's text, then "itives" on a later line: the phrase is correct in the
+    # document and unrecoverable from the extraction. The source holds the row literally, and
+    # the freshness check above already proves the PDF was built from this source.
+    source_tex = (ROOT / "paper" / "ieee" / "oniontrace.tex").read_text(encoding="utf-8")
     check("clean control careful findings = 0",
           s["clean_control"]["careful_collapsed_count"] == 0
-          and find(flat, "0 findings, 0 false positives"))
+          and "0 findings, 0 false positives" in source_tex)
     check("clean control naive findings = 5",
           s["clean_control"]["naive_collapsed_count"] == 5)
     check("naive false positive is dot_git on a 404",
           [f["kind"] for f in s["clean_control"]["naive_false_positives"]] == ["dot_git"]
           and find(flat, "dot_git"))
     check("misconfigured careful = 2", s["misconfigured"]["careful_collapsed_count"] == 2)
+    # A v3 address is 56 unbreakable characters, which is wider than a column at ten point, so
+    # the paper sets it in two pieces joined by \allowbreak: the line can break inside the
+    # address and nothing is added to it. The check therefore compares with whitespace removed,
+    # which still catches the failure that matters. A hyphen inserted for the break, or a
+    # character lost or changed, survives whitespace stripping and fails here.
     check("both onion addresses appear verbatim",
-          all(find(flat, e["address"]) for e in on["services"].values()))
+          all(re.sub(r"\s+", "", e["address"]) in tight for e in on["services"].values()))
 
     print("\nlab servers (lab_servers.json)")
     lab = load(RW / "lab_servers.json")

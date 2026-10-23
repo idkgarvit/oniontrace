@@ -1427,3 +1427,17 @@ def test_a_human_can_accept_the_source_policy_and_the_run_says_so(gate, case, cl
     assert not summary.blocked_by_policy
     assert any("accepted the source policy" in note for note in summary.notes)
     assert query_url(query) in transport.fetched
+
+
+def test_the_certificate_log_host_is_no_longer_allowed():
+    """crt.sh left the allowance on 2026-10-23, for a stronger reason than refusing.
+
+    No RFC 6962 log can answer "which certificates name this onion": a log is ordered by
+    sequence number and searchable only by index, so the question needs a database of parsed
+    logs, and the one to hand publishes ``Disallow: /`` for every agent. The capability moved
+    to collect/ctlog_direct.py, which verifies a signed tree head instead of querying by name.
+    """
+    from collect.live import CLEARNET_ALLOWANCE
+
+    assert "crt.sh" not in CLEARNET_ALLOWANCE
+    assert "t.me" in CLEARNET_ALLOWANCE

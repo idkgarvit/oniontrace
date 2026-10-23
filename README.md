@@ -675,6 +675,13 @@ tests/
                   fresh clone installs what the code actually imports
   test_base_rates.py 11 tests; the farm's one claim about the world matches the measurement
                   that produced it, and the correlation result survives the drop to it
+  test_ct_ground_truth.py 21 tests; the evaluator's arithmetic, its cap, and a held-out
+                  split that never lets a cluster be learned on one half and scored on the
+                  other -- including the wildcard rule that keeps one holder from becoming
+                  two services
+  test_build_ieee.py 13 tests; the IEEE build holds its contents -- tables wrap inside the
+                  column, a 56-character address breaks without gaining a character, and
+                  inline code is not escaped twice
 ```
 
 ## Base rates are measured, not chosen
@@ -709,6 +716,58 @@ The farm keeps 100 percent as its default so every published number stays reprod
 `FarmConfig(widespread_default_share=...)` exists so a reader can check the claim rather than
 take it. `tests/test_base_rates.py` holds the constant to the measurement and the conclusion to
 the measured rate.
+
+## Real groupings, and how little the certificate fields recover them
+
+The farm's correlation numbers are scored against ground truth the generator wrote down. That is
+the only way to compute precision at all, and it is also why they cannot be a claim about the
+world. Certificate Transparency supplies ground truth nobody in this project invented: a
+certificate naming several onion services asserts that one holder controls all of them, signed
+by a CA, produced for a purpose unrelated to this work.
+
+So the question the farm cannot answer becomes answerable. Given only the fields a passive
+observer has, how much of that real grouping is recoverable?
+
+```bash
+python3 scripts/ct_ground_truth.py    # rewrites ct_ground_truth.json, prints a verdict
+```
+
+On the cached corpus that is 516 services in 466 certificate-implied clusters, 205 true pairs,
+largest cluster 12. The two linkers the corpus supports are the issuer alone, and the issuer
+together with the issue date:
+
+| linker | pairs proposed | precision | recall | F1 |
+|---|---|---|---|---|
+| issuer alone | 32,855 | 0.006 | 1.000 | 0.012 |
+| issuer + issue date | 1,304 | 0.134 | 0.854 | 0.232 |
+| + cap at 10 | 509 | 0.273 | 0.678 | 0.389 |
+| + cap at 3 (the farm's rule) | 106 | 0.179 | 0.093 | 0.122 |
+
+The issuer alone is the clearest possible illustration of the problem this project exists for.
+It finds every real pair and proposes 32,650 false ones, because one CA issues to most of the
+population. Adding the issue date is a genuine improvement and still leaves seven of eight
+proposed links wrong.
+
+The cap is where the honest part gets uncomfortable. It is selected on one half of the clusters
+and reported on the other, because reporting the best cap found on the data it is scored on is a
+fit and not a result. Chosen that way it holds F1 0.222 on the unseen half, against 0.389 at its
+best point in sample. The farm's own rule, a cap of three, scores 0.122 here: the cap that works
+is a property of the population, and the population was invented when that number was chosen.
+
+Two conclusions follow, and the second one is the useful one.
+
+Certificate fields are a weak linker on real data, so no claim in this project should rest on
+them. And that is fine, because Certificate Transparency was never needed here as a feature.
+It is needed as a target: an independent assertion of who owns what, signed by a third party,
+against which a correlator can be scored. Treating co-certificate as a feature instead would
+have been reading the answer key, which is why `eval/ct_ground_truth.py` keeps it on the target
+side and tests that it stays there.
+
+One detail that looks like a discrepancy and is not. Elsewhere the corpus is described as
+holding 688 unique onions; here it is 516. A wildcard SAN is folded into the name it covers,
+because `*.x.onion` and `x.onion` are one holder, and counting them as two services would split
+a single operator across two nodes in the ground truth itself. The evaluator prints that note
+next to its own count so the two numbers cannot be read as a contradiction.
 
 
 ## Reproducibility
@@ -782,7 +841,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (495 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (529 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
