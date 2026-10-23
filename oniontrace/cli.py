@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -97,8 +98,18 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_show)
 
     e = sub.add_parser("env", help="preflight the execution environment before live collection")
-    e.add_argument("--tor-socks", default=DEFAULT_TOR_ENDPOINT,
-                   help=f"Tor SOCKS endpoint; a unix socket by default ({DEFAULT_TOR_ENDPOINT})")
+    # The launcher exports the socket path it actually bound, so honour it: an operator who
+    # started Tor through scripts/tor_disposable.sh should not have to retype the path, and
+    # a default that disagrees with the launcher reports a missing listener that is running.
+    _env_sock = os.environ.get("ONIONTRACE_TOR_SOCK", "").strip()
+    if not _env_sock:
+        _default_sock = DEFAULT_TOR_ENDPOINT
+    elif _env_sock.startswith("unix:"):
+        _default_sock = _env_sock
+    else:
+        _default_sock = f"unix:{_env_sock}"
+    e.add_argument("--tor-socks", default=_default_sock,
+                   help=f"Tor SOCKS endpoint; a unix socket by default ({_default_sock})")
     e.add_argument("--case-root", default=None,
                    help="directory the run must be able to write to")
     e.add_argument("--deep", action="store_true",
