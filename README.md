@@ -673,7 +673,43 @@ tests/
                   UNPROVEN, and every claim function is fed the output that defeats it
   test_dependencies.py 3 tests; every third-party import is in requirements.txt, so a
                   fresh clone installs what the code actually imports
+  test_base_rates.py 11 tests; the farm's one claim about the world matches the measurement
+                  that produced it, and the correlation result survives the drop to it
 ```
+
+## Base rates are measured, not chosen
+
+The farm plants a stock-default artefact on every eligible service, which is a 100 percent
+prevalence claim sitting under every correlation number in the report. That was the last
+assumption in the experiment with no source behind it.
+
+Real certificates supply one. On 3,018 onion-bearing certificates there are 19 issuers, the
+most common covers 1,788 of them (59.2 percent), and 3,015 of 3,018 sit under an issuer that
+another certificate also uses:
+
+```bash
+python3 scripts/measure_base_rates.py     # rewrites base_rates.json, prints the share
+python3 scripts/base_rate_sensitivity.py  # the farm at 100%, 59.2% and 25%
+```
+
+| prevalence | defaults planted | naive precision | capped precision |
+|---|---|---|---|
+| 100% (design) | 18 | 0.207 | 1.000 |
+| 59.2% (measured) | 10 | 0.444 | 1.000 |
+| 25% | 4 | 0.800 | 1.000 |
+
+The cap's precision does not move, because a value shared by more services than a cluster
+cannot be cluster specific at any prevalence. What moves is the naive correlator, which gets
+worse as defaults become more common -- so the designed 100 percent rate is the hardest case
+for it and the fairest headline, and the conclusion does not depend on it. The one thing that
+does stop discriminating at low prevalence is the ranking view, where naive precision@1 also
+reaches 1.000; the link view keeps separating them.
+
+The farm keeps 100 percent as its default so every published number stays reproducible, and
+`FarmConfig(widespread_default_share=...)` exists so a reader can check the claim rather than
+take it. `tests/test_base_rates.py` holds the constant to the measurement and the conclusion to
+the measured rate.
+
 
 ## Reproducibility
 
@@ -746,7 +782,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (484 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (495 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and

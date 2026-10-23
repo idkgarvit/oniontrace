@@ -353,6 +353,10 @@ class FarmConfig:
     n_abstention_retrieval_cases: int = 4
     target_flaw_count: int = 25
     posts_per_persona: int = 12
+    #: What fraction of eligible services carry a *widespread* stock default. 1.0 is the
+    #: adversarial upper bound the farm was designed around; farm.base_rates records the
+    #: measured share so the same experiment can be run at a rate observed in the wild.
+    widespread_default_share: float = 1.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

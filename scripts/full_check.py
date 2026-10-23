@@ -196,6 +196,13 @@ def stages(tor_sock: Path) -> list[Stage]:
             timeout=240,
         ),
         Stage(
+            name="Base-rate sensitivity",
+            command="python3 scripts/base_rate_sensitivity.py",
+            why="the correlation result survives prevalence being dropped to the measured rate",
+            claim=verdict_line,
+            timeout=180,
+        ),
+        Stage(
             name="Gate refusals",
             command=f"python3 -m gates --root {shlex.quote(str(Path(tmp) / 'refusals'))} demo",
             why="every gate refuses what it should, and the refusal lands in the audit chain",

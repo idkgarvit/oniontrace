@@ -205,6 +205,41 @@ def _inject_cluster_flaws(
     return flaws
 
 
+def widespread_targets(
+    eligible_by_cluster: dict[str, list[Service]], share: float
+) -> list[Service]:
+    """Which eligible services carry a widespread default, at a given prevalence.
+
+    Dealing round-robin across clusters rather than taking a prefix, because a prefix would put
+    the whole default inside the alphabetically first clusters and turn a population-wide
+    artefact into a cluster-local one -- which is the exact false link the farm's ground truth
+    must never contain. ``share >= 1.0`` returns everyone, so the designed farm is unchanged.
+    """
+
+    if share >= 1.0:
+        # Every eligible service, in the same cluster-major order the farm always used, so the
+        # designed farm stays byte-identical.
+        return [
+            service
+            for cluster_id in sorted(eligible_by_cluster)
+            for service in eligible_by_cluster[cluster_id]
+        ]
+
+    queues = [list(group) for _, group in sorted(eligible_by_cluster.items())]
+    ordered: list[Service] = []
+    depth = 0
+    while any(depth < len(queue) for queue in queues):
+        for queue in queues:
+            if depth < len(queue):
+                ordered.append(queue[depth])
+        depth += 1
+
+    # Two is the floor: one service carrying a value is not a shared artefact at all, and the
+    # coincidental class already covers exactly-two.
+    count = min(len(ordered), max(2, round(share * len(ordered))))
+    return ordered[:count]
+
+
 def _inject_stock_defaults(
     cfg: FarmConfig,
     services: list[Service],
@@ -247,23 +282,25 @@ def _inject_stock_defaults(
             eligible_by_cluster.setdefault(svc.cluster_id, []).append(svc)
 
         if index < N_WIDESPREAD_DEFAULT_PLANTS:
-            # Every eligible service: the value becomes conspicuously common, which is
-            # what gives frequency filtering something to detect.
-            for cluster_id in sorted(eligible_by_cluster):
-                for svc in eligible_by_cluster[cluster_id]:
-                    assign_stock_default(svc, spec)
-                    hard_negatives.append(
-                        HardNegative(
-                            fixture_id=f"HN-wide-{spec.kind}-{svc.service_id}",
-                            flaw_kind=spec.kind,
-                            service_id=svc.service_id,
-                            path=spec.path,
-                            why=(
-                                get_spec(spec.kind).hard_negative_why or ""
-                            )
-                            + " [widespread: detectable by artefact frequency]",
+            # At share 1.0 this is every eligible service: the value becomes conspicuously
+            # common, which is what gives frequency filtering something to detect. At a lower
+            # share it is still population-wide, just at a rate somebody measured.
+            targets = widespread_targets(eligible_by_cluster, cfg.widespread_default_share)
+            for svc in targets:
+                assign_stock_default(svc, spec)
+                hard_negatives.append(
+                    HardNegative(
+                        fixture_id=f"HN-wide-{spec.kind}-{svc.service_id}",
+                        flaw_kind=spec.kind,
+                        service_id=svc.service_id,
+                        path=spec.path,
+                        why=(
+                            get_spec(spec.kind).hard_negative_why or ""
                         )
+                        + " [widespread: detectable by artefact frequency, "
+                        + f"{cfg.widespread_default_share:.1%} of eligible services]",
                     )
+                )
             continue
 
         if index >= N_WIDESPREAD_DEFAULT_PLANTS + N_COINCIDENTAL_DEFAULT_PLANTS:
