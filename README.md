@@ -463,6 +463,32 @@ every failing check at once. The probes live in `collect/preflight.py`, not in `
 because the gates package is required to have no network or subprocess capability;
 `gates/environment.py` holds only the verdict.
 
+### What the live sources said
+
+The first live runs went out on 2026-10-23 through the jail and a client-only Tor, against
+case `CASE-LIVE-2`, with `public_index` and `certificate_log` and **no onion target in
+scope**. Neither source returned data, and neither said so politely. Both answers are
+recorded, because a source refusing a query and a source having nothing to say are
+different facts and only one of them is about the world.
+
+| Source | Answer | What the collector recorded |
+| --- | --- | --- |
+| `ahmia.fi` search | `302` to `/`, on every query, with any user agent | A refusal, not a ranking with zero results. The note quotes the host's own `robots.txt` (`Disallow: /search/`, `Disallow: /*?`) and keeps the `Onion-Location` header the refusal carried |
+| `crt.sh` | `429` | Nothing parsed, and the query deliberately left un-checkpointed so a re-run retries it instead of treating throttling as an empty result |
+
+Two things this changed in the code. A `3xx` used to fall through to the parser, so the run
+printed `0 candidate addresses parsed` with `errors=0` — true, and together a lie. A `3xx`
+is now its own outcome. And the SSRF guard used to resolve every host before the allowance
+check, which inside a no-network jail fails for *every* name and refuses a run for being
+well contained; an allowlisted name that cannot resolve here is now exempt, while a
+private, loopback, link-local or IP-literal verdict still refuses even when allowlisted.
+
+The practical consequence is a source problem, not a tool problem: ahmia.fi publishes a
+machine-readable refusal and then enforces it, and crt.sh fronts data whose authoritative
+source is the CT log servers themselves. Reading certificate transparency at the log rather
+than through a mirror that would rather not be queried is the honest fix, and it is not
+built yet.
+
 ## Layout
 
 ```
@@ -530,7 +556,7 @@ tests/
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
-  test_collect.py 69 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 71 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
   test_environment.py 25 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
@@ -607,15 +633,16 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (412 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (414 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
 the **M5 transformer upgrade** (the committed TF-IDF baseline lives in
-`eval/detectors/attribution.py`). **Live acquisition is deliberately unfinished**: the
-transport exists and its five guards are tested, but no run in this repository has ever
-fetched a byte from a third-party target, and any report citing acquisition has to say so.
-M1 is therefore scored as `fixture-verified` and never as `live-tested`.
+`eval/detectors/attribution.py`). **Live acquisition has run, and the sources refused it**
+(2026-10-23, `CASE-LIVE-1` and `CASE-LIVE-2`): the transport reached two real public
+services from inside the isolation jail and both declined to answer, which the collector
+recorded as refusals rather than as empty results. See *What the live sources said* below.
+M1 stays scored as `fixture-verified`, and the live runs are reported as `live-refused`.
 
 That the correlator is next is the plan's own ordering, not a preference: the farm (WP2.1)
 and the harness exist so the modules can be measured as they land, the gates exist so the

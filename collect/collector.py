@@ -403,6 +403,10 @@ class Collector:
         )
         self._warc_dir = warc_dir
         self._revisit = revisit or RevisitPlanner()
+        #: robots.txt rules per host, fetched at most once per run and only when a source
+        #: refuses a query. A diagnostic, so a failure here is stored as an empty string
+        #: rather than allowed to break the run it is explaining.
+        self._robots_cache: dict[str, str] = {}
 
     # -- plumbing ---------------------------------------------------------- #
 
@@ -677,6 +681,39 @@ class Collector:
 
     # -- path 2: public search engine -------------------------------------- #
 
+    def _robots_rules(self, url: str, *, scope, case_id, summary, budget) -> str:
+        """Quote the host's own disallow rules when it refuses a query.
+
+        Called only on a refusal, so a normal run costs no extra requests, and cached per
+        host because a run asks the same question once per source at most. A failure here
+        is swallowed on purpose: this is the explanation for a refusal, and an explanation
+        that crashes the run it was written to describe is worse than no explanation.
+        """
+        host = (urlsplit(url).hostname or "").lower()
+        if host in self._robots_cache:
+            return self._robots_cache[host]
+        rules = ""
+        try:
+            result = self._fetch(
+                f"https://{host}/robots.txt",
+                scope=scope,
+                case_id=case_id,
+                seed_label="robots",
+                summary=summary,
+                budget=budget,
+            )
+            if result is not None and result.status == 200:
+                disallow = [
+                    line.strip()
+                    for line in result.text.splitlines()
+                    if line.strip().lower().startswith("disallow:")
+                ]
+                rules = "; ".join(disallow[:4])
+        except Exception:  # noqa: BLE001 - see the docstring
+            rules = ""
+        self._robots_cache[host] = rules
+        return rules
+
     def _path_ahmia(
         self,
         case_id: str,
@@ -718,6 +755,34 @@ class Collector:
                 budget=budget,
             )
             if result is None:
+                continue
+            if 300 <= result.status < 400:
+                # A redirect is a refusal wearing a status code. Following it would let the
+                # page choose what this collector asks for next, so redirects stay off --
+                # but treating the empty body as "nothing ranked" turns a refusal into a
+                # negative finding, which is the one mistake this project cannot afford.
+                # Header names are case-insensitive by specification and arrive in whatever
+                # case the server chose, so a lookup that assumes one case silently reads
+                # '' and reports a redirect to nowhere.
+                headers = {name.lower(): value for name, value in result.headers.items()}
+                location = headers.get("location", "")
+                note = (
+                    f"{query!r}: the index answered {result.status} to {location!r} instead "
+                    "of a results page. Redirects are never followed, so this is recorded "
+                    "as a refusal, not as a ranking with no results"
+                )
+                rules = self._robots_rules(
+                    url, scope=scope, case_id=case_id, summary=summary, budget=budget
+                )
+                if rules:
+                    note += f". Its robots.txt says {rules}"
+                onion_location = headers.get("onion-location", "")
+                if onion_location:
+                    # Worth keeping: the source that refused the query still published an
+                    # address for itself, which is the correlation signal this project
+                    # measures, offered without being asked.
+                    note += f". The refusal carried Onion-Location {onion_location!r}"
+                summary.notes.append(note)
                 continue
             if result.status >= 400:
                 summary.notes.append(

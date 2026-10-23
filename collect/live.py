@@ -240,8 +240,20 @@ class LiveTransport:
         # loopback, link-local or a private range must be refused here rather than at
         # connect time. Onion names have no DNS record and are exempt by construction,
         # since SOCKS resolves them at the proxy and the name is not an address.
+        #
+        # One narrow exemption, and it is about the resolver rather than the host: an
+        # allowlisted name that cannot be resolved here is refused by the full check, but
+        # the name is a constant in this file rather than a value from a page, and under
+        # socks5h the proxy is what resolves it. Inside an isolation jail there is no
+        # resolver by design, so without this a well-contained run would be refused for
+        # being well contained. Only the "unresolvable" verdict is exempt: a private,
+        # loopback, link-local or IP-literal verdict still refuses even when allowlisted,
+        # so nobody can add 127.0.0.1 to the allowance and reach it.
+        allowlisted = host in self._hosts
         if not host.endswith(".onion"):
             blocked, why = is_non_public_address(host)
+            if blocked and allowlisted and why.startswith("unresolvable"):
+                blocked = False
             if blocked:
                 raise LiveCollectionRefused(
                     f"refusing {host!r}: {why}. Live collection is public, "

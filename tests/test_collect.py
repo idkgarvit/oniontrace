@@ -1198,3 +1198,80 @@ def test_ahmia_resolves_and_is_permitted_on_this_network():
 
     blocked, why = is_non_public_address("ahmia.fi")
     assert not blocked, f"ahmia.fi must be fetchable, got: {why}"
+
+
+def test_a_redirect_is_recorded_as_a_refusal_not_as_an_empty_ranking(
+    gate, case, fixtures, clock
+):
+    """A 302 is a refusal wearing a status code.
+
+    Found against the live index: ahmia.fi answered 302 to '/' for a search query, and the
+    run reported "0 candidate addresses parsed" with errors=0. Both of those are true and
+    together they are a lie -- the source refused the query, and a reader would have
+    concluded nothing ranked. Nothing is stored for a refusal either, because an empty
+    results page and a refusal are different facts about the world.
+    """
+    query = fixtures.seed_query
+    transport = FixtureTransport(
+        clock=clock,
+        hosts=(AHMIA_HOST,),
+        pages={
+            search_url(query): Page(
+                body="",
+                status=302,
+                headers={
+                    "Location": "/",
+                    "Onion-Location": (
+                        "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd"
+                        ".onion/search/?q=tor"
+                    ),
+                },
+            ),
+            f"https://{AHMIA_HOST}/robots.txt": Page(
+                body="User-agent: *\nDisallow: /search/\nDisallow: /*?\n"
+            ),
+        },
+    )
+    collector = make_collector(gate, transport, clock)
+    scope = CollectionScope(search_queries=(query,))
+    report = collector.collect(case_id=case, principal=OWNER, scope=scope)
+
+    summary = next(s for s in report.origins if s.origin == ORIGIN_AHMIA)
+    note = " ".join(summary.notes)
+    assert "302" in note
+    assert "refusal" in note
+    assert "Disallow: /search/" in note, "the source's own rule is the explanation"
+    assert "Onion-Location" in note, "a refusal can still publish an address for itself"
+    assert summary.stored == 0, "a refusal is not a results page and must not be stored"
+    assert not [s for s in stored_snapshots(gate) if s["origin"] == ORIGIN_AHMIA]
+    assert not report.proposals, "a refused query proposes nothing"
+
+
+def test_an_allowlisted_name_that_cannot_resolve_here_is_still_permitted():
+    """The narrow exemption, and the reason it has to exist.
+
+    Under socks5h the proxy resolves the name, so a local lookup is only a pre-flight
+    opinion. An isolation jail has no resolver at all by design, and without this the
+    collector would refuse its own allowlisted infrastructure for being well contained.
+
+    The name is in the allowance, which is a constant in the source, so it is not a value
+    an attacker can choose. The test above proves the private-address verdict still holds.
+    """
+    from collect.clock import FrozenClock
+    from collect.live import LiveSettings, LiveTransport
+
+    transport = LiveTransport(
+        authorised_mode=True,
+        settings=LiveSettings(socks_host="127.0.0.1"),
+        clock=FrozenClock(),
+        extra_hosts=("does-not-exist.invalid",),
+    )
+    # .invalid can never resolve, which is what the jail's missing resolver looks like.
+    transport.check("https://does-not-exist.invalid/search/?q=x")
+
+    # And the exemption is not a hole: the same unresolvable name, outside the allowance,
+    # is still refused -- by the SSRF guard, which fires before the allowance check.
+    from collect.errors import LiveCollectionRefused
+
+    with pytest.raises(LiveCollectionRefused):
+        transport.check("https://not-allowlisted.invalid/search/?q=x")

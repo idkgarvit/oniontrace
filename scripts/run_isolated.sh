@@ -107,4 +107,24 @@ BWRAP_ARGS+=(
   --chdir "$PWD"
   --
 )
+
+# The HTTP client the collector uses speaks SOCKS5 over TCP only; it cannot dial a unix
+# socket. So when a Tor socket exists, a socat bridge inside the jail republishes it on
+# 127.0.0.1, and the child gets ONIONTRACE_SOCKS pointing at that.
+#
+# This does not weaken the isolation. The jail still has no non-loopback interface and no
+# route, so the bridge is the only thing it can reach, and the bridge only reaches Tor.
+# Loopback works here even though `lo` is administratively down: the kernel routes
+# 127.0.0.1 without the interface being up, which is why no CAP_NET_ADMIN is needed.
+if [[ -S "$TOR_SOCK" ]]; then
+  BRIDGE_PORT="${ONIONTRACE_BRIDGE_PORT:-19050}"
+  exec bwrap "${BWRAP_ARGS[@]}" /bin/sh -c '
+    socat TCP-LISTEN:'"$BRIDGE_PORT"',fork,reuseaddr,bind=127.0.0.1 UNIX-CONNECT:'"$TOR_SOCK"' &
+    bridge=$!
+    trap "kill $bridge 2>/dev/null" EXIT INT TERM
+    ONIONTRACE_SOCKS=127.0.0.1:'"$BRIDGE_PORT"' export ONIONTRACE_SOCKS
+    "$@"
+  ' sh "$@"
+fi
+
 exec bwrap "${BWRAP_ARGS[@]}" "$@"
