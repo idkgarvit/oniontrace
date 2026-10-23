@@ -85,8 +85,18 @@ def write_report(result: PipelineResult, path: Path) -> Path:
                 for kind, count in s["by_kind"].items():
                     a(f"| `{kind}` | {count} |")
                 a("")
-            a("**Limit.** For seven of the rule set no negative fixture exists, so a false "
-              "positive could not have been observed even if present.")
+            from farm.catalogue import rules_without_hard_negative
+
+            gap = rules_without_hard_negative()
+            if gap:
+                a(f"**Limit.** For {len(gap)} of the rule set no negative fixture exists "
+                  f"({', '.join(gap)}), so a false positive could not have been observed even "
+                  "if present.")
+            else:
+                a("**Coverage.** Every rule in this table has a negative fixture served for it: "
+                  "a page that looks like the flaw and carries the feature that means it is not. "
+                  "A false positive could have been observed on each one, so the zeros above are "
+                  "measured rather than assumed.")
         else:
             a(f"**Did not run.** {det.error}")
         a("")

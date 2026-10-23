@@ -62,28 +62,28 @@ def test_rules_without_a_hard_negative_are_a_known_short_list():
     This test previously asserted `rules_without_hard_negative() == []`, i.e. that every
     rule was protected. It passed only because the function it checked was broken: it
     tested whether the `hard_negative_why` prose field was populated, and all 25 flaws
-    carry that field, so it always returned an empty list. Seven single-scope rules have a
-    rationale for a negative but no fixture served, and their precision is measured against
+    carry that field, so it always returned an empty list. Seven single-scope rules had a
+    rationale for a negative but no fixture served, and their precision was measured against
     true positives only.
 
-    The assertion is now the honest one: the gap is a known, enumerated list, and it must
-    be reported rather than asserted away. Pinning an exact set means a newly-unprotected
-    rule fails this test instead of joining the list unnoticed.
+    Those seven are now implemented, so the list is empty again, and this time it is empty
+    because the fixtures exist. The test checks both directions, because an empty list is
+    exactly what the broken function used to return: the list must be empty AND every rule
+    that can be scored must have a fixture behind it.
     """
+    from eval.detectors.misconfig import RULES
+    from farm.services import HARD_NEGATIVE_FIXTURES
+
     gap = rules_without_hard_negative()
-    assert gap == [
-        "dot_env",
-        "backup_file",
-        "apache_version_banner",
-        "nginx_version_banner",
-        "timezone_leak",
-        "etag_pattern",
-        "http_header_order",
-    ], "the unprotected-rule list changed; update the report if this is intended"
-    # And the two views must not disagree, which is what let the defect hide.
+    assert gap == [], f"rules without a negative fixture: {gap}"
+    # The two views must not disagree, which is what let the defect hide.
+    import eval.detectors.misconfig as misconfig
+
     from farm.services import rules_with_hard_negative_fixture
 
     assert len(gap) + len(rules_with_hard_negative_fixture()) == len(SINGLE_FLAWS)
+    assert set(rules_with_hard_negative_fixture()) == set(RULES)
+    assert set(HARD_NEGATIVE_FIXTURES) >= set(misconfig.RULES)
 
 
 def test_every_flaw_kind_is_buildable():

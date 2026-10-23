@@ -137,20 +137,36 @@ Spurious C1: favicon_sha256=STOCK_DEFAULT              }  a rule keying on
                                                           }  these two, wrongly
 ```
 
-**Coverage is partial, and the gap is reported.** Twelve of the nineteen single-scope rules
-have a negative fixture served for them. Seven do not: `dot_env`, `backup_file`,
+**Coverage is now complete, and it is checked in both directions.** All nineteen single-scope
+rules have a negative fixture served for them. The last seven — `dot_env`, `backup_file`,
 `apache_version_banner`, `nginx_version_banner`, `timezone_leak`, `etag_pattern` and
-`http_header_order`. Each has a written rationale for the negative that *should* exist, but a
-rationale is not a fixture — so for those seven, precision is never tested against a fixture
-designed to trip the pattern without carrying the meaning.
+`http_header_order` — were the ones whose flaw lives in a header or in one line of a file, and
+they had been left out on the argument that a proxy makes them indistinguishable at the
+response level. That argument was wrong. Each has a feature the careful rule reads and the
+careless rule ignores:
 
-**This qualifies the careful rule set's headline.** All nineteen rules, including the seven
-unprotected ones, are scored in the careful table, so its `precision = 1.000` (19 TP / 0 FP)
-is partly *unmeasured* rather than earned: for seven of the nineteen, no negative fixture
-exists that could have produced a false positive. The honest reading is "no false positive was
-observed, and for seven rules none could have been." Closing that gap — implementing the seven
-negatives already described — is the first item of follow-up work, and until then the figure
-carries the caveat wherever it is quoted.
+| rule | the fixture looks like | the discriminator |
+|---|---|---|
+| `dot_env` | `/.env` answers 200 | the body carries no `key=value` line |
+| `backup_file` | a `.bak` path answers 200 | the body is a page, not source with `<?php` |
+| `apache_version_banner` | `Server: Apache` | no version token after the product name |
+| `nginx_version_banner` | `Server: nginx` | no version token after the product name |
+| `timezone_leak` | a `Date` header exists | it is GMT, so no local offset is disclosed |
+| `etag_pattern` | an `ETag` exists | it is a release tag, not an inode-and-size pair |
+| `http_header_order` | custom headers are present | three of the four default-stack headers |
+
+**This is measured, not asserted.** `tests/test_hard_negatives.py` holds each fixture to two
+conditions at once: the careful rule must stay silent on it, and the careless rule must fire.
+A fixture that fires the careful rule is a false positive the farm planted itself, and a fixture
+that tempts nobody proves nothing. Both ends are asserted for all nineteen, so a new rule cannot
+join the set without a fixture that has teeth.
+
+**What the fixtures changed.** The careful table is unchanged at 19 true positives and no false
+positives, and that number now means something it did not before. The careless table moved from
+17 true positives and 14 false positives (precision 0.548) to 17 and 21 (precision 0.447):
+every one of the seven new fixtures fires the careless rule on the clean control, which is
+exactly what a fixture with teeth is supposed to do. The separation between the two tables got
+wider because the measurement got honest, not because the rules changed.
 
 This gap was hidden until it was attacked. `rules_without_hard_negative()` tested whether the
 `hard_negative_why` prose field was populated rather than whether a fixture was served; all 25
@@ -488,6 +504,44 @@ machine-readable refusal and then enforces it, and crt.sh fronts data whose auth
 source is the CT log servers themselves. Reading certificate transparency at the log rather
 than through a mirror that would rather not be queried is the honest fix, and it is built:
 see the next subsection.
+
+### Collecting from a live onion, and how it is proven
+
+Every acquisition number in this project came from a fixture until 2026-10-23, when the
+collector fetched a live onion service for the first time. Pointing it at a stranger's hidden
+service would have measured a third party who did not ask to be measured, and pointing it at a
+local page called `onion.example` tests the parser while skipping the only hard part, which is
+Tor. So the check publishes an onion of its own: a static page served from inside the
+collection jail, published by the same disposable Tor, then collected back through the real Tor
+network and the real jail bridge.
+
+```bash
+python3 scripts/live_onion_check.py            # explains what it would do, publishes nothing
+python3 scripts/live_onion_check.py --publish  # publishes, collects, verifies, stops
+```
+
+The page carries a nonce generated for that run. A cache, a stale snapshot, a fixture that
+happens to contain the same words, or a collector that stored something it never fetched all
+fail to produce it, so the check can only pass by completing the round trip.
+
+Three details cost an attempt each, and all three are about publishing rather than collecting.
+A freshly published hidden service is not findable immediately: its descriptor has to reach the
+hash ring, and the measured waits across runs were 5.8 seconds on a tor that had already been up
+for three minutes, then 78 seconds, then 240 seconds where the answer did not arrive at all, and
+finally 319.5 seconds on a cold instance. The window is 600 seconds for that reason, and it says
+so while it waits. A publisher started on top of a running client dies with "another Tor process
+is running with the same data directory", so the script stops the old instance and refuses to
+start a second one. And a `.onion` target with no SOCKS proxy is refused rather than attempted,
+because an onion name sent to ordinary DNS leaks the target to the resolver and cannot work
+anyway; that refusal is what the first hand-run produced, which is the guard behaving as
+designed.
+
+The successful run is kept as evidence: `casework/cases/CASE-LIVE-11`, one seed, one snapshot,
+one cursor, one WARC record of the raw exchange, `pages=1 fetched=1 stored=1 errors=0`, against
+an address this project published and then took down. The stored snapshot contains the page that
+run served and nothing else was claimed from it. Case data is never committed, by rule, so that
+directory exists on the machine that ran the check and the way to see it elsewhere is to run
+the check again.
 
 ### Certificate transparency at the source
 

@@ -139,10 +139,120 @@ cmd_clean() {
   say "removed $DIR"
 }
 
+# --------------------------------------------------------------------------- #
+# serve: publish an onion of our own, so the collector can be tested against a
+# live hidden service without touching anyone else's.
+#
+# The alternative is to point the acquisition path at a stranger's onion service,
+# which is a third party who did not ask to be measured. Publishing our own costs
+# a torrc and a python http.server, keeps the target inside the authorisation we
+# hold, and exercises the same code path: real Tor, real rendezvous, real HTTP over
+# a .onion. It also makes the test repeatable, because the address is ours.
+# --------------------------------------------------------------------------- #
+cmd_serve() {
+  local webroot="${1:-}"
+  local port="${2:-8080}"
+  need_tools
+  if [[ -z "$webroot" || ! -d "$webroot" ]]; then
+    say "usage: $0 serve <directory-to-publish> [port]"
+    exit 2
+  fi
+  webroot="$(cd "$webroot" && pwd)"
+  unpack
+
+  # A tor started by `start` holds this data directory's lock and owns the socket path.
+  # Starting a publisher on top of it produced a tor that exited with "another Tor process is
+  # running with the same data directory" after unlinking the live socket, so every connection
+  # through the bridge went nowhere and looked like a network failure minutes later. Stop it
+  # first, and refuse to continue if it will not stop.
+  if command -v screen >/dev/null 2>&1; then
+    screen -S "$SESSION" -X quit 2>/dev/null || true
+  fi
+  pkill -x tor 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    pgrep -x tor >/dev/null 2>&1 || break
+    sleep 0.5
+  done
+  if pgrep -x tor >/dev/null 2>&1; then
+    say "a tor process survived the stop; refusing to start a second one on the same data directory"
+    exit 7
+  fi
+  rm -f "$SOCK"
+
+  mkdir -p "$DIR/hs"
+  chmod 700 "$DIR/hs"
+
+  cat > "$DIR/torrc" <<TORRC
+# Client only, and now also a publisher: the hidden service is ours, pointed at a
+# server that is also inside this jail. Nothing here relays for anyone else.
+ClientOnly 1
+SocksPort unix:/mnt/tor.sock
+DataDirectory /mnt/data
+Log notice file /mnt/tor.log
+AvoidDiskWrites 1
+HiddenServiceDir /mnt/hs
+HiddenServicePort 80 127.0.0.1:$port
+TORRC
+
+  cat > "$DIR/run.sh" <<RUNNER
+#!/usr/bin/env bash
+set -euo pipefail
+exec bwrap \\
+  --die-with-parent --new-session \\
+  --unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup \\
+  --ro-bind / / \\
+  --tmpfs /home \\
+  --tmpfs /root \\
+  --bind "$DIR" /mnt \\
+  --ro-bind "$webroot" /mnt/www \\
+  --dev /dev --proc /proc \\
+  /bin/bash -c 'python3 -m http.server $port --bind 127.0.0.1 --directory /mnt/www >/mnt/www.log 2>&1 &
+exec /mnt/root/usr/bin/tor -f /mnt/torrc'
+RUNNER
+  chmod +x "$DIR/run.sh"
+
+  if [[ -n "${ONIONTRACE_HS_SESSION:-}" ]] && screen -ls 2>/dev/null | grep -q "$ONIONTRACE_HS_SESSION"; then
+    screen -S "$ONIONTRACE_HS_SESSION" -X quit || true
+    sleep 1
+  fi
+  rm -f "$SOCK" "$DIR/tor.log"
+
+  local session="${ONIONTRACE_HS_SESSION:-onionhs}"
+  screen -dmS "$session" "$DIR/run.sh"
+  say "started publishing in screen session '$session'"
+
+  # The hostname file appears immediately, because it is derived from keys written at start.
+  # The service is not reachable until the descriptor is published, which cannot happen before
+  # the client has a circuit. Returning the address before this point hands the caller an
+  # address that does not work yet, so wait for the socket and the bootstrap first.
+  for _ in $(seq 1 120); do
+    if [[ -S "$SOCK" ]] && grep -q "Bootstrapped 100" "$DIR/tor.log" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  if ! grep -q "Bootstrapped 100" "$DIR/tor.log" 2>/dev/null; then
+    say "the publishing tor did not bootstrap within 120s; see $DIR/tor.log"
+    exit 5
+  fi
+
+  for _ in $(seq 1 30); do
+    if [[ -s "$DIR/hs/hostname" ]]; then
+      say "address: $(cat "$DIR/hs/hostname")"
+      cat "$DIR/hs/hostname"
+      return 0
+    fi
+    sleep 1
+  done
+  say "no onion address after 30s; see $DIR/tor.log"
+  exit 6
+}
+
 case "${1:-}" in
   start)  cmd_start ;;
   status) cmd_status ;;
   stop)   cmd_stop ;;
   clean)  cmd_clean ;;
+  serve)  shift; cmd_serve "$@" ;;
   *)      sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

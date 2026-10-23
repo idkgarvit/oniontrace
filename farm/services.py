@@ -330,11 +330,13 @@ def _fx_default_404(spec: FlawSpec, service: Service, seed: int) -> Endpoint:
 # from a formality into a measurement: without them the rule engine scores 19/19 and
 # has demonstrated nothing, because there is nothing present for it to get wrong.
 #
-# Not every catalogue rationale has a constructible fixture. The header-based rules
-# (nginx banner behind a proxy, shared-provider ETag, shared-provider header order)
-# describe situations that are indistinguishable at the response level, so no fixture
-# is implemented for them. `rules_with_hard_negative_fixture()` reports the gap
-# openly rather than leaving it implied.
+# Not every catalogue rationale had a constructible fixture. The last seven were left
+# unimplemented for a while, and the reason was wrong: they are the rules whose flaw lives in
+# a header or in a single line of a file, and it looked as though a proxy would make them
+# indistinguishable at the response level. It does not. Every one of them has a distinguishing
+# feature the careful rule reads and the careless rule ignores, which is exactly what a hard
+# negative is for: the page looks like the flaw and the discriminator says it is not.
+# `rules_with_hard_negative_fixture()` now covers all nineteen, and a test pins that.
 # --------------------------------------------------------------------------- #
 
 HARD_NEGATIVE_FIXTURES: dict[str, tuple[str, str, dict[str, str]]] = {
@@ -346,6 +348,61 @@ HARD_NEGATIVE_FIXTURES: dict[str, tuple[str, str, dict[str, str]]] = {
         "<a href='/server-status'>server-status</a> from the admin network.</p>"
         "</body></html>",
         {},
+    ),
+    # The env path answers, at 200, and carries no assignment. The naive rule keys on the
+    # path and fires; the careful rule reads the body and finds nothing to disclose.
+    "dot_env": (
+        "/.env",
+        "<html><body><h1>Not Found</h1><p>No such file.</p></body></html>",
+        {},
+    ),
+    # A backup-suffixed path that serves a page rather than source. ".bak" is enough for the
+    # naive rule; the absence of an opening PHP tag is what the careful rule checks.
+    "backup_file": (
+        "/index.php.bak",
+        "<html><body><h1>Backup unavailable</h1></body></html>",
+        {},
+    ),
+    # Apache named without a version. "Apache" in the Server header trips the naive rule;
+    # a version token is what makes a banner a disclosure, and there is none.
+    "apache_version_banner": (
+        "/about",
+        "<html><body><h1>About</h1></body></html>",
+        {"Server": "Apache"},
+    ),
+    # The same for nginx, at a different path so the two fixtures never collide on one
+    # service. A bare product name is not a version disclosure.
+    "nginx_version_banner": (
+        "/colophon",
+        "<html><body><h1>Colophon</h1></body></html>",
+        {"Server": "nginx"},
+    ),
+    # A Date header that exists and is UTC. The naive rule asks whether a Date header is
+    # present, which is every response ever served; the careful rule asks whether the clock
+    # leaks a local offset, and GMT means it does not.
+    "timezone_leak": (
+        "/contact",
+        "<html><body><h1>Contact</h1></body></html>",
+        {"Date": "Fri, 23 Oct 2026 13:00:00 GMT"},
+    ),
+    # An ETag in a shape that leaks nothing: a release tag, not the inode-and-size pair that
+    # names the file's stat on disk. Presence alone is the naive test.
+    "etag_pattern": (
+        "/style.css",
+        "body{color:#111}",
+        {"ETag": '"v5-1a2b"'},
+    ),
+    # Three of the four headers a default panel stack emits, with X-Request-Id missing. The
+    # naive rule fires on any X- header; the careful rule requires the whole set, because a
+    # partial set is a deliberately configured server rather than a default one.
+    "http_header_order": (
+        "/faq",
+        "<html><body><h1>FAQ</h1></body></html>",
+        {
+            "X-Powered-By": "PHP/8.1.2",
+            "Vary": "Accept-Encoding",
+            "Cache-Control": "no-store",
+        },
     ),
     # An application-rendered gallery at /uploads/. Contains "Index" and anchors, so a
     # loose autoindex heuristic fires; there is no server-generated listing.
