@@ -67,6 +67,7 @@ def cmd_env(args: argparse.Namespace) -> int:
     report = check_environment(
         tor_endpoint=args.tor_socks,
         case_root=Path(args.case_root) if args.case_root else None,
+        deep=args.deep,
     )
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
@@ -100,6 +101,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"Tor SOCKS endpoint; a unix socket by default ({DEFAULT_TOR_ENDPOINT})")
     e.add_argument("--case-root", default=None,
                    help="directory the run must be able to write to")
+    e.add_argument("--deep", action="store_true",
+                   help="also ask Tor to build a circuit (one CONNECT to the Tor Project); "
+                        "off by default because it needs the network and reaches a third party")
     e.add_argument("--json", action="store_true", help="machine-readable report")
     e.set_defaults(func=cmd_env)
     return p

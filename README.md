@@ -424,9 +424,39 @@ The gate also sits in front of live collection as the last guard, after authoris
 after the per-URL checks, so a run refused for lacking authorisation keeps that reason
 instead of being told its problem is the environment.
 
-**Not installed here:** this machine has no `tor` binary, so `--live` cannot run on it. The
-preflight reports the missing socket and the collector refuses, which is the intended
-behaviour rather than a limitation of the check.
+**Not installed here:** there is still no system `tor` package, because installing one needs
+root and a client-only daemon does not need to be installed. `scripts/tor_disposable.sh`
+fetches the distribution's signed `.deb`, unpacks it with `dpkg-deb -x` into
+`~/.cache/oniontrace-tor`, and runs it in a screen session under the same style of jail:
+
+```bash
+scripts/tor_disposable.sh start     # unpack, configure, run, wait for bootstrap
+scripts/tor_disposable.sh status    # socket, bootstrap, session
+scripts/tor_disposable.sh clean     # stop and delete every byte it wrote
+```
+
+Nothing lands in `/usr`, no service is enabled, and `clean` leaves no trace. The instance is
+`ClientOnly 1`, so it never relays for anyone else, and `/home` and `/root` are empty tmpfs
+mounts inside its jail — a client-only daemon that can read `~/.hermes/.env` is a liability.
+
+**`--deep`** adds a fifth check that asks Tor to build a circuit and CONNECT to the Tor
+Project's check host. It is off by default because it needs the working network and it
+reaches a third party, but it retires the report's own first limitation, and the report
+drops that line when it runs. Measured, end to end, from inside the no-network jail:
+
+```
+ok  own network namespace: loopback only, no routable interface
+ok  direct egress blocked: 1.1.1.1:443 unreachable from here (OSError)
+ok  tor reachable:         SOCKS5 no-auth handshake completed at unix:.../tor.sock
+ok  case directory writable
+ok  tor circuit:           CONNECT to check.torproject.org:443 succeeded through Tor
+
+not established by this report:
+  - a private network namespace says nothing about the cleanliness of the host outside it
+  - this checks the environment the collector starts in, not everything it does afterwards
+```
+
+A jail with no route out, reaching a verified Tor exit, is the whole design in one output.
 
 The refusal is a `GateRefused` (`E2.6` namespace, `E2.7` egress, `E2.8` Tor) and names
 every failing check at once. The probes live in `collect/preflight.py`, not in `gates/`,
@@ -502,7 +532,7 @@ tests/
                   figures above 200 dpi, and refuses to build without diagrams or capture
   test_collect.py 69 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
-  test_environment.py 20 tests; each pins one check, one refusal, or that the shipped
+  test_environment.py 25 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
 ```
 
@@ -577,7 +607,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (407 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (412 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and

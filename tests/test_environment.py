@@ -27,6 +27,7 @@ import pytest
 from collect import preflight
 from collect.preflight import (
     check_environment,
+    probe_circuit,
     probe_case_writable,
     probe_direct_egress,
     probe_network_namespace,
@@ -254,6 +255,108 @@ def test_a_missing_socket_names_the_path_it_wanted(tmp_path):
     assert not check.ok
     assert "absent.sock" in check.detail
     assert "SocksPort" in check.remedy
+
+
+# -- the circuit probe (--deep) ----------------------------------------- #
+
+
+def _socks_server(path: Path, *, reply_code: int, bind_atyp: int, truncate: bool = False):
+    """A SOCKS5 server that answers the greeting and one CONNECT.
+
+    ``bind_atyp`` selects the reply's address type, because the bind address length varies
+    and a client that reads a fixed number of bytes desynchronises the stream -- the bug
+    this probe had before the reply was parsed by type.
+    """
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(path))
+    server.listen(4)
+
+    if bind_atyp == 1:
+        bind = b"\x7f\x00\x00\x01" + b"\x00\x50"
+    elif bind_atyp == 4:
+        bind = b"\x00" * 16 + b"\x00\x50"
+    else:
+        bind = bytes([9]) + b"localhost" + b"\x00\x50"
+
+    def serve():
+        while True:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                return
+            try:
+                conn.recv(3)
+                conn.sendall(b"\x05\x00")
+                conn.recv(64)  # the CONNECT request
+                if truncate:
+                    conn.sendall(b"\x05\x00\x00")
+                    continue
+                conn.sendall(b"\x05" + bytes([reply_code]) + b"\x00" + bytes([bind_atyp]) + bind)
+            except OSError:
+                pass
+            finally:
+                conn.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+
+
+def test_a_built_circuit_is_reported_as_one(short_socket_dir):
+    path = short_socket_dir / "tor.sock"
+    _socks_server(path, reply_code=0, bind_atyp=1)
+
+    check = probe_circuit(f"unix:{path}")
+
+    assert check.ok
+    assert "succeeded through Tor" in check.detail
+
+
+def test_an_ipv6_bind_address_in_the_reply_does_not_desynchronise_the_stream(short_socket_dir):
+    """The reply's length depends on its address type; a fixed read leaves bytes behind."""
+
+    path = short_socket_dir / "tor.sock"
+    _socks_server(path, reply_code=0, bind_atyp=4)
+
+    check = probe_circuit(f"unix:{path}")
+
+    assert check.ok, check.detail
+
+
+def test_tor_refusing_the_connect_is_reported_with_its_reply_code(short_socket_dir):
+    path = short_socket_dir / "tor.sock"
+    _socks_server(path, reply_code=4, bind_atyp=1)  # 0x04 = host unreachable
+
+    check = probe_circuit(f"unix:{path}")
+
+    assert not check.ok
+    assert "0x04" in check.detail
+
+
+def test_a_truncated_reply_does_not_pass(short_socket_dir):
+    path = short_socket_dir / "tor.sock"
+    _socks_server(path, reply_code=0, bind_atyp=1, truncate=True)
+
+    check = probe_circuit(f"unix:{path}")
+
+    assert not check.ok
+
+
+def test_deep_adds_the_circuit_check_and_retires_its_limitation(monkeypatch):
+    called = []
+
+    def fake_circuit(endpoint):
+        called.append(endpoint)
+        return Check("tor circuit", True, "connected")
+
+    monkeypatch.setattr(preflight, "probe_circuit", fake_circuit)
+
+    shallow = check_environment()
+    deep = check_environment(deep=True)
+
+    assert called, "deep did not run the circuit probe"
+    assert any("circuit" in line for line in shallow.limitations)
+    assert not any("circuit" in line for line in deep.limitations)
+    assert any(c.name == "tor circuit" for c in deep.checks)
 
 
 # -- the writability probe ---------------------------------------------- #

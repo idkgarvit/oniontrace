@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import os
 import socket
+import struct
 from typing import Callable, Iterable
 
 from gates.environment import (
@@ -41,9 +42,17 @@ from gates.environment import (
 #: beyond a SYN: the check fails on connect success, which is the outcome we do not want.
 EGRESS_PROBE_ADDRESS = ("1.1.1.1", 443)
 
+#: Where the deep check asks Tor to connect. A clearnet host belonging to the Tor Project,
+#: chosen because the request is a CONNECT and nothing else -- no page is fetched, and the
+#: service exists to be reached by people checking their Tor setup.
+CIRCUIT_CHECK_HOST = ("check.torproject.org", 443)
+
 #: Long enough for a local socket, short enough that a blackholed route does not stall a
 #: preflight check. A jail that drops packets rather than refusing them is the slow case.
 PROBE_TIMEOUT = 1.0
+
+#: A circuit needs longer than a local socket: Tor has to pick and build a path.
+CIRCUIT_TIMEOUT = 30.0
 
 #: SOCKS5 greeting: version 5, one method offered, "no authentication required".
 _SOCKS_GREETING = b"\x05\x01\x00"
@@ -189,30 +198,118 @@ def probe_case_writable(case_root: str | os.PathLike[str] | None) -> Check:
     return Check("case directory writable", True, f"{path} accepts writes")
 
 
+def _recv_exactly(sock: socket.socket, count: int) -> bytes:
+    buf = b""
+    while len(buf) < count:
+        chunk = sock.recv(count - len(buf))
+        if not chunk:
+            raise OSError("connection closed mid-reply")
+        buf += chunk
+    return buf
+
+
+def probe_circuit(endpoint: str) -> Check:
+    """Ask Tor to actually connect somewhere, which a greeting never does.
+
+    This is the deep check, off by default for two reasons: it needs a working Tor network,
+    and it sends one CONNECT to a third party. Both are reasonable things to refuse on a
+    preflight that runs before every collection, so it is opt-in.
+
+    A successful CONNECT proves three things a greeting cannot: the exit can reach the
+    network, a circuit was built, and the proxy is speaking SOCKS5 rather than being a
+    listener that happens to answer two bytes.
+    """
+
+    host, port = CIRCUIT_CHECK_HOST
+    try:
+        sock = _connect_endpoint(endpoint)
+        sock.settimeout(CIRCUIT_TIMEOUT)
+    except OSError as exc:
+        return Check(
+            "tor circuit",
+            False,
+            f"no listener at {endpoint} ({exc.__class__.__name__})",
+            "start tor and bind its SocksPort into the jail",
+        )
+
+    try:
+        sock.sendall(_SOCKS_GREETING)
+        if _recv_exactly(sock, 2) != b"\x05\x00":
+            return Check("tor circuit", False, "greeting refused", "check the SocksPort")
+
+        sock.sendall(
+            b"\x05\x01\x00\x03"
+            + bytes([len(host)])
+            + host.encode("idna")
+            + struct.pack(">H", port)
+        )
+        head = _recv_exactly(sock, 4)
+        if head[0] != 5 or head[1] != 0:
+            return Check(
+                "tor circuit",
+                False,
+                f"Tor refused CONNECT to {host}:{port} (SOCKS5 reply {head[1]:#04x})",
+                "Tor is answering but cannot build a circuit; check the network and the log",
+            )
+
+        # Consume the bind address by type. Reading a fixed length here is what leaves
+        # stray bytes in a stream and breaks whatever protocol speaks next.
+        atyp = head[3]
+        if atyp == 1:
+            _recv_exactly(sock, 6)
+        elif atyp == 4:
+            _recv_exactly(sock, 18)
+        elif atyp == 3:
+            _recv_exactly(sock, _recv_exactly(sock, 1)[0] + 2)
+        else:
+            return Check("tor circuit", False, f"unexpected bind address type {atyp}")
+    except OSError as exc:
+        return Check(
+            "tor circuit",
+            False,
+            f"circuit to {host}:{port} failed ({exc.__class__.__name__})",
+            "Tor may still be bootstrapping; check its log for 'Bootstrapped 100%'",
+        )
+    finally:
+        sock.close()
+
+    return Check("tor circuit", True, f"CONNECT to {host}:{port} succeeded through Tor")
+
+
 def check_environment(
     *,
     tor_endpoint: str = DEFAULT_TOR_ENDPOINT,
     case_root: str | os.PathLike[str] | None = None,
+    deep: bool = False,
     probes: Iterable[Callable[[], Check]] | None = None,
 ) -> EnvironmentReport:
     """Run the preflight and return every answer, passing or not.
 
     ``probes`` replaces the whole set, which is what the tests use to produce each failure
-    without needing a broken machine to produce it.
+    without needing a broken machine to produce it. ``deep`` adds the circuit check, and
+    drops the limitation it retires.
     """
 
     if probes is None:
-        chosen: tuple[Callable[[], Check], ...] = (
+        chosen: list[Callable[[], Check]] = [
             probe_network_namespace,
             probe_direct_egress,
             lambda: probe_tor(tor_endpoint),
             lambda: probe_case_writable(case_root),
-        )
+        ]
+        if deep:
+            chosen.append(lambda: probe_circuit(tor_endpoint))
     else:
-        chosen = tuple(probes)
+        chosen = list(probes)
+
+    limitations = DEFAULT_LIMITATIONS
+    if deep:
+        limitations = tuple(
+            line for line in DEFAULT_LIMITATIONS if "circuit" not in line
+        )
 
     return EnvironmentReport(
         checks=tuple(probe() for probe in chosen),
         tor_endpoint=tor_endpoint,
-        limitations=DEFAULT_LIMITATIONS,
+        limitations=limitations,
     )
