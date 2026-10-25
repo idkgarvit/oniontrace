@@ -127,9 +127,8 @@ def state_for(
     if decision == "rejected":
         return LinkState.ANALYST_REJECTED
     if decision is None:
-        return (
-            LinkState.UNCONFIRMED if score >= confirm_threshold else LinkState.POSSIBLE
-        )
+        above = confirm_threshold_reached(score, confirm_threshold=confirm_threshold)
+        return LinkState.UNCONFIRMED if above else LinkState.POSSIBLE
     raise PresentationError(f"unknown analyst decision {decision!r}")
 
 
@@ -197,5 +196,10 @@ def render_abstention(case_id: str, *, confirm_threshold: float) -> str:
 
 
 def confirm_threshold_reached(score: float, *, confirm_threshold: float) -> bool:
-    """Whether a score is strong enough to be worth an analyst's attention at all."""
+    """Whether a score is strong enough to be worth an analyst's attention at all.
+
+    The single definition of "above the bar". `state_for` calls this rather than repeating
+    the comparison, so the threshold that decides a state and the threshold a caller can
+    query cannot drift apart.
+    """
     return score >= confirm_threshold

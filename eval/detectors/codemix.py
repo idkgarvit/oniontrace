@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from itertools import pairwise
 from typing import Sequence
 
 TOKEN = re.compile(r"[a-z']+")
@@ -170,7 +171,7 @@ def switch_count(post) -> int:
     """
 
     known = [l for l in post_languages(post) if l != UNKNOWN]
-    return sum(1 for a, b in zip(known, known[1:]) if a != b)
+    return sum(1 for a, b in pairwise(known) if a != b)
 
 
 def codemix_profile(posts: Sequence) -> dict[str, float]:

@@ -19,12 +19,11 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from graph.model import (
     Artefact,
     Edge,
-    EdgeMethod,
     EdgeStatus,
     Entity,
     Evidence,

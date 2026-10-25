@@ -84,7 +84,7 @@ class WarcRecord:
             f"ONIONTRACE-Case: {self.case_id}",
             f"ONIONTRACE-Transport: {self.transport}",
             f"ONIONTRACE-Seed-Label: {self.seed_label}",
-            f"Content-Type: application/http; msgtype=response",
+            "Content-Type: application/http; msgtype=response",
         ]
         block = _http_block(self)
         lines.append(f"Content-Length: {len(block.encode('utf-8'))}")

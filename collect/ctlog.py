@@ -24,7 +24,6 @@ from urllib.parse import urlencode
 CTLOG_HOST = "crt.sh"
 
 ONION_RE = re.compile(r"\b([a-z2-7]{56}\.onion)\b")
-DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$")
 
 #: Carried into every report so a reader cannot meet an association without the caveat.
 SIGNAL_NOTE = (
@@ -151,9 +150,3 @@ def associations(entries: list[CertEntry]) -> list[OnionAssociation]:
             )
         )
     return out
-
-
-def clearnet_domains(entries: list[CertEntry]) -> tuple[str, ...]:
-    """Well-formed clearnet domains seen anywhere in the log slice."""
-    names = {n for entry in entries for n in entry.clearnet_names if DOMAIN_RE.match(n)}
-    return tuple(sorted(names))

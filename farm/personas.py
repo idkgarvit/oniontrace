@@ -39,8 +39,6 @@ CODE_MIX_RATIO: dict[StyleRegime, float] = {
     StyleRegime.TEMPLATE_REUSER: 0.10,
 }
 
-_FUNCTION_SET_NAMES: tuple[str, ...] = tuple(FUNCTION_WORD_SETS)
-
 # Each persona's posts land mostly in a few hours of the day. Two personas with
 # different active windows are behaviourally distinguishable; two with the same
 # window are not, which is the honest limit of a 24-slot histogram.

@@ -25,10 +25,8 @@ from farm.model import FarmConfig, FlawScope, PersonaRole, StyleRegime
 from farm.personas import build_persona, generate_posts
 from farm.services import (
     CLUSTER_FLAW_ARTIFACT_KEY,
-    FIXTURE_BUILDERS,
     HEADER_FLAWS,
     STOCK_DEFAULT_ARTIFACT,
-    make_service,
     unbuildable_flaw_kinds,
 )
 

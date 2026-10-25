@@ -21,7 +21,6 @@ from graph.model import (
     STOCK_DEFAULT,
     Artefact,
     EdgeStatus,
-    Evidence,
     GraphError,
     MergeNotReversible,
     NoSuchEntity,

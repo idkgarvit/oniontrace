@@ -16,7 +16,6 @@ import pytest
 
 from collect.collector import (
     ORIGIN_AHMIA,
-    SEARCH_PROVIDER_AHMIA,
     SEARCH_PROVIDER_LOCAL,
     CollectionPolicy,
     CollectionScope,
@@ -290,6 +289,5 @@ def test_a_query_is_not_asked_again_against_an_index_of_the_same_size(gate, cloc
 
 
 def test_the_run_report_says_which_index_answered(gate, clock):
-    collector = make_collector(gate, RefusingTransport(), clock)
     scope = CollectionScope(search_queries=("market",))
     assert "index: local" in "\n".join(scope.summary())

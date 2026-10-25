@@ -31,6 +31,31 @@ ROOT = Path(__file__).resolve().parent.parent
 PDF = ROOT / "paper" / "ieee" / "oniontrace.pdf"
 RW = ROOT / "out" / "paper-drop" / "real_world"
 
+
+def paper_source() -> Path | None:
+    """Ask the builder where its source is, so the two cannot disagree.
+
+    The freshness check needs the same file the PDF was built from. Repeating the lookup
+    here is how the two scripts came to hold two hardcoded copies of one absolute path;
+    asking the builder keeps a single answer. A source that is absent is not an error
+    for a verifier -- it only means the freshness check cannot run on this machine.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "build_ieee", ROOT / "paper" / "build_ieee.py"
+    )
+    if spec is None or spec.loader is None:
+        print("  note could not load paper/build_ieee.py; freshness not checked")
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        return module.paper_source()
+    except FileNotFoundError as error:
+        print(f"  note {error}; freshness not checked")
+        return None
+
 #: Phrases that would claim the torn-down services are still reachable. Any hit is a
 #: failure: the addresses are destroyed, so such a sentence is false.
 LIVENESS_PHRASES = (
@@ -273,9 +298,8 @@ def main() -> int:
 
     # -- freshness ----------------------------------------------------------- #
     print("\nfreshness")
-    src = Path("/home/shiga0_0/.hermes/profiles/researcher/workspace/"
-               "oniontrace-paper/paper.md")
-    if src.exists():
+    src = paper_source()
+    if src is not None:
         check("PDF is not older than the markdown source",
               PDF.stat().st_mtime >= src.stat().st_mtime,
               "rebuild: python3 paper/build_ieee.py && pdflatex")

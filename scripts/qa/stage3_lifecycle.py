@@ -115,7 +115,7 @@ async def main() -> int:
         )
         check("a reverse button appears in the merge log", rev_btn is True, str(rev_btn))
 
-        clicked = await real_click(c, '.panel form[action$="/reverse"] button.no', 0)
+        await real_click(c, '.panel form[action$="/reverse"] button.no', 0)
         g3 = graph()
         check("reversing restores the entity count",
               g3["counts"]["entities"] == n_ent0,

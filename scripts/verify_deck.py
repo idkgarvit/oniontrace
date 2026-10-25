@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 
 from pptx import Presentation
-from pptx.util import Emu
 
 EMU_IN = 914400
 # Arial averages close to 0.5em per character across mixed prose. Use 0.52 to stay
@@ -45,18 +44,6 @@ def est_height(tf, box_w_in: float) -> float:
         if p.space_after is not None:
             total += p.space_after.pt / 72
     return total
-
-
-def est_width(tf) -> float:
-    """Width in inches the longest single line needs, for one-line labels."""
-
-    widest = 0.0
-    for p in tf.paragraphs:
-        text = "".join(r.text for r in p.runs)
-        sizes = [r.font.size.pt for r in p.runs if r.font.size]
-        pt = max(sizes) if sizes else 18.0
-        widest = max(widest, len(text) * pt * CHAR_W / 72)
-    return widest
 
 
 def boxes_overlap(a, b, pad=0.02) -> bool:

@@ -39,10 +39,6 @@ class SeedCandidate:
     snippet: str
     source_url: str
 
-    @property
-    def index_url(self) -> str:
-        return f"http://{self.address}/"
-
 
 def extract_addresses(text: str) -> list[str]:
     """Unique onion addresses in first-seen order.

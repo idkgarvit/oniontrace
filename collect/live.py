@@ -51,10 +51,12 @@ from .transport import FetchResult
 #: allowance is a statement about what the tool may do, and the tool may no longer do this.
 #:
 #: The ``public_index`` origin is kept rather than deleted: keyword discovery is a real
-#: capability and the parser is not specific to any one index. It ships with no provider
-#: configured, so it fails loudly instead of quietly returning nothing. Pointing it at an
-#: index that permits automated querying is an operator decision, made through
-#: ``extra_hosts``, and it belongs on the record.
+#: capability and the parser is not specific to any one index. It was shipped with no
+#: provider at all, and it now has one that works locally (``collect/index.py``): an index
+#: built from pages this project was allowed to read, so the path needs no host and cannot
+#: be refused. The ``ahmia`` provider stays selectable so that its refusal is recorded
+#: rather than forgotten. Pointing the origin at some third index instead is an operator
+#: decision, made through ``extra_hosts``, and it belongs on the record.
 #:
 #: ``crt.sh`` is gone for a different and more interesting reason. It is not that the host
 #: refuses; it is that no certificate log can answer the question this origin asks. A log is
@@ -130,7 +132,7 @@ def is_non_public_address(host: str) -> tuple[bool, str]:
         return True, "empty host"
     if name in _LOCAL_NAMES or name.endswith(".localhost"):
         return True, "loopback name"
-    if name.endswith(".internal") or name.endswith(".local"):
+    if name.endswith((".internal", ".local")):
         return True, "internal-only name suffix"
 
     candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []

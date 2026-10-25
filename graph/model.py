@@ -240,9 +240,3 @@ class NoSuchEntity(GraphError):
 
 class MergeNotReversible(GraphError):
     """The merge cannot be undone in its current state."""
-
-
-def utc_now_stub() -> str:
-    """Placeholder overwritten by the store; kept so the type module has no clock."""
-
-    raise NotImplementedError

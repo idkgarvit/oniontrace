@@ -767,6 +767,7 @@ def test_correlation_baseline_describes_the_pool_actually_ranked(farm):
     # The pool actually handed to the ranker is the full one.
     assert len(pool) == len(farm.services) - 1 == 13
     assert any("solo" in candidate for candidate in pool)
+    assert ranked and all(candidate in pool for candidate, _ in ranked)
 
     # So the baseline reported must be the full-pool one.
     from eval.harness import correlation_experiment

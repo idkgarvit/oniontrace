@@ -30,11 +30,10 @@ import hashlib
 import json
 import re
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent

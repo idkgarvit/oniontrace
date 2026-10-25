@@ -15,7 +15,6 @@ properties that make the numbers trustworthy:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -166,7 +165,7 @@ def test_a_failing_stage_is_recorded_and_does_not_abort_the_run(tmp_path, monkey
 def test_report_names_the_limits_of_its_own_numbers(tmp_path):
     from oniontrace.pipeline import run_pipeline
 
-    result = run_pipeline(
+    run_pipeline(
         seed=20260925, case_id="CASE-R", output_dir=tmp_path / "run",
         case_root=tmp_path / "casework",
     )

@@ -73,23 +73,6 @@ MINIMUM_ROLE: dict[Permission, Role] = {
     Permission.READ_AUDIT: Role.ADMIN,
 }
 
-#: Permissions that additionally require the principal to own the specific case, unless
-#: they are an admin. Holding the case-owner role for case A must not confer authority
-#: over case B, or "case-owner" would just mean "anyone who is trusted at all".
-CASE_SCOPED: frozenset[Permission] = frozenset(
-    {
-        Permission.OPEN_CASE,
-        Permission.CLOSE_CASE,
-        Permission.EXPORT,
-        Permission.ADD_SEED,
-        Permission.START_COLLECTION,
-        Permission.VIEW_SNAPSHOTS,
-        Permission.RUN_QUERY,
-        Permission.RECORD_LINK_ACTION,
-    }
-)
-
-
 @dataclass(frozen=True)
 class Principal:
     """An authenticated actor."""
@@ -100,10 +83,6 @@ class Principal:
     def __post_init__(self) -> None:
         if not self.principal_id or not self.principal_id.strip():
             raise ValueError("a principal needs a non-empty identifier to be auditable")
-
-
-def minimum_role(permission: Permission) -> Role:
-    return MINIMUM_ROLE[permission]
 
 
 def require(principal: Principal, permission: Permission) -> None:

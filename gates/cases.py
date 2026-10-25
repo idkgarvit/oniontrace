@@ -27,8 +27,6 @@ from typing import Any
 
 from gates.errors import CaseError
 
-ISO = "%Y-%m-%dT%H:%M:%S%z"
-
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")

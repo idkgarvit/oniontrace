@@ -48,13 +48,8 @@ from collect.checkpoints import CheckpointStore, ProposalStore
 from collect.clock import FrozenClock, SystemClock
 from collect.collector import (
     ORIGINS,
-    ORIGIN_AHMIA,
-    SEARCH_PROVIDER_AHMIA,
     SEARCH_PROVIDER_LOCAL,
     SEARCH_PROVIDERS,
-    ORIGIN_CT,
-    ORIGIN_ONION,
-    ORIGIN_TELEGRAM,
     CollectionPolicy,
     CollectionScope,
     Collector,

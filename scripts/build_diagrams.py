@@ -11,7 +11,6 @@ makes a set of slides look drawn rather than assembled.
 from __future__ import annotations
 
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 

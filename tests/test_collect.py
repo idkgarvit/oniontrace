@@ -31,13 +31,11 @@ from collect.collector import (
     ORIGIN_TELEGRAM,
     ORIGINS,
     SEARCH_PROVIDER_AHMIA,
-    SEARCH_PROVIDER_LOCAL,
     CollectionPolicy,
     CollectionScope,
     Collector,
     OriginSummary,
     checkpoint_source,
-    content_id,
 )
 from collect.ctlog import CTLOG_HOST, query_url
 from collect.errors import CheckpointError, CollectionError, ScopeViolation

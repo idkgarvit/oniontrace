@@ -86,10 +86,13 @@ class _PreviewParser(HTMLParser):
             self._posted_at = ""
             self._parts = []
             return
-        if self._msg_depth is not None and self._text_depth is None:
-            if "js-message_text" in classes:
-                self._text_depth = self._depth
-                self._parts = []
+        if (
+            self._msg_depth is not None
+            and self._text_depth is None
+            and "js-message_text" in classes
+        ):
+            self._text_depth = self._depth
+            self._parts = []
 
     def handle_data(self, data):
         if self._text_depth is not None:

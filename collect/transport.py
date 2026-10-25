@@ -108,10 +108,6 @@ class FixtureTransport:
     def hosts(self) -> tuple[str, ...]:
         return self._hosts
 
-    @property
-    def registered_urls(self) -> tuple[str, ...]:
-        return tuple(sorted(self._pages))
-
     def register(self, url: str, page: Page) -> None:
         host = _host_of(url)
         if host not in self._hosts:

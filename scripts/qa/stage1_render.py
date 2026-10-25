@@ -8,7 +8,6 @@ that throws after paint, a panel wider than its column, a colour that cannot be 
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 from pathlib import Path
 

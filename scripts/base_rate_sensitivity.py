@@ -28,8 +28,11 @@ sys.path.insert(0, str(ROOT))
 from eval.harness import correlation_experiment  # noqa: E402
 from farm.base_rates import (  # noqa: E402
     DESIGN_SHARE,
+    MEASURE_COMMAND,
+    MEASURED_ON,
     MEASURED_POPULATION,
     MEASURED_SHARES_NOTE,
+    MEASURED_SOURCE,
     MEASURED_TOP_ARTEFACT_SHARE,
     SENSITIVITY_SHARES,
     describe,
@@ -96,6 +99,9 @@ def main() -> int:
                 "seed": SEED,
                 "cap": CAP,
                 "measured_population": MEASURED_POPULATION,
+                "measured_on": MEASURED_ON,
+                "measured_source": MEASURED_SOURCE,
+                "measure_command": MEASURE_COMMAND,
                 "measured_share": MEASURED_TOP_ARTEFACT_SHARE,
                 "design_share": DESIGN_SHARE,
                 "note": MEASURED_SHARES_NOTE,

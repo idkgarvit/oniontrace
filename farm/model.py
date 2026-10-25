@@ -22,7 +22,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Iterable
 
 # --------------------------------------------------------------------------- #
 # Enums
@@ -393,11 +393,29 @@ class FarmTruth:
             if s.cluster_id == svc.cluster_id and s.service_id != service_id
         ]
 
-    def correlation_pool(self, service_id: str) -> list[str]:
-        """Every candidate the correlator may rank for a query service."""
-        return [s.service_id for s in self.services if s.service_id != service_id]
+    def correlation_pool(
+        self, service_id: str, *, service_ids: Iterable[str] | None = None
+    ) -> list[str]:
+        """Every candidate the correlator may rank for a query service.
 
-    def precision_at_1_baseline(self, *, restricted_to_clustered: bool = True) -> float:
+        `service_ids` restricts the pool to a subset, which is what the held-out block
+        uses: a test query must be answered from test services alone, or the top-ranked
+        candidate could be a dev service the farm was fitted against.
+        """
+        allowed = None if service_ids is None else set(service_ids)
+        return [
+            s.service_id
+            for s in self.services
+            if s.service_id != service_id
+            and (allowed is None or s.service_id in allowed)
+        ]
+
+    def precision_at_1_baseline(
+        self,
+        *,
+        restricted_to_clustered: bool = True,
+        service_ids: Iterable[str] | None = None,
+    ) -> float:
         """Random-guess precision@1 over the correlation pool.
 
         Part E1 requires this next to every correlation result. Two pool definitions
@@ -413,14 +431,28 @@ class FarmTruth:
 
         Only clustered services are treated as queries: a singleton has no true
         mate, so its correct answer is abstention, not a hit.
+
+        `service_ids` restricts both the queries and the pool, so the baseline quoted
+        next to a held-out result describes the pool the held-out run actually used.
         """
-        clustered = [s for s in self.services if s.cluster_id is not None]
+        allowed = None if service_ids is None else set(service_ids)
+        in_scope = [
+            s for s in self.services
+            if allowed is None or s.service_id in allowed
+        ]
+        clustered = [s for s in in_scope if s.cluster_id is not None]
         if not clustered:
             return 0.0
-        pool = len(clustered) - 1 if restricted_to_clustered else len(self.services) - 1
+        pool = (
+            len(clustered) - 1 if restricted_to_clustered else len(in_scope) - 1
+        )
         if pool <= 0:
             return 0.0
-        ratios = [len(self.cluster_mates(s.service_id)) / pool for s in clustered]
+        ratios = [
+            len([m for m in self.cluster_mates(s.service_id)
+                 if allowed is None or m in allowed]) / pool
+            for s in clustered
+        ]
         return sum(ratios) / len(ratios)
 
     def clean_services(self) -> list[Service]:

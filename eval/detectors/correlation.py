@@ -20,8 +20,8 @@ correlator lands, it is scored here in place of the reference implementation.
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from typing import Iterable, Sequence
+from collections import Counter
+from typing import Sequence
 
 
 def artifact_frequencies(farm) -> Counter:
@@ -37,7 +37,7 @@ def _comparable_keys(farm, query_id: str, candidate_id: str) -> list[str]:
     """Artefact keys both services carry, so a match is meaningful."""
     query = farm.service(query_id).shared_artifacts
     candidate = farm.service(candidate_id).shared_artifacts
-    return [k for k in query.keys() & candidate.keys()]
+    return list(query.keys() & candidate.keys())
 
 
 def rank_services(
@@ -75,10 +75,13 @@ def rank_services(
         for key in keys:
             if query_artifacts[key] != candidate_artifacts[key]:
                 continue
-            if frequencies is not None and max_artifact_frequency is not None:
+            if (
+                frequencies is not None
+                and max_artifact_frequency is not None
                 # A value shared across much of the population is not evidence.
-                if frequencies[query_artifacts[key]] > max_artifact_frequency:
-                    continue
+                and frequencies[query_artifacts[key]] > max_artifact_frequency
+            ):
+                continue
             agreements += 1
 
         if agreements:

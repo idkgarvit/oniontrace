@@ -29,6 +29,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Sequence
 
 from eval.detectors.codemix import codemix_profile
@@ -94,7 +95,7 @@ def behaviour_profile(posts: Sequence) -> dict[str, float]:
     features = {f"hour_{h:02d}": hours.get(h, 0) / hour_total for h in range(24)}
 
     ordered = sorted(p.day_index for p in posts)
-    gaps = [b - a for a, b in zip(ordered, ordered[1:])] or [0]
+    gaps = [b - a for a, b in pairwise(ordered)] or [0]
     features["mean_gap"] = min(1.0, (sum(gaps) / len(gaps)) / 7.0)
     features["template_ratio"] = sum(1 for p in posts if p.is_template) / len(posts)
     features["mean_length"] = min(

@@ -20,13 +20,10 @@ import asyncio
 import base64
 import json
 import subprocess
-import sys
-import tempfile
 from pathlib import Path
 
 import websockets
 from pptx import Presentation
-from pptx.util import Emu
 
 EMU_IN = 914400
 PX_PER_IN = 96  # CSS reference pixel; only affects the preview, never the deck

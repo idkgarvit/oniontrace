@@ -409,7 +409,6 @@ def _build_near_miss_decoys(
     if not subjects:
         return [], []
 
-    by_id = {s.service_id: s for s in services}
     # Service each subject posts on, derived from the subject's cluster position.
     decoys = []
     decoy_service_ids: list[str] = []
@@ -596,7 +595,7 @@ def _build_abstention_cases(
         )
 
     # Retrieval abstention: decoy text against a subjects-only pool.
-    for i, decoy in enumerate(decoys[: cfg.n_abstention_retrieval_cases]):
+    for decoy in decoys[: cfg.n_abstention_retrieval_cases]:
         cases.append(
             AbstentionCase(
                 case_id=f"ABS-RETR-{decoy.persona_id}",
@@ -646,7 +645,7 @@ def generate_farm(cfg: FarmConfig | None = None) -> FarmTruth:
     all_service_ids = subject_service_ids + decoy_service_ids
 
     topics = list(TOPIC_VOCABULARY)
-    for persona, service_id in zip(all_personas, all_service_ids):
+    for persona, service_id in zip(all_personas, all_service_ids, strict=True):
         # Style drift on some personas: content vocabulary moves, function words do
         # not (D3). The drift topic is deliberately different from the persona's own.
         own_topic = None

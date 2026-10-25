@@ -41,7 +41,6 @@ from farm.language import TOPIC_VOCABULARY
 from farm.model import (
     Endpoint,
     Flaw,
-    FlawScope,
     Service,
     deterministic_hex,
     deterministic_onion_address,
@@ -51,16 +50,6 @@ SERVICE_TITLES: tuple[str, ...] = (
     "Trading Post", "Swap Shop", "Second Look", "Old Stock", "Corner Store",
     "Parts Bin", "Shelf Life", "Hand-Me-Down", "The Backroom", "Odd Lots",
     "Spare Room", "Clear Out",
-)
-
-# Artefact keys used in Service.shared_artifacts.
-ARTIFACT_KEYS: tuple[str, ...] = (
-    "favicon_sha256",
-    "tls_spki_sha256",
-    "ssh_hostkey_sha256",
-    "app_js_sha256",
-    "analytics_id",
-    "error404_sha256",
 )
 
 # The stock-default value used by hard negatives. Deliberately identical across

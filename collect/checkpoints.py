@@ -94,12 +94,6 @@ class CheckpointStore:
             return ()
         return tuple(sorted(p.stem for p in folder.glob("*.json")))
 
-    def purge_reason(self, case_id: str) -> str:
-        return (
-            f"checkpoints for case {case_id!r} under {self._dir}: they record which "
-            "sources were watched and how far back, which is case data"
-        )
-
 
 class ProposalStore:
     """Seed *proposals* the collector found, waiting on an analyst's decision.

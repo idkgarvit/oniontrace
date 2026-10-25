@@ -18,7 +18,7 @@ implies precision the sample cannot support.
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
 # z for a two-sided 95% interval.
@@ -124,7 +124,7 @@ def precision_at_1(
     total = 0
     abstained = 0
     skipped_no_answer = 0
-    for ranked, truth in zip(rankings, relevant):
+    for ranked, truth in zip(rankings, relevant, strict=True):
         if not truth:
             # No right answer to find: restraint, not failure. Scored elsewhere.
             skipped_no_answer += 1
@@ -150,7 +150,7 @@ def hit_at_k(
     total = 0
     abstained = 0
     skipped_no_answer = 0
-    for ranked, truth in zip(rankings, relevant):
+    for ranked, truth in zip(rankings, relevant, strict=True):
         if not truth:
             # No right answer to find: restraint, not failure. Scored elsewhere.
             skipped_no_answer += 1
@@ -173,7 +173,7 @@ def recall_at_k(
     query can have more than one right answer -- correlation queries always do.
     """
     ratios: list[float] = []
-    for ranked, truth in zip(rankings, relevant):
+    for ranked, truth in zip(rankings, relevant, strict=True):
         if not truth:
             continue
         ratios.append(len(truth & set(ranked[:k])) / len(truth))
@@ -191,7 +191,7 @@ def mean_reciprocal_rank(
     """
     total = 0.0
     count = 0
-    for ranked, truth in zip(rankings, relevant):
+    for ranked, truth in zip(rankings, relevant, strict=True):
         if not truth:
             continue
         count += 1

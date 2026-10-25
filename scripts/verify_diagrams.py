@@ -14,7 +14,6 @@ import asyncio
 import json
 import socket
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
