@@ -202,6 +202,19 @@ class _EnvironmentGatedTransport:
 
         return getattr(self._inner, "name", "environment-gated")
 
+    @property
+    def settings(self):
+        """The wrapped transport's settings, so the permit reserve is its real timeout.
+
+        The collector keeps a request's timeout in hand when it checks the permit
+        deadline, because a page started inside the permit can finish outside it. This
+        wrapper is transparent apart from the preflight; hiding the timeout here made the
+        reserve a 30-second default while a live request was allowed ten minutes, so the
+        guard could never fire before the permit expired.
+        """
+
+        return getattr(self._inner, "settings", None)
+
     def check(self, url: str, headers: dict[str, str] | None = None) -> None:
         self._inner.check(url, headers)
         if self._report is not None and self._report.ok:

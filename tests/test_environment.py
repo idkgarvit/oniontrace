@@ -438,6 +438,24 @@ def test_a_bad_environment_stops_the_fetch():
         gated.fetch("http://example.onion/")
 
 
+def test_the_environment_wrapper_keeps_the_transports_timeout_visible():
+    """The wrapper is transparent apart from the preflight, timeout included.
+
+    The collector's permit reserve is the transport's own timeout, because a request that
+    starts inside the permit can finish outside it. When this wrapper hid the setting, the
+    reserve fell back to a 30-second default while a live request was allowed ten minutes,
+    so the guard fired after the deadline it was meant to protect -- or never at all.
+    """
+    from collect.cli import _EnvironmentGatedTransport
+    from collect.live import LiveSettings, LiveTransport
+
+    inner = LiveTransport(settings=LiveSettings(timeout_seconds=600))
+    gated = _EnvironmentGatedTransport(inner, report_factory=lambda: None)
+
+    assert gated.settings is inner.settings
+    assert gated.settings.timeout_seconds == 600
+
+
 def test_a_good_environment_is_checked_once_for_the_whole_run():
     from collect.cli import _EnvironmentGatedTransport
 

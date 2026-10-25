@@ -26,7 +26,6 @@ import websockets
 from pptx import Presentation
 
 EMU_IN = 914400
-PX_PER_IN = 96  # CSS reference pixel; only affects the preview, never the deck
 PORT = 9344
 
 

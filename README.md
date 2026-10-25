@@ -717,9 +717,20 @@ a fifteen-minute permit two dozen pages long, and the gate refuses an ingest pre
 after the host has already been paid the politeness. The collector checks the deadline before
 each request, holding the transport's own timeout in hand so a page cannot start that would
 finish after it, and stops with what it has and a per-page cursor. The run then stores what it
-read and the next one continues from there. Measured on `securedrop.org`: thirty-one pages is
-sixteen minutes at a ten-second delay, which is why the first live attempt to prove this path
-stored nothing and why the guard exists.
+read and the next one continues from there.
+
+Proved live on `securedrop.org` on 2026-10-25: a ten-minute request timeout against a
+fifteen-minute permit put the deadline at five minutes of walking. The walk stopped at 300
+seconds with 21 of 40 pages stored, 19 named as unread, and a cursor per page. The byte budget
+was 10.3 MB of the 64 MB allowed, so time was the only limit -- and the earlier attempt that
+hit the 8 MB ceiling first showed what the guard is for, because a byte stop also keeps the
+pages it read instead of losing them to a late refusal.
+
+The first live attempt at this proof also found a defect in the guard itself. The live
+transport is wrapped by the environment preflight, and the wrapper hid the transport's
+`settings`, so the reserve silently fell back to a 30-second default while each request was
+allowed ten minutes: the guard could never fire before the deadline it was meant to protect.
+The wrapper now passes the setting through, and a test pins it.
 
 That means the operator can point the walk at `https://securedrop.org/` and let the site name
 its own pages, which is the difference between a crawler that is handed its answer and one
@@ -884,7 +895,7 @@ tests/
                   figures above 200 dpi, and refuses to build without diagrams or capture
   test_collect.py 77 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
-  test_environment.py 25 tests; each pins one check, one refusal, or that the shipped
+  test_environment.py 26 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
   test_robots.py 14 tests; said no, said nothing, said it in a way this has to
                   interpret -- including the two real files that started this
