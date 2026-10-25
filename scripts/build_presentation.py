@@ -83,7 +83,9 @@ def para(tf, text, *, size=20, color=FG, bold=False, first=False, space_after=0,
     return p
 
 
-def rule(slide, x, y, w, color=AMBER, thick=Pt(2.5)):
+def rule(slide, x, y, w, color=AMBER, thick=None):
+    if thick is None:
+        thick = Pt(2.5)
     bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(y), Inches(w), thick)
     bar.fill.solid()
     bar.fill.fore_color.rgb = color

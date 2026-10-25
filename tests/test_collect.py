@@ -738,7 +738,7 @@ def test_a_second_run_at_the_same_moment_issues_no_requests(gate, case, fixtures
     assert len(fixtures.transport.fetched) == fetched_after_first
     # Every path has to say why it did nothing, or "no requests" is indistinguishable from
     # a path that silently did not run.
-    for summary, prior in zip(second.origins, first.origins):
+    for summary, prior in zip(second.origins, first.origins, strict=True):
         if prior.pages == 0:
             # A path with nothing declared owes no explanation for doing nothing. Every
             # path that had work on the first run must say why it had none on the second.

@@ -158,7 +158,7 @@ def sitemaps(text: str) -> tuple[str, ...]:
     return tuple(declared)
 
 
-def crawl_delay(text: str, *, user_agent: str = PRODUCT_TOKEN) -> float | None:
+def crawl_delay(text: str) -> float | None:
     """The host's requested delay between requests, when it states one.
 
     ``Crawl-delay`` is not part of the robots standard any more, and a site that states it is
@@ -166,6 +166,11 @@ def crawl_delay(text: str, *, user_agent: str = PRODUCT_TOKEN) -> float | None:
     agents and not to this one still describes how the host wants to be read, and reading it
     faster than asked because the rule does not strictly bind is a choice a collector should
     not make on its own.
+
+    Deliberately takes no ``user_agent``. It used to accept one and ignore it, which is worse
+    than not having it: a caller could pass their own token and reasonably believe the answer
+    was scoped to them, while the function returned the file-wide maximum either way. The
+    over-compliance is the policy; the parameter was a claim the code did not keep.
     """
     values = [float(match) for match in _CRAWL_DELAY_RE.findall(text)]
     return max(values) if values else None

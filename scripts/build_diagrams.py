@@ -291,7 +291,7 @@ def d5_farm() -> None:
                 ("cluster D", 3, "#b07fd6")]
     x = 64
     for name, n, color in clusters:
-        for i in range(n):
+        for _ in range(n):
             s.append(f"<rect x='{x}' y='190' width='62' height='62' rx='8' fill='{PANEL}' "
                      f"stroke='{color}' stroke-width='2'/>")
             x += 72

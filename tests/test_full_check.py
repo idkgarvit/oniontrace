@@ -232,3 +232,83 @@ def test_an_unproven_stage_fails_the_run(tmp_path: Path):
 @pytest.mark.parametrize("status", ["PASS", "FAIL", "UNPROVEN", "SKIP", "running"])
 def test_every_status_has_a_colour(status: str):
     assert status in harness.COLOURS
+
+
+# --- a skipped stage is not a pass --------------------------------------------------
+
+
+def _finished(status: str, name: str = "probe") -> Any:
+    """A stage in a terminal state, without running anything."""
+    stage = _stage("true")
+    stage.name = name
+    stage.status = status
+    stage.summary = {"PASS": "12 checks passed", "SKIP": "no Tor socket"}.get(status, status)
+    return stage
+
+
+def test_a_run_with_a_skipped_stage_does_not_claim_every_check_passed():
+    """The banner is the part people read, and it disagreed with its own report.
+
+    A run that skipped the two live stages printed "ALL CHECKS PASSED" over two amber SKIP
+    rows, printed "verdict: all checks passed", and exited 0. Every sentence of that was
+    false about a check that never ran.
+    """
+    sentence, code = harness._verdict([_finished("PASS"), _finished("SKIP", "Live check")])
+
+    assert code != 0
+    assert "all checks passed" not in sentence.lower()
+    assert "1 were skipped" in sentence or "1 was skipped" in sentence
+    assert "Live check" in sentence
+
+
+def test_the_banner_is_amber_and_names_the_skip_count(tmp_path: Path):
+    results = [_finished("PASS", "suite"), _finished("SKIP", "Live check")]
+    destination = tmp_path / "report.html"
+    harness.render(results, {"when": "", "commit": "", "branch": "", "tree": "", "host": ""},
+                   destination)
+    page = destination.read_text(encoding="utf-8")
+
+    assert "ALL CHECKS PASSED" not in page
+    assert "1 PASSED, 1 SKIPPED" in page
+    assert harness.COLOURS["SKIP"][0] in page
+
+
+def test_a_clean_run_still_says_it_passed(tmp_path: Path):
+    """The strict rule must not turn a genuine green run into an amber one."""
+    results = [_finished("PASS", "suite"), _finished("PASS", "paper")]
+    sentence, code = harness._verdict(results)
+
+    assert (sentence, code) == ("all 2 stages passed", 0)
+    destination = tmp_path / "report.html"
+    harness.render(results, {"when": "", "commit": "", "branch": "", "tree": "", "host": ""},
+                   destination)
+    assert "ALL CHECKS PASSED" in destination.read_text(encoding="utf-8")
+
+
+def test_the_machine_readable_result_carries_the_verdict(tmp_path: Path):
+    """It shipped without one, so a consumer had to guess success from the rows.
+
+    The first consumer to ask for it read ``result["verdict"]`` from a passing run and got
+    None, which is exactly the shape of a bug that survives a green run.
+    """
+    results = [_finished("PASS", "suite"), _finished("SKIP", "Live check")]
+    destination = tmp_path / "result.json"
+    harness.write_json(results, {"commit": "abc"}, destination, "1 of 2 stages passed")
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+
+    assert payload["verdict"] == "1 of 2 stages passed"
+    assert payload["passed"] is False
+    assert payload["incomplete"] is True
+    assert payload["counts"]["SKIP"] == 1
+    assert payload["stages"][0]["status"] == "PASS"
+
+
+def test_the_json_says_passed_only_when_every_stage_ran_and_passed(tmp_path: Path):
+    destination = tmp_path / "result.json"
+    harness.write_json([_finished("PASS")], {"commit": "abc"}, destination, "all 1 stages passed")
+    assert json.loads(destination.read_text(encoding="utf-8"))["passed"] is True
+
+    harness.write_json([_finished("FAIL")], {"commit": "abc"}, destination, "a failure")
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    assert payload["passed"] is False
+    assert payload["incomplete"] is False

@@ -889,7 +889,7 @@ tests/
                    injection through collected values, and the origin/CSP boundary
   test_farm.py   65 tests; each locks in a property a reported metric depends on
   test_eval.py   69 tests; each pins what a number in the report is allowed to mean
-  test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
+  test_gates.py  97 tests; each asserts a refusal, or that the refusal is on the record
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
@@ -903,8 +903,9 @@ tests/
                   hostile page could put in either of them
   test_ctlog_direct.py 13 tests; each builds its own key and bytes, so a tree head
                   either verifies offline or it does not -- none of them opens a socket
-  test_full_check.py 23 tests; the harness contract -- exit 0 without a verdict is
-                  UNPROVEN, and every claim function is fed the output that defeats it
+  test_full_check.py 28 tests; the harness contract -- exit 0 without a verdict is
+                  UNPROVEN, a skipped stage is never a pass, and every claim function is
+                  fed the output that defeats it
   test_dependencies.py 3 tests; every third-party import is in requirements.txt, so a
                   fresh clone installs what the code actually imports
   test_base_rates.py 11 tests; the farm's one claim about the world matches the measurement
@@ -916,6 +917,9 @@ tests/
   test_build_ieee.py 17 tests; the IEEE build holds its contents -- tables wrap inside the
                   column, a 56-character address breaks without gaining a character, and
                   inline code is not escaped twice
+  test_paper_drop.py 3 tests; every number in the drop comes from the run this process
+                  started, a half-finished run is reported rather than parsed, and one
+                  seed is not run twice
   test_index.py  26 tests; extraction, whole-word matching, ranking, and a guard that the
                   index never ingests its own answers as evidence for the next answer
   test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
@@ -1083,8 +1087,8 @@ Implemented:
   signed collection permits, per-case seeds, purge with a kept tombstone, append-only
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
-  95-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (530 today, after `graph/`, `dashboard/`, the code-mix
+  97-test suite (nine of them pinning audit-trail truncation and damage reporting).
+  **284 tests pass in total.** (661 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
@@ -1211,6 +1215,17 @@ brace.
 
 `tests/test_full_check.py` pins this from both sides, including the case that matters: `true`
 exits 0, and the harness must call it UNPROVEN.
+
+A **SKIP is not a pass**, and the first version of this harness quietly disagreed with itself
+about that. It printed `ALL CHECKS PASSED` whenever no stage had *failed*, so a run where the
+two live stages never started showed a green banner over two amber rows, printed
+`verdict: all checks passed`, and exited 0. It was found by reading `out/full-check.json` and
+finding no verdict field in it at all, which is how a green run hides a broken claim. The
+banner now reads `8 PASSED, 2 SKIPPED`, the exit code is non-zero, and the verdict says the
+run is incomplete and names the stages that measured nothing. The JSON carries the same
+verdict as the page, plus `passed` and `incomplete`, so nothing downstream has to infer
+success from a list of rows. Starting Tor with `scripts/tor_disposable.sh start` is what turns
+those two stages back into evidence.
 
 ### It found two things while being written
 

@@ -74,7 +74,9 @@ def imported_modules() -> dict[str, set[str]]:
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError as broken:
-            raise AssertionError(f"{path} does not parse, so its imports are unknown: {broken}")
+            raise AssertionError(
+                f"{path} does not parse, so its imports are unknown: {broken}"
+            ) from broken
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:

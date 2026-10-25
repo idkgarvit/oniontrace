@@ -29,7 +29,7 @@ from datetime import datetime, timedelta, timezone
 from farm.model import FarmTruth, Persona, deterministic_hex
 
 from .ahmia import AHMIA_HOST, search_url
-from .checkpoints import CheckpointStore  # noqa: F401  (re-exported for callers)
+from .checkpoints import CheckpointStore
 from .clock import FrozenClock
 from .ctlog import CTLOG_HOST, query_url
 from .telegram import PREVIEW_HOST, preview_url
@@ -127,7 +127,7 @@ class FixtureSet:
 
 
 def _history_pages(
-    channel: str, messages: list[dict[str, object]], *, page_size: int
+    messages: list[dict[str, object]], *, page_size: int
 ) -> list[tuple[int | None, list[dict[str, object]]]]:
     """Cut a channel's history into ``?before=`` pages, newest slice first.
 
@@ -209,7 +209,7 @@ def build_fixtures(
         channel = channel_for(persona)
         channels.append(channel)
         messages = persona_messages(persona)
-        history = _history_pages(channel, messages, page_size=page_size)
+        history = _history_pages(messages, page_size=page_size)
         pages_by_channel[channel] = len(history)
         for cursor, page in history:
             url = preview_url(channel, before=cursor)

@@ -309,10 +309,39 @@ COLOURS = {
 
 
 def _counts(results: list[Stage]) -> dict[str, int]:
-    counts = {status: 0 for status in ("PASS", "FAIL", "UNPROVEN", "SKIP")}
+    counts = dict.fromkeys(("PASS", "FAIL", "UNPROVEN", "SKIP"), 0)
     for stage in results:
         counts[stage.status] = counts.get(stage.status, 0) + 1
     return counts
+
+
+def _verdict(results: list[Stage]) -> tuple[str, int]:
+    """One sentence for the run, and the exit code that goes with it.
+
+    The contract at the top of this file says exit 0 means every stage passed, and a skipped
+    stage did not pass -- it did not run. Returning 0 for a run where the two live stages
+    never started is how a harness ends up certifying a check it never performed, which is
+    the exact failure this file exists to prevent. The earlier version counted only FAIL and
+    UNPROVEN, so a run with two SKIPs printed "all checks passed" and exited 0; it was caught
+    by reading the JSON and finding no verdict in it at all.
+    """
+    counts = _counts(results)
+    failed = [s for s in results if s.status in ("FAIL", "UNPROVEN")]
+    skipped = [s for s in results if s.status == "SKIP"]
+    if failed:
+        return (
+            " | ".join(f"{s.name}: {s.status} ({s.summary})" for s in failed),
+            1,
+        )
+    if skipped:
+        names = ", ".join(stage.name for stage in skipped)
+        return (
+            f"{counts['PASS']} of {len(results)} stages passed and {len(skipped)} were "
+            f"skipped ({names}), so the run is incomplete. A skipped stage measured nothing, "
+            "and this verdict does not call that a pass",
+            1,
+        )
+    return f"all {counts['PASS']} stages passed", 0
 
 
 def render(
@@ -353,6 +382,12 @@ def render(
     elif counts["UNPROVEN"]:
         banner = f"{counts['UNPROVEN']} STAGE(S) UNPROVEN"
         banner_bg, banner_fg = COLOURS["UNPROVEN"]
+    elif counts["SKIP"]:
+        # A run that skipped a stage has not passed: the stage measured nothing. Saying
+        # "ALL CHECKS PASSED" over an amber SKIP row is the banner disagreeing with its own
+        # report, and the banner is the part people read.
+        banner = f"{counts['PASS']} PASSED, {counts['SKIP']} SKIPPED"
+        banner_bg, banner_fg = COLOURS["SKIP"]
     else:
         banner = "ALL CHECKS PASSED"
         banner_bg, banner_fg = COLOURS["PASS"]
@@ -399,8 +434,25 @@ def render(
     destination.write_text(document, encoding="utf-8")
 
 
-def write_json(results: list[Stage], meta: dict[str, str], destination: Path) -> None:
+def write_json(
+    results: list[Stage], meta: dict[str, str], destination: Path, verdict: str
+) -> None:
+    """The machine-readable result, carrying the same verdict the page and stdout carry.
+
+    It shipped without one, so anything reading this file had to re-derive success from the
+    per-stage rows -- and the first consumer to try it, reading ``result["verdict"]``, got
+    None from a run that had just passed. A field that is always absent is worse than no
+    field, because it looks like a value.
+    """
+    counts = _counts(results)
     payload = {
+        "verdict": verdict,
+        # `passed` is true only when every stage ran and every stage passed, which is the
+        # same condition the exit code carries. Two spellings of one fact, deliberately:
+        # a reader should not have to infer the exit code from the statuses.
+        "passed": bool(results) and all(stage.status == "PASS" for stage in results),
+        "incomplete": any(stage.status == "SKIP" for stage in results),
+        "counts": counts,
         "meta": meta,
         "stages": [
             {
@@ -467,22 +519,13 @@ def main() -> int:
             render(results, meta, destination, refresh=refresh)
 
     render(results, meta, destination)
-    write_json(results, meta, json_path)
+    verdict, code = _verdict(results)
+    write_json(results, meta, json_path, verdict)
 
-    failed = [stage for stage in results if stage.status in ("FAIL", "UNPROVEN")]
     print(f"\nreport: {destination}")
     print(f"result: {json_path}")
-    print(
-        "verdict: "
-        + (
-            "all checks passed"
-            if not failed
-            else " | ".join(
-                f"{stage.name}: {stage.status} ({stage.summary})" for stage in failed
-            )
-        )
-    )
-    return 0 if not failed else 1
+    print(f"verdict: {verdict}")
+    return code
 
 
 if __name__ == "__main__":

@@ -91,12 +91,19 @@ def rank_services(
     return ranked
 
 
-def common_value_threshold(farm, services_per_cluster: int) -> int:
+def common_value_threshold(services_per_cluster: int) -> int:
     """A defensible default for `max_artifact_frequency`.
 
     A genuine cluster artefact appears on exactly the services in one cluster, so a
     value shared by *more* services than that cannot be cluster-specific. This is a
-    derivation from the farm's structure, not a number tuned on the results -- which
-    matters, because a threshold fitted on the test set would invalidate the score.
+    derivation from the farm's cluster size, not a number tuned on the results --
+    which matters, because a threshold fitted on the test set would invalidate the
+    score.
+
+    It used to take the farm as its first argument and never read it. The docstring
+    said "the farm's structure", so the parameter looked load-bearing while the
+    answer came entirely from the second argument; a caller could pass a farm with a
+    different shape and get the same number. The size is now the only input, which is
+    what the function always computed.
     """
     return max(2, services_per_cluster)

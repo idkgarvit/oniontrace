@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import tempfile
 from pathlib import Path
 
 from gates.acceptable_use import statement_text
@@ -34,9 +36,14 @@ DEMO_WARNING = (
     "role enforcement is real; identity is not -- this CLI takes --role at face value"
 )
 
+#: The gate root every command uses when the operator names none. ``--root`` defaults to
+#: ``None`` rather than to this string so ``demo`` can tell "you chose ./casework" from "you
+#: said nothing", which is the difference between writing into a case root and not.
+DEFAULT_ROOT = "./casework"
+
 
 def _gate(args: argparse.Namespace) -> CollectionGate:
-    return CollectionGate(Path(args.root))
+    return CollectionGate(Path(args.root or DEFAULT_ROOT))
 
 
 def _principal(args: argparse.Namespace) -> Principal:
@@ -179,10 +186,21 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
     A gate that has never refused anything has not been shown to work, so the demo starts
     with the refusals rather than ending with them.
+
+    It always runs against a gate root it created itself. Step 1 needs a gate whose
+    acceptable-use statement is unacknowledged and which holds no ``CASE-DEMO``; run against
+    ``./casework`` -- where real case data lives -- the second run refused at step 1 with
+    "case already exists", which is the wrong rule for the wrong reason, and exited 2. A
+    demo that only demonstrates anything on a machine that has never run it is not evidence.
+    ``--root`` names the parent for the disposable directory, never a root to write into.
     """
-    gate = _gate(args)
-    root = Path(args.root)
+    parent = Path(args.root) if args.root else Path(tempfile.gettempdir())
+    parent.mkdir(parents=True, exist_ok=True)
+    root = Path(tempfile.mkdtemp(prefix="oniontrace-demo-", dir=parent))
+    gate = CollectionGate(root)
     print(f"gate root: {root}")
+    print("  (fresh and disposable: the demo never runs against a root holding case data,")
+    print("   because its first step needs a gate that has not acknowledged the statement)")
     print(f"({DEMO_WARNING})")
     print()
 
@@ -281,6 +299,9 @@ def cmd_demo(args: argparse.Namespace) -> int:
     ]
     print(f"  {len(refusals)} refusal(s) on the trail for this case")
     print(f"  audit head: {verification.get('head_hash', '')[:16]}...")
+    # Removed before the verdict, so VERDICT stays the last line the harness reads.
+    shutil.rmtree(root, ignore_errors=True)
+    print(f"\n  disposable gate root removed: {root}")
     print(
         f"VERDICT: {len(refusals)} refusals recorded, audit trail verified over "
         f"{verification['entries_checked']} entries and anchored, "
@@ -307,7 +328,11 @@ def build_parser() -> argparse.ArgumentParser:
             "presentation rules. " + DEMO_WARNING
         ),
     )
-    parser.add_argument("--root", default="./casework", help="gate root directory")
+    parser.add_argument(
+        "--root",
+        default=None,
+        help=f"gate root directory (default: {DEFAULT_ROOT})",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("acceptable-use", help="print ACCEPTABLE_USE.md").set_defaults(

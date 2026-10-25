@@ -434,7 +434,7 @@ def run(
     )
 
     # --- 2. score every module --------------------------------------------------- #
-    frequency_cap = correlation.common_value_threshold(farm, cfg.services_per_cluster)
+    frequency_cap = correlation.common_value_threshold(cfg.services_per_cluster)
 
     careful = misconfig.evaluate(farm, misconfig.RULES)
     naive_rules = misconfig.evaluate(farm, misconfig.NAIVE_RULES)

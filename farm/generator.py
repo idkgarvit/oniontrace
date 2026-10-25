@@ -456,7 +456,6 @@ def _build_near_miss_decoys(
 
 
 def _inject_rule_hard_negatives(
-    cfg: FarmConfig,
     services: list[Service],
 ) -> list:
     """Plant a pattern-without-meaning fixture for each rule that has one.
@@ -635,7 +634,7 @@ def generate_farm(cfg: FarmConfig | None = None) -> FarmTruth:
     flaws = _inject_single_flaws(cfg, services)
     flaws += _inject_cluster_flaws(cfg, clusters, services)
     hard_negatives = _inject_stock_defaults(cfg, services)
-    hard_negatives += _inject_rule_hard_negatives(cfg, services)
+    hard_negatives += _inject_rule_hard_negatives(services)
 
     subjects, subject_service_ids = _build_subject_personas(rng, cfg, clusters, services)
     decoys, decoy_service_ids = _build_near_miss_decoys(rng, cfg, subjects, services)

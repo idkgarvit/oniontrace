@@ -25,7 +25,6 @@ from PIL import Image
 
 BG = (14, 19, 24)          # the deck background, #0e1318
 TOL = 12                   # how close to the background still counts as background
-MARGIN_IN = 0.85           # the deck's left margin
 SLIDE_W_IN = 13.333
 
 
@@ -45,7 +44,7 @@ def main(folder: str) -> int:
         raise SystemExit(f"error: no slide images in {folder}")
 
     problems: list[str] = []
-    lefts: list[float] = []
+    inked: list[tuple[Path, float]] = []
 
     print(f"{len(files)} slides\n")
     for f in files:
@@ -63,7 +62,7 @@ def main(folder: str) -> int:
         left_in = cols[0] / w * SLIDE_W_IN
         top_in = rows[0] / h * 7.5
         bottom_in = rows[-1] / h * 7.5
-        lefts.append(left_in)
+        inked.append((f, left_in))
 
         print(f"  {f.name}: ink {coverage:5.1f}%  left {left_in:.2f}in  "
               f"top {top_in:.2f}in  bottom {bottom_in:.2f}in")
@@ -77,10 +76,10 @@ def main(folder: str) -> int:
         if top_in < 0.15:
             problems.append(f"{f.name}: content starts at {top_in:.2f}in, touching the top edge")
 
-    if lefts:
+    if inked:
         # One slide out of line with the rest reads as sloppy even when nobody can say why.
-        ref = float(np.median(lefts))
-        for f, left in zip([f for f in files], lefts):
+        ref = float(np.median([left for _, left in inked]))
+        for f, left in inked:
             if abs(left - ref) > 0.12:
                 problems.append(
                     f"{f.name}: left edge at {left:.2f}in against {ref:.2f}in on the other "

@@ -941,7 +941,7 @@ class Collector:
         children = child_pages(index_result.text, base_url=directory_url, limit=cap)
         robots_text = (
             self._robots_text(
-                directory_url, scope=scope, case_id=case_id, summary=summary, budget=budget
+                directory_url, scope=scope, case_id=case_id, budget=budget
             )
             or ""
         )
@@ -1348,7 +1348,7 @@ class Collector:
 
     # -- path 3b: the public search engine, kept for the record ------------- #
 
-    def _robots_text(self, url: str, *, scope, case_id, summary, budget) -> str | None:
+    def _robots_text(self, url: str, *, scope, case_id, budget) -> str | None:
         """The host's robots file, fetched at most once per run.
 
         ``None`` means the host served nothing usable, and that is deliberately different
@@ -1384,10 +1384,10 @@ class Collector:
         self._robots_cache[host] = text
         return text
 
-    def _robots_rules(self, url: str, *, scope, case_id, summary, budget) -> str:
+    def _robots_rules(self, url: str, *, scope, case_id, budget) -> str:
         """A short quoting of the disallow rules, for a note explaining a refusal."""
         text = self._robots_text(
-            url, scope=scope, case_id=case_id, summary=summary, budget=budget
+            url, scope=scope, case_id=case_id, budget=budget
         )
         if text is None:
             return ""
@@ -1452,7 +1452,7 @@ class Collector:
                     "as a refusal, not as a ranking with no results"
                 )
                 rules = self._robots_rules(
-                    url, scope=scope, case_id=case_id, summary=summary, budget=budget
+                    url, scope=scope, case_id=case_id, budget=budget
                 )
                 if rules:
                     note += f". Its robots.txt says {rules}"
@@ -1549,7 +1549,7 @@ class Collector:
             parts = urlsplit(url)
             allowed, why = verdict(
                 self._robots_text(
-                    url, scope=scope, case_id=case_id, summary=summary, budget=budget
+                    url, scope=scope, case_id=case_id, budget=budget
                 ),
                 parts.path + (f"?{parts.query}" if parts.query else ""),
                 user_agent=PRODUCT_TOKEN,
@@ -1891,7 +1891,7 @@ class Collector:
             origins=tuple(summaries),
             snapshots_stored=stored,
             proposals=tuple(_unique_by_seed(collected)),
-            resume_note=self._resume_note(case_id, checkpoints),
+            resume_note=self._resume_note(checkpoints),
             budget_pages=budget.pages,
             budget_bytes=budget.bytes,
             page_ceiling=budget.politeness.max_pages_per_source,
@@ -1913,7 +1913,7 @@ class Collector:
         self.records.clear()
         return target
 
-    def _resume_note(self, case_id: str, checkpoints: CheckpointStore) -> str:
+    def _resume_note(self, checkpoints: CheckpointStore) -> str:
         """Where this case's cursors live and what happens to them, spelled out.
 
         The CLI prints this instead of the paths, which is the whole point: the

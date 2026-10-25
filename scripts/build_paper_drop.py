@@ -13,6 +13,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,22 +29,42 @@ def sh(*cmd: str) -> str:
         return f"(failed: {exc})"
 
 
-def results_for(seed: str) -> dict:
-    """Results for a seed, rebuilding them if the run is not on disk.
+#: Results already generated in this process, keyed by seed. Regenerating is cheap, but
+#: ``main`` asks for the same seed twice and there is no reason to pay for it twice.
+_CACHE: dict[str, dict] = {}
 
-    The first version read fixed paths under /tmp and failed once those were cleaned,
-    which made the drop impossible to rebuild after a reboot. A seed run takes a few
-    seconds, so regenerate rather than depend on a stale temp file.
+
+def results_for(seed: str) -> dict:
+    """Results for a seed, regenerating them rather than reading a stale file.
+
+    The first version read fixed paths under /tmp, so it silently reused whatever an
+    earlier, differently-configured run had left there -- and failed outright once /tmp
+    was cleaned. Both were the same mistake: trusting a file nobody in this process wrote.
+    Each seed is now run into a directory this process created and owns, so the numbers
+    always come from the code as it stands.
     """
+    if seed in _CACHE:
+        return _CACHE[seed]
+
     primary = ROOT / "out" / "eval-results.json"
     if seed == SEEDS[0] and primary.exists():
-        return json.loads(primary.read_text())
-    cached = Path(f"/tmp/seed_{seed}") / "eval-results.json"
-    if not cached.exists():
-        out = Path(f"/tmp/seed_{seed}")
-        subprocess.run([sys.executable, "-m", "eval", "run", "--seed", seed,
-                        "--out", str(out)], cwd=ROOT, capture_output=True, timeout=900)
-    return json.loads(cached.read_text())
+        _CACHE[seed] = json.loads(primary.read_text())
+        return _CACHE[seed]
+
+    with tempfile.TemporaryDirectory(prefix=f"oniontrace-seed-{seed}-") as tmp:
+        out = Path(tmp)
+        run = subprocess.run(
+            [sys.executable, "-m", "eval", "run", "--seed", seed, "--out", str(out)],
+            cwd=ROOT, capture_output=True, text=True, timeout=900,
+        )
+        produced = out / "eval-results.json"
+        if run.returncode != 0 or not produced.exists():
+            raise SystemExit(
+                f"eval run for seed {seed} failed (rc={run.returncode}):\n"
+                f"{run.stderr.strip() or '(no stderr)'}"
+            )
+        _CACHE[seed] = json.loads(produced.read_text())
+    return _CACHE[seed]
 
 
 def write(rel: str, text: str) -> None:

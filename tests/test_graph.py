@@ -91,18 +91,6 @@ def _edge(*args, **kwargs):
     return to_edges([prop])[0]
 
 
-def _build(arts, entities):
-    with GraphStore(":memory:", case_id="CASE-T") as store:
-        for art in arts:
-            store.add_artefact(art)
-        for e in entities:
-            store.add_entity(e, e)
-            store.attach_service(e, e.replace("ent-", ""))
-        for edge in to_edges(resolve(store.entities(), arts)):
-            store.add_edge(edge)
-        return store.export()
-
-
 # -- extraction --------------------------------------------------------- #
 def test_extraction_covers_every_service_and_artefact(farm, arts):
     assert len(arts) == 6 * 4

@@ -309,7 +309,7 @@ def test_careful_rules_find_the_injected_flaws_without_false_positives(farm):
 def test_frequency_filtering_improves_correlation_link_precision(farm):
     from eval.detectors import correlation
 
-    cap = correlation.common_value_threshold(farm, farm.config.services_per_cluster)
+    cap = correlation.common_value_threshold(farm.config.services_per_cluster)
     naive = _correlation_link_scoring(farm, None)
     filtered = _correlation_link_scoring(farm, cap)
     assert filtered["precision"] > naive["precision"]

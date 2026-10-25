@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -980,6 +981,76 @@ def test_the_cli_demo_runs_and_refuses_cleanly(tmp_path, capsys):
     assert "REFUSED  export as analyst" in output
     assert "audit verified: True" in output
     assert "case snapshots remaining: 0" in output
+
+
+def test_the_demo_runs_with_the_command_the_readme_prints(tmp_path, monkeypatch, capsys):
+    """`python -m gates demo`, with no --root, is what the README tells a reader to type.
+
+    It used to run against ./casework, where real case data lives. Step 1 needs a gate whose
+    statement is unacknowledged and which holds no CASE-DEMO, so on any machine that had run
+    the demo once (or opened a case) the command refused at step 1 with "case already
+    exists" -- the wrong rule, for the wrong reason -- and exited 2. The test above only ever
+    passed an explicit --root, which is exactly the flag whose absence was broken.
+    """
+
+    from gates.cli import main
+
+    monkeypatch.chdir(tmp_path)
+    assert main(["demo"]) == 0
+
+    output = capsys.readouterr().out
+    assert "[E2.6]" in output, "step 1 must be the acknowledgement rule, not a name clash"
+    assert "already exists" not in output
+    root_line = next(line for line in output.splitlines() if line.startswith("gate root:"))
+    printed = Path(root_line.split(":", 1)[1].strip())
+    # Absolute and outside the working directory. Checking only that "./casework" is absent
+    # afterwards proves nothing: the demo removes its root at the end, so the old behaviour
+    # cleaned up the case root it had just written into and the assertion passed anyway.
+    assert printed.is_absolute(), f"the demo used a relative root: {printed}"
+    assert printed.parent.resolve() != tmp_path.resolve(), (
+        f"the demo wrote into the working directory: {printed}"
+    )
+    assert not (tmp_path / "casework").exists(), (
+        "the demo created a directory inside the operator's case root"
+    )
+    assert output.strip().splitlines()[-1].startswith("VERDICT:"), (
+        "the verdict must stay the last line, because the harness reads it there"
+    )
+
+
+def test_the_demo_ignores_a_gate_root_that_already_has_state(tmp_path, capsys):
+    """An explicit --root names where the disposable directory goes, not what to write into."""
+
+    from gates.cli import main
+
+    root = tmp_path / "casework"
+    (root / "cases" / "CASE-DEMO").mkdir(parents=True)
+    # The real acknowledgement file, not a name that happens to look right: a test that
+    # seeds a file the gate never reads proves the demo left it alone without ever having
+    # put the demo in the state that used to break it.
+    ack = root / "acceptable-use-ack.json"
+    seeded = json.dumps(
+        {
+            "principal_id": "a.sharma",
+            "role": "case_owner",
+            "acknowledged_at": "2026-10-01T00:00:00+00:00",
+            "statement_digest": "0" * 16,
+        },
+        indent=2,
+    )
+    ack.write_text(seeded, encoding="utf-8")
+
+    assert main(["--root", str(root), "demo"]) == 0
+    output = capsys.readouterr().out
+
+    assert "[E2.6]" in output, (
+        "the demo ran against a root that was already acknowledged, so it demonstrated the "
+        "wrong rule"
+    )
+    assert list(root.glob("oniontrace-demo-*")) == [], (
+        "the disposable directory was left behind in the gate root"
+    )
+    assert ack.read_text(encoding="utf-8") == seeded, "the demo modified the operator's state"
 
 
 def test_the_cli_reports_a_refusal_as_a_nonzero_exit(tmp_path, capsys):

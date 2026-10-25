@@ -231,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             urlopen(url, timeout=10).read()
         except URLError as exc:
-            raise SystemExit(f"error: the console would not serve {url}: {exc}")
+            raise SystemExit(f"error: the console would not serve {url}: {exc}") from None
 
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)

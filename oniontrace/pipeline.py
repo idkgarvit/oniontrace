@@ -197,7 +197,7 @@ def stage_correlate(farm) -> dict[str, Any]:
     from eval.detectors import correlation
 
     cap = correlation.common_value_threshold(
-        farm, services_per_cluster=len(farm.services) // max(len(farm.clusters), 1)
+        services_per_cluster=len(farm.services) // max(len(farm.clusters), 1)
     )
 
     # Precision@k here means: of the k services proposed, how many really are cluster
