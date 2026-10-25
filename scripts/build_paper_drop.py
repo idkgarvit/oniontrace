@@ -55,7 +55,7 @@ def results_for(seed: str) -> dict:
         out = Path(tmp)
         run = subprocess.run(
             [sys.executable, "-m", "eval", "run", "--seed", seed, "--out", str(out)],
-            cwd=ROOT, capture_output=True, text=True, timeout=900,
+            cwd=ROOT, capture_output=True, text=True, timeout=900, check=False,
         )
         produced = out / "eval-results.json"
         if run.returncode != 0 or not produced.exists():
@@ -198,7 +198,8 @@ def main() -> int:
     multis.append("| seed | farm fingerprint | naive precision | thresholded precision | frequency-filtered precision | false-merge |")
     multis.append("|---|---|---|---|---|---|")
     for s in SEEDS:
-        dd = results_for(s); cc = dd["modules"]["M2_correlation"]
+        dd = results_for(s)
+        cc = dd["modules"]["M2_correlation"]
         multis.append("| {} | {} | {:.3f} | {:.3f} | {:.3f} | {:.3f} |".format(
             s, dd["meta"].get("farm_fingerprint", "?")[:12],
             cc["naive"]["link_scoring"]["precision"],

@@ -46,7 +46,7 @@ def _fake_run(payload: dict | None, returncode: int = 0):
 
     calls: list[list[str]] = []
 
-    def run(cmd, cwd=None, capture_output=True, text=True, timeout=None):
+    def run(cmd, cwd=None, capture_output=True, text=True, timeout=None, check=False):
         calls.append(list(cmd))
         out = Path(cmd[cmd.index("--out") + 1])
         if payload is not None:
