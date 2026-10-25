@@ -902,7 +902,7 @@ tests/
                   split that never lets a cluster be learned on one half and scored on the
                   other -- including the wildcard rule that keeps one holder from becoming
                   two services
-  test_build_ieee.py 13 tests; the IEEE build holds its contents -- tables wrap inside the
+  test_build_ieee.py 17 tests; the IEEE build holds its contents -- tables wrap inside the
                   column, a 56-character address breaks without gaining a character, and
                   inline code is not escaped twice
   test_index.py  26 tests; extraction, whole-word matching, ranking, and a guard that the

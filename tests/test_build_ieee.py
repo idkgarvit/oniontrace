@@ -94,3 +94,48 @@ class TestOnionAddresses:
     def test_escaping_is_idempotent_in_shape(self, text):
         once = build.esc(text)
         assert build.esc(once) == once or r"\allowbreak" in once
+
+
+class TestWhereTheSourceComesFrom:
+    """The build has to run on a machine other than the one the paper was written on.
+
+    It used to read a hardcoded home directory, which is a path that works for exactly one
+    person. The resolution order is now: the explicit variable, a copy vendored into the
+    repository, the retired workspace path -- and a variable that points nowhere is an
+    error rather than a silent fallback.
+    """
+
+    def test_the_env_var_wins(self, tmp_path, monkeypatch):
+        chosen = tmp_path / "custom.md"
+        chosen.write_text("# chosen\n", encoding="utf-8")
+        monkeypatch.setenv("ONIONTRACE_PAPER_MD", str(chosen))
+        assert build.paper_source() == chosen
+
+    def test_a_bad_env_var_is_an_error_not_a_silent_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(build, "ROOT", tmp_path)
+        monkeypatch.setattr(build, "LEGACY_SRC", tmp_path / "legacy.md")
+        monkeypatch.setenv("ONIONTRACE_PAPER_MD", str(tmp_path / "missing.md"))
+
+        with pytest.raises(FileNotFoundError, match="ONIONTRACE_PAPER_MD"):
+            build.paper_source()
+
+    def test_a_repo_copy_beats_the_retired_workspace_path(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("ONIONTRACE_PAPER_MD", raising=False)
+        vendored = tmp_path / "paper.md"
+        vendored.write_text("# vendored\n", encoding="utf-8")
+        legacy = tmp_path / "legacy.md"
+        legacy.write_text("# legacy\n", encoding="utf-8")
+        monkeypatch.setattr(build, "ROOT", tmp_path)
+        monkeypatch.setattr(build, "LEGACY_SRC", legacy)
+
+        assert build.paper_source() == vendored
+
+    def test_no_source_anywhere_is_none_and_the_build_says_so(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("ONIONTRACE_PAPER_MD", raising=False)
+        monkeypatch.setattr(build, "ROOT", tmp_path)
+        monkeypatch.setattr(build, "LEGACY_SRC", tmp_path / "legacy.md")
+
+        assert build.paper_source() is None
+        # A build with nothing to read fails loudly instead of writing an empty paper.
+        monkeypatch.setattr(build, "paper_source", lambda: None)
+        assert build.main() == 1
