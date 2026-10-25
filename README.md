@@ -709,6 +709,16 @@ Pointed at a front page there is no path prefix to prefer, and a sitemap lists a
 order it published, so the walk orders what the map returns by path depth: sections are
 shallower than articles, and `/directory/` must not queue behind three hundred headlines.
 
+The permit is a deadline, not a receipt. A host that asks for ten seconds between pages makes
+a fifteen-minute permit two dozen pages long, and the gate refuses an ingest presented after it
+-- so without a guard the walk succeeds, the store is refused, and every page read is lost
+after the host has already been paid the politeness. The collector checks the deadline before
+each request, holding the transport's own timeout in hand so a page cannot start that would
+finish after it, and stops with what it has and a per-page cursor. The run then stores what it
+read and the next one continues from there. Measured on `securedrop.org`: thirty-one pages is
+sixteen minutes at a ten-second delay, which is why the first live attempt to prove this path
+stored nothing and why the guard exists.
+
 That means the operator can point the walk at `https://securedrop.org/` and let the site name
 its own pages, which is the difference between a crawler that is handed its answer and one
 that asks the publisher where to look.
@@ -898,9 +908,10 @@ tests/
   test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
                   opened, every hit citing the page behind it, declared seeds never offered
                   back, and a query asked again only when the index has actually grown
-  test_directory_walk.py 25 tests; a directory walk that stays on its host, keeps the cap,
+  test_directory_walk.py 28 tests; a directory walk that stays on its host, keeps the cap,
                   waits the delay robots.txt asks for, resumes per page when the budget
-                  stops it, and never mistakes a facet link for an entry
+                  stops it, stops before its permit expires rather than losing the pages,
+                  and never mistakes a facet link for an entry
 ```
 
 ## Base rates are measured, not chosen

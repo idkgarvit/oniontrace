@@ -51,6 +51,7 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Collection, Mapping, Sequence
 from urllib.parse import quote, urljoin, urlsplit
@@ -407,18 +408,37 @@ def checkpoint_source(origin: str, identifier: str) -> str:
     return f"{origin}:{safe}"
 
 
+def _permit_expiry(permit) -> datetime:
+    """The moment a permit stops being valid, as a comparable datetime.
+
+    The gate writes the stamp as ISO text because that is what the audit record carries. A
+    naive stamp cannot be compared to the collector's clock, and guessing a timezone at the
+    comparison is how a deadline silently moves by hours, so it is pinned to UTC here.
+    """
+    stamp = datetime.fromisoformat(permit.expires_at)
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+
+
 def allowed_hosts(scope: CollectionScope) -> frozenset[str]:
     """Every host a request may name, given the declared scope.
 
-    Two hosts are fixed infrastructure -- a certificate query goes to crt.sh, a channel
-    walk to t.me. Naming them here rather than inferring them from the queries is
-    deliberate: the queries are not hostnames, so a query string that happened to contain
-    a host would have no way to widen the set.
+    Three hosts are fixed infrastructure -- a keyword query goes to the public index, a
+    certificate query to ``crt.sh``, a channel walk to ``t.me``. Naming them here rather
+    than inferring them from the queries is deliberate: the queries are not hostnames, so a
+    query string that happened to contain a host would have no way to widen the set.
 
-    ``ahmia.fi`` is deliberately absent. It disallows automated search and enforces that
-    with a redirect, so the public-index path ships with no provider rather than with a
-    host that will not answer. Clearnet pages a run reads for a self-published onion are
-    its own declared scope and join the set below.
+    This set answers "may this run ask", which is a different question from "will the
+    source co-operate". ``ahmia.fi`` stays in it so that ``--search-provider ahmia`` can
+    reach the host and *record its 302 as a refusal*; removing it would turn that recorded
+    refusal into an out-of-scope exception, which is a worse answer to the same question.
+    ``crt.sh`` stays for the same kind of reason: the fixture transport serves it, so the
+    `certificate_log` path is exercised end to end, while the live transport refuses it
+    because ``CLEARNET_ALLOWANCE`` no longer carries it. Live certificate reading goes
+    through ``collect/ctlog_direct.py``, which verifies signed tree heads instead of
+    querying a database.
+
+    Clearnet pages a run reads for a self-published onion, and directories it walks, are
+    the run's own declared scope and join the set below.
 
     Everything else must be an address the case declared. This is the collector's half of
     the division of labour described at the top of the module: the gate decides whether the
@@ -468,6 +488,11 @@ class Collector:
         #: A human can accept a source whose robots policy is narrower than its published
         #: interface. The decision is recorded on every run it affects, never assumed.
         self.accept_source_policy = bool(accept_source_policy)
+        #: When the permit the current path is running under stops being valid. The gate
+        #: mints a fifteen-minute permit and refuses the ingest after it, so a path that
+        #: outlives its permit loses every page it read: the refusal arrives after the
+        #: walking. Knowing the moment here turns that into a stop with the pages kept.
+        self._permit_expires_at: datetime | None = None
 
     # -- plumbing ---------------------------------------------------------- #
 
@@ -475,9 +500,23 @@ class Collector:
     def sleeper(self) -> Sleeper:
         return self._sleeper
 
-    @property
-    def transport_name(self) -> str:
-        return getattr(self._transport, "name", "unknown")
+    def _fetch_reserve_seconds(self) -> float:
+        """How long one request may still take, which is what has to be kept in hand.
+
+        The permit gates *ingest*, but a page that starts one second before it expires can
+        finish after it and take the whole path down with it, so the deadline is measured
+        against the moment a request would end, not the moment it starts. The live
+        transport knows its own timeout; a fixture has none and the default stands in.
+        """
+        settings = getattr(self._transport, "settings", None)
+        return float(getattr(settings, "timeout_seconds", 30.0))
+
+    def _permit_closing(self, *, reserve: float | None = None) -> bool:
+        """True when there is no longer time to fetch a page and still ingest it."""
+        if self._permit_expires_at is None:
+            return False
+        margin = self._fetch_reserve_seconds() if reserve is None else reserve
+        return self._clock.now() + timedelta(seconds=margin) >= self._permit_expires_at
 
     def _checkpoints(self, case_id: str) -> CheckpointStore:
         """Case-scoped, and inside the purge's reach -- see ``collect/checkpoints.py``."""
@@ -544,6 +583,18 @@ class Collector:
                 "scope. The target list is what the case authorised; a request outside it "
                 "would be scope creep carried by a parser bug."
             )
+        if self._permit_closing():
+            # A permit gates the ingest, not the request, so a page started a second before
+            # it expires is fetched and then refused -- and the refusal takes every page the
+            # path had already read with it. The deadline is what converts that into "stop
+            # asking, keep what you have".
+            stamp = self._permit_expires_at.isoformat(timespec="seconds")
+            summary.notes.append(
+                f"the collection permit expires at {stamp}; {url} was not requested, "
+                "because a page fetched past that moment would be refused at ingest and "
+                "take the pages already read with it"
+            )
+            return None
         if budget.exhausted:
             # Named rather than assumed: "the page budget was reached" printed for a run
             # stopped by bytes would send a reader looking in the wrong place.
@@ -938,7 +989,7 @@ class Collector:
 
         declared = set(scope.onion_addresses)
         carried = 0
-        for child in children:
+        for position, child in enumerate(children):
             child_source = checkpoint_source(ORIGIN_ONION_LOCATION, child)
             child_prior = checkpoints.load(case_id, child_source)
             if child_prior and child_prior.completed:
@@ -953,6 +1004,18 @@ class Collector:
                     "the page budget ran out mid-walk; the pages read are remembered "
                     "individually, so a later run continues from here instead of starting "
                     "over, and the directory is still not marked as done"
+                )
+                return
+            # Checked with the delay this page would cost included: waiting ten seconds only
+            # to discover there is no time left to fetch is the walk spending the host's
+            # patience for nothing.
+            if self._permit_closing(reserve=self._fetch_reserve_seconds() + (delay or 0.0)):
+                stamp = self._permit_expires_at.isoformat(timespec="seconds")
+                summary.notes.append(
+                    f"{directory_url}: the collection permit expires at {stamp}, so the "
+                    f"walk stopped with {len(children) - position} page(s) unread. Each "
+                    "page already read is remembered, and a later run continues from here "
+                    "instead of starting over"
                 )
                 return
             if delay:
@@ -1791,7 +1854,16 @@ class Collector:
                 )
                 summaries.append(summary)
                 continue
-            outcome = paths[origin](case_id, scope, checkpoints, seen, budget)
+            # The deadline is per path, and a path is allowed to raise: a scope violation
+            # propagates by design, and a configuration error should. Clearing the stamp in
+            # a ``finally`` is what keeps that from leaking into the next path of the same
+            # collector, which would then refuse to request anything against a deadline
+            # belonging to a permit that is already spent.
+            self._permit_expires_at = _permit_expiry(permit)
+            try:
+                outcome = paths[origin](case_id, scope, checkpoints, seen, budget)
+            finally:
+                self._permit_expires_at = None
             summary = outcome.summary
             self.gate.ingest(permit, principal, outcome.payloads)
             summary.stored = len(outcome.payloads)

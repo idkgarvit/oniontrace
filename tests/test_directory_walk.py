@@ -12,6 +12,7 @@ import pytest
 
 from collect.clock import FrozenClock
 from collect.collector import (
+    ORIGIN_AHMIA,
     ORIGIN_ONION_LOCATION,
     CollectionPolicy,
     CollectionScope,
@@ -25,6 +26,7 @@ from collect.directory import (
     sitemap_index_children,
     sitemap_urls,
 )
+from collect.errors import CollectionError
 from collect.schedule import Politeness
 from collect.transport import FixtureTransport, Page
 from gates.gate import CollectionGate
@@ -132,7 +134,6 @@ def test_addresses_come_back_once_each_in_the_order_they_appear():
 
 
 def test_a_link_to_another_host_is_not_followed():
-    html = '<a href="https://elsewhere.invalid/page">x</a>'
     assert same_host_pages(["/local", "https://elsewhere.invalid/page"], base_url=BASE) == (
         f"https://{HOST}/local",
     )
@@ -179,9 +180,9 @@ def directory_pages() -> dict[str, Page]:
         BASE: Page(
             body=(
                 "<html><body><h1>Directory</h1>"
-                f'<a href="/directory/one/">One</a>'
-                f'<a href="/directory/two/">Two</a>'
-                f'<a href="https://elsewhere.invalid/three">Off-host</a>'
+                '<a href="/directory/one/">One</a>'
+                '<a href="/directory/two/">Two</a>'
+                '<a href="https://elsewhere.invalid/three">Off-host</a>'
                 "</body></html>"
             )
         ),
@@ -384,7 +385,7 @@ def test_a_sparse_front_page_is_completed_from_the_sitemap_the_host_declared(gat
     """
     root = f"https://{HOST}/"
     pages = {
-        root: Page(body=f'<html><body><a href="/about/">About</a></body></html>'),
+        root: Page(body='<html><body><a href="/about/">About</a></body></html>'),
         f"https://{HOST}/robots.txt": Page(
             body=f"User-agent: *\nDisallow:\nSitemap: {root}sitemap.xml\n"
         ),
@@ -512,7 +513,7 @@ def test_a_declared_sitemap_that_errors_does_not_cost_the_walk_its_pages(gate, c
     """An error page is not a map with nothing in it, and it must not end the walk."""
     root = f"https://{HOST}/"
     pages = {
-        root: Page(body=f'<html><body><a href="/directory/one/">One</a></body></html>'),
+        root: Page(body='<html><body><a href="/directory/one/">One</a></body></html>'),
         f"https://{HOST}/robots.txt": Page(
             body=f"User-agent: *\nDisallow:\nSitemap: {root}gone.xml\n"
         ),
@@ -561,7 +562,7 @@ def test_the_map_is_not_read_to_repeat_what_the_page_already_named(gate, clock):
     """
     root = f"https://{HOST}/"
     pages = {
-        root: Page(body=f'<html><body><a href="/about/">About</a></body></html>'),
+        root: Page(body='<html><body><a href="/about/">About</a></body></html>'),
         f"https://{HOST}/robots.txt": Page(
             body=f"User-agent: *\nDisallow:\nSitemap: {root}sitemap.xml\n"
         ),
@@ -600,7 +601,7 @@ def test_a_walk_that_reads_the_map_still_finishes_inside_its_budget(gate, clock)
     """
     root = f"https://{HOST}/"
     pages = {
-        root: Page(body=f'<html><body><a href="/about/">About</a></body></html>'),
+        root: Page(body='<html><body><a href="/about/">About</a></body></html>'),
         f"https://{HOST}/robots.txt": Page(
             body=f"User-agent: *\nDisallow:\nSitemap: {root}sitemap.xml\n"
         ),
@@ -644,3 +645,116 @@ def test_a_walk_that_reads_the_map_still_finishes_inside_its_budget(gate, clock)
     assert {p.seed for p in report.proposals} == {FIRST, SECOND, THIRD}
     summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
     assert not any("budget ran out" in note for note in summary.notes), summary.notes
+
+
+def test_a_walk_stops_before_its_permit_expires_rather_than_losing_everything(gate, clock):
+    """The gate refuses an ingest made after the permit expires, and it refuses it late.
+
+    A fifteen-minute permit and a host that asks for ten seconds between pages is a walk
+    that cannot finish thirty pages in time. Without a deadline the walking succeeds, the
+    ingest is then refused, and every page read is lost -- the run paid the host's
+    politeness and stored nothing. Stopping first keeps what was read and leaves a cursor.
+    """
+    pages = {
+        BASE: Page(
+            body="<html><body>"
+            '<a href="/directory/one/">One</a>'
+            '<a href="/directory/two/">Two</a>'
+            '<a href="/directory/three/">Three</a>'
+            '<a href="/directory/four/">Four</a>'
+            "</body></html>"
+        ),
+        f"{BASE}one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+        f"{BASE}two/": Page(body=f'<a href="http://{SECOND}/">two</a>'),
+        f"{BASE}three/": Page(body=f'<a href="http://{THIRD}/">three</a>'),
+        f"{BASE}four/": Page(body='<p>nothing here</p>'),
+        # Four minutes and ten seconds between pages: four pages do not fit in the
+        # fifteen minutes the gate allows, which is the whole point.
+        f"https://{HOST}/robots.txt": Page(body="User-agent: *\nDisallow:\nCrawl-delay: 250\n"),
+    }
+    transport = make_transport(clock, pages)
+
+    class SlowHost:
+        def sleep(self, seconds: float) -> float:
+            clock.advance(seconds=seconds)
+            return seconds
+
+    collector = collector_for(gate, transport, clock, waiter=SlowHost())
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(BASE,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    # The run stored what it read instead of raising a refusal at the end.
+    stored = [
+        s for s in gate.collected_snapshots(OWNER, CASE) if s["origin"] == ORIGIN_ONION_LOCATION
+    ]
+    assert len(stored) == 3
+    assert [p.seed for p in report.proposals] == [FIRST, SECOND, THIRD]
+    # The page it could not reach was not requested at all, and it says why.
+    assert f"{BASE}four/" not in transport.requested
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    assert any("permit expires at" in note for note in summary.notes), summary.notes
+    assert any("1 page(s) unread" in note for note in summary.notes), summary.notes
+
+
+def test_a_fetch_that_would_cross_the_permit_deadline_is_not_attempted(gate, clock):
+    """The deadline holds for every request, including a map read from inside the walk."""
+    root = f"https://{HOST}/"
+    pages = {
+        # A page with no links, so the map is the only request the walk has to make.
+        root: Page(body="<html><body><p>nothing here</p></body></html>"),
+        # Fourteen minutes and forty seconds: the wait the host asks for is itself long
+        # enough to eat a fifteen-minute permit, so the map cannot be fetched inside it.
+        f"https://{HOST}/robots.txt": Page(
+            body=f"User-agent: *\nDisallow:\nCrawl-delay: 880\nSitemap: {root}sitemap.xml\n"
+        ),
+        f"{root}sitemap.xml": Page(
+            body=f"<urlset><url><loc>{root}one/</loc></url></urlset>"
+        ),
+        f"{root}one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+    }
+    transport = make_transport(clock, pages)
+
+    class SlowHost:
+        def sleep(self, seconds: float) -> float:
+            clock.advance(seconds=seconds)
+            return seconds
+
+    collector = collector_for(gate, transport, clock, waiter=SlowHost())
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(root,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert f"{root}sitemap.xml" not in transport.requested
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    assert any("was not requested" in note for note in summary.notes), summary.notes
+
+
+def test_a_path_that_raises_does_not_leave_its_permit_deadline_behind(gate, clock):
+    """The deadline belongs to one path's permit, so it must not outlive that path.
+
+    ``collect`` stamps the expiry before walking and clears it in a ``finally``. A path
+    is allowed to raise -- a scope violation propagates by design, and a configuration
+    error should -- so without that reset the stamp would stay set on a collector the
+    caller may reuse, and later requests would be refused against a permit already spent.
+    """
+    pages = {BASE: Page(body=f'<a href="http://{FIRST}/">one</a>')}
+    collector = collector_for(gate, make_transport(clock, pages), clock)
+
+    with pytest.raises(CollectionError, match="unknown search provider"):
+        collector.collect(
+            case_id=CASE,
+            principal=OWNER,
+            scope=CollectionScope(
+                search_queries=("market",), search_provider="no-such-index"
+            ),
+            origins=(ORIGIN_AHMIA,),
+        )
+
+    assert collector._permit_expires_at is None
