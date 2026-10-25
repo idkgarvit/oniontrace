@@ -839,7 +839,6 @@ def _services_in_clusters(results, cluster_ids):
 
 def test_a_held_out_pool_contains_no_dev_service(farm):
     """The defect this guards: a test query answered by a dev service is not held out."""
-    from eval.harness import correlation_experiment
     from eval.splits import cluster_split
 
     split = cluster_split(farm)
