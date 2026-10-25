@@ -52,17 +52,22 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Mapping, Sequence
-from urllib.parse import quote, urlsplit
+from typing import Collection, Mapping, Sequence
+from urllib.parse import quote, urljoin, urlsplit
 
 from gates.errors import GateRefused
 from gates.roles import Principal
 
 from .ahmia import AHMIA_HOST, extract_addresses, parse_results, search_url
-from .directory import DEFAULT_PAGE_CAP, child_pages, onions_in
+from .directory import (
+    DEFAULT_PAGE_CAP,
+    child_pages,
+    onions_in,
+    sitemap_index_children,
+)
 from .index import DEFAULT_INDEX_FILENAME, OnionIndex
 from .onionlocation import advertisements
-from .robots import PRODUCT_TOKEN, crawl_delay, rules_for, summarise, verdict
+from .robots import PRODUCT_TOKEN, crawl_delay, rules_for, sitemaps, summarise, verdict
 from .checkpoints import Checkpoint, CheckpointStore, ProposalStore
 from .clock import Clock
 from .ctlog import CTLOG_HOST, associations, parse_entries, query_url
@@ -883,20 +888,54 @@ class Collector:
         remaining = max(0, budget.politeness.max_pages_per_source - budget.pages)
         cap = min(DEFAULT_PAGE_CAP, remaining)
         children = child_pages(index_result.text, base_url=directory_url, limit=cap)
-        summary.notes.append(
-            f"{directory_url}: {len(children)} page(s) under it, cap {cap} for this run"
-        )
-        delay = crawl_delay(
+        robots_text = (
             self._robots_text(
                 directory_url, scope=scope, case_id=case_id, summary=summary, budget=budget
             )
             or ""
         )
+        delay = crawl_delay(robots_text)
         if delay:
             summary.notes.append(
                 f"{directory_url}: its robots.txt asks for {delay:g}s between requests, and "
                 "this walk waits that long rather than the run's own setting"
             )
+        # A front page links to its navigation, not to its entries. Ask the host's own map,
+        # which is the host saying which pages it wants found. The room passed down is what
+        # the page left unclaimed: at zero the list is already as long as this walk may
+        # carry, and reading the map would spend a page to say nothing new.
+        extra = self._sitemap_pages(
+            directory_url,
+            robots_text=robots_text,
+            scope=scope,
+            case_id=case_id,
+            summary=summary,
+            budget=budget,
+            limit=cap - len(children),
+            delay=delay,
+            exclude=children,
+        )
+        if extra:
+            # The map was fetched, and a map is a page. What it may fill is the room left
+            # *after* that fetch, not the room this walk had before it -- otherwise the
+            # walk plans one page more than it may spend and always drops its last page.
+            left = max(0, budget.politeness.max_pages_per_source - budget.pages)
+            room = max(0, left - len(children))
+            children = children + extra[:room]
+        # Reading a sitemap is a fetch like any other, so a walk that spent pages on the map
+        # stops sooner. The list is not trimmed to the remaining budget here: pages already
+        # read are skipped without spending any, so a trim would drop the very entries the
+        # next run needs to reach.
+        summary.notes.append(
+            f"{directory_url}: {len(children)} page(s) under it, cap {cap} for this run"
+        )
+        if not children and budget.exhausted:
+            summary.notes.append(
+                "the page budget was spent before any page under this directory could be "
+                "read, so the directory is not marked as done and a later run will walk it"
+            )
+            return
+
         declared = set(scope.onion_addresses)
         carried = 0
         for child in children:
@@ -992,6 +1031,111 @@ class Collector:
                 completed=True,
             )
         )
+
+    #: How many sitemaps one walk may read, counting an index and the maps it names. A
+    #: declared sitemap is a list of everything a site ever published; two is enough to find
+    #: the entries and cheap enough that a run still spends most of its budget on pages.
+    SITEMAP_FETCH_LIMIT = 2
+
+    def _sitemap_pages(
+        self,
+        directory_url: str,
+        *,
+        robots_text: str,
+        scope: CollectionScope,
+        case_id: str,
+        summary: OriginSummary,
+        budget: Budget,
+        limit: int,
+        delay: float | None = None,
+        exclude: Collection[str] = (),
+    ) -> tuple[str, ...]:
+        """Pages the host's own sitemap names, when it declares one in robots.txt.
+
+        This is what makes the walk startable from a front page. ``--directory`` names the
+        host; the host's robots file names its map; the map names the pages. Nothing here
+        guesses a URL: a site with no ``Sitemap:`` line yields nothing and the walk stays
+        exactly as it was.
+
+        Bounded on purpose. A sitemap is the largest list a site has, so it is read at most
+        ``SITEMAP_FETCH_LIMIT`` times, follows a sitemap index one level only, and returns
+        at most ``limit`` pages, which is what the run has left to spend.
+
+        ``exclude`` is what the page already named. A depth-ordered map offers the
+        shallowest pages first, which are usually exactly the ones a front page links to,
+        so without this the map would be read to be told what the walk already had.
+        """
+        if limit <= 0:
+            # The single gate for "no room left". Every other bound in here caps how much
+            # comes back; this one stops the request being made at all, which is the whole
+            # economy being claimed.
+            return ()
+        declared = sitemaps(robots_text)
+        if not declared:
+            return ()
+        known = set(exclude)
+        found: list[str] = []
+        queue = [urljoin(directory_url, value) for value in declared[:1]]
+        fetches = 0
+        while queue and fetches < self.SITEMAP_FETCH_LIMIT:
+            if budget.exhausted:
+                break
+            sitemap_url = queue.pop(0)
+            host = (urlsplit(sitemap_url).hostname or "").lower()
+            if host != (urlsplit(directory_url).hostname or "").lower():
+                # A robots file cannot widen the walk's scope; only the run can do that.
+                summary.notes.append(
+                    f"robots.txt declares a sitemap on {host!r}, which is not this walk's "
+                    "host, so it was not read"
+                )
+                continue
+            # A sitemap is a page on the same host, so the delay the host asked for applies
+            # to it identically. Skipping it here would make the walk's politeness a property
+            # of which URL it happened to request next.
+            if delay:
+                summary.seconds_waited += self._sleeper.sleep(delay)
+            result = self._fetch(
+                sitemap_url,
+                scope=scope,
+                case_id=case_id,
+                seed_label=f"sitemap:{sitemap_url}",
+                summary=summary,
+                budget=budget,
+            )
+            if result is None:
+                continue
+            if result.status >= 400:
+                summary.notes.append(
+                    f"{sitemap_url}: the declared sitemap answered {result.status}; the walk "
+                    "continued with the links on the page alone"
+                )
+                continue
+            fetches += 1
+            nested = sitemap_index_children(result.text)
+            if nested:
+                followed = nested[: self.SITEMAP_FETCH_LIMIT]
+                summary.notes.append(
+                    f"{sitemap_url}: a sitemap index naming {len(nested)} map(s); following "
+                    f"{len(followed)} of them"
+                )
+                queue.extend(urljoin(sitemap_url, value) for value in followed)
+                continue
+            # Ask for the room wanted plus the pages already known, because the known ones
+            # sit at the front of a depth-ordered map and would otherwise spend the room.
+            pages = child_pages(
+                result.text, base_url=directory_url, limit=limit + len(known)
+            )
+            fresh = [page for page in pages if page not in known]
+            for page in fresh:
+                known.add(page)
+                found.append(page)
+                if len(found) >= limit:
+                    break
+            summary.notes.append(
+                f"{sitemap_url}: the host declared this sitemap in robots.txt and it names "
+                f"{len(found)} new page(s) for this walk"
+            )
+        return tuple(found[:limit])
 
     # -- path 3: keyword discovery ------------------------------------------ #
 

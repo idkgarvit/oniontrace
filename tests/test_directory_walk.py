@@ -22,6 +22,7 @@ from collect.directory import (
     looks_like_sitemap,
     onions_in,
     same_host_pages,
+    sitemap_index_children,
     sitemap_urls,
 )
 from collect.schedule import Politeness
@@ -101,6 +102,15 @@ def test_a_sitemap_is_recognised_by_what_it_says_not_by_its_url():
     assert looks_like_sitemap('<?xml version="1.0"?><urlset>')
     assert looks_like_sitemap("<sitemapindex><sitemap><loc>x</loc></sitemap></sitemapindex>")
     assert not looks_like_sitemap("<!doctype html><html><body>hi</body></html>")
+
+
+def test_an_index_of_sitemaps_is_not_read_as_a_list_of_pages():
+    """A big site splits its map; the index names maps, and each one is followed once."""
+    index = "<sitemapindex><sitemap><loc>https://x.invalid/news.xml</loc></sitemap></sitemapindex>"
+    assert sitemap_index_children(index) == ("https://x.invalid/news.xml",)
+    urlset = "<urlset><url><loc>https://x.invalid/a</loc></url></urlset>"
+    assert sitemap_index_children(urlset) == ()
+    assert sitemap_index_children("") == ()
 
 
 def test_a_sitemap_yields_its_urls_with_entities_resolved():
@@ -344,3 +354,293 @@ def test_an_address_already_declared_is_evidence_but_not_a_proposal(gate, clock)
     assert report.proposals == ()
     stored = [s for s in gate.collected_snapshots(OWNER, CASE) if s["origin"] == ORIGIN_ONION_LOCATION]
     assert stored and FIRST in stored[0]["content"]["onions"]
+
+
+# --------------------------------------------------------------------------- #
+# The map the host declares, and starting from a front page
+# --------------------------------------------------------------------------- #
+
+
+def test_a_hosts_declared_sitemap_is_parsed_out_of_its_robots_file():
+    from collect.robots import sitemaps
+
+    text = (
+        "User-agent: *\nDisallow:\n\n"
+        "Sitemap: https://x.invalid/sitemap.xml\n"
+        "sitemap: https://x.invalid/news.xml\n"
+        "Sitemap: https://x.invalid/sitemap.xml\n"
+    )
+    assert sitemaps(text) == ("https://x.invalid/sitemap.xml", "https://x.invalid/news.xml")
+    assert sitemaps("User-agent: *\nDisallow: /search/\n") == ()
+    assert sitemaps("") == ()
+
+
+def test_a_sparse_front_page_is_completed_from_the_sitemap_the_host_declared(gate, clock):
+    """The operator names the host; the host names its pages. That is the whole point.
+
+    A front page links to its navigation. The entries live on pages the site lists in the
+    sitemap it declares in robots.txt, and a walk that only followed links would report a
+    host with fifty entries as a host with none.
+    """
+    root = f"https://{HOST}/"
+    pages = {
+        root: Page(body=f'<html><body><a href="/about/">About</a></body></html>'),
+        f"https://{HOST}/robots.txt": Page(
+            body=f"User-agent: *\nDisallow:\nSitemap: {root}sitemap.xml\n"
+        ),
+        f"{root}sitemap.xml": Page(
+            body=(
+                '<?xml version="1.0"?><urlset>'
+                f"<url><loc>{root}directory/one/</loc></url>"
+                f"<url><loc>{root}directory/two/</loc></url>"
+                "</urlset>"
+            )
+        ),
+        f"{root}directory/one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+        f"{root}directory/two/": Page(body=f'<a href="http://{SECOND}/">two</a>'),
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(root,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert f"{root}sitemap.xml" in transport.requested
+    assert {proposal.seed for proposal in report.proposals} == {FIRST, SECOND}
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    assert any("declared this sitemap in robots.txt" in note for note in summary.notes)
+
+
+def test_a_page_that_already_fills_the_budget_does_not_fetch_its_sitemap(gate, clock):
+    """Reading a map that can only repeat what the page already gave is a wasted page."""
+    pages = {
+        BASE: Page(
+            body="<html><body>"
+            '<a href="/directory/one/">One</a>'
+            '<a href="/directory/two/">Two</a>'
+            "</body></html>"
+        ),
+        f"{BASE}one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+        f"{BASE}two/": Page(body=f'<a href="http://{SECOND}/">two</a>'),
+        f"https://{HOST}/robots.txt": Page(
+            body=f"User-agent: *\nDisallow:\nSitemap: https://{HOST}/sitemap.xml\n"
+        ),
+        f"https://{HOST}/sitemap.xml": Page(
+            body=f"<urlset><url><loc>{BASE}one/</loc></url></urlset>"
+        ),
+    }
+    transport = make_transport(clock, pages)
+    # Three pages for the run: the directory and its two entries. The page already names
+    # both entries, so the walk has a full list and no reason to spend a page on the map.
+    collector = Collector(
+        gate=gate,
+        transport=transport,
+        clock=clock,
+        policy=CollectionPolicy(
+            politeness=Politeness(min_host_delay_seconds=0.0, max_pages_per_source=3)
+        ),
+    )
+    collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(BASE,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert f"https://{HOST}/sitemap.xml" not in transport.requested
+
+
+def test_a_sitemap_index_is_followed_one_level(gate, clock):
+    root = f"https://{HOST}/"
+    pages = {
+        root: Page(body='<html><body><a href="/about/">About</a></body></html>'),
+        f"https://{HOST}/robots.txt": Page(
+            body=f"User-agent: *\nDisallow:\nSitemap: {root}sitemap.xml\n"
+        ),
+        f"{root}sitemap.xml": Page(
+            body=(
+                "<sitemapindex>"
+                f"<sitemap><loc>{root}maps/news.xml</loc></sitemap>"
+                "</sitemapindex>"
+            )
+        ),
+        f"{root}maps/news.xml": Page(
+            body=f"<urlset><url><loc>{root}directory/one/</loc></url></urlset>"
+        ),
+        f"{root}directory/one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(root,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert f"{root}maps/news.xml" in transport.requested
+    assert [p.seed for p in report.proposals] == [FIRST]
+
+
+def test_a_sitemap_on_another_host_is_not_read(gate, clock):
+    """A robots file is the host's own statement; it cannot widen the walk's scope."""
+    root = f"https://{HOST}/"
+    pages = {
+        root: Page(body='<html><body><a href="/about/">About</a></body></html>'),
+        f"https://{HOST}/robots.txt": Page(
+            body="User-agent: *\nDisallow:\nSitemap: https://elsewhere.invalid/sitemap.xml\n"
+        ),
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(root,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert not any("elsewhere.invalid" in url for url in transport.requested)
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    assert any("not this walk's host" in note for note in summary.notes)
+
+
+def test_a_declared_sitemap_that_errors_does_not_cost_the_walk_its_pages(gate, clock):
+    """An error page is not a map with nothing in it, and it must not end the walk."""
+    root = f"https://{HOST}/"
+    pages = {
+        root: Page(body=f'<html><body><a href="/directory/one/">One</a></body></html>'),
+        f"https://{HOST}/robots.txt": Page(
+            body=f"User-agent: *\nDisallow:\nSitemap: {root}gone.xml\n"
+        ),
+        f"{root}gone.xml": Page(body="not found", status=404),
+        f"{root}directory/one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(root,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert [p.seed for p in report.proposals] == [FIRST]
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    assert any("answered 404" in note for note in summary.notes)
+
+
+def test_a_sitemap_offered_from_a_front_page_is_ordered_sections_first():
+    """A map lists a site in publication order; `/directory/` must not queue behind 2026.
+
+    Pointed at a front page there is no path prefix to prefer, so without an order the walk
+    spends its budget on the newest headlines and never reaches the section that lists the
+    entries.
+    """
+    xml = (
+        "<urlset>"
+        "<url><loc>https://x.invalid/news/2026/09/17/a-headline/</loc></url>"
+        "<url><loc>https://x.invalid/news/2026/09/18/another/</loc></url>"
+        "<url><loc>https://x.invalid/directory/</loc></url>"
+        "<url><loc>https://x.invalid/about/team/history/</loc></url>"
+        "</urlset>"
+    )
+    ordered = child_pages(xml, base_url="https://x.invalid/", limit=3)
+    assert ordered[0] == "https://x.invalid/directory/"
+    assert len(ordered) == 3
+
+
+def test_the_map_is_not_read_to_repeat_what_the_page_already_named(gate, clock):
+    """The shallowest pages in a map are usually exactly the front page's own links.
+
+    Offering them again would spend the walk's room on pages it already has and leave the
+    entries it does not have unread, so the page's list is excluded before the map fills.
+    """
+    root = f"https://{HOST}/"
+    pages = {
+        root: Page(body=f'<html><body><a href="/about/">About</a></body></html>'),
+        f"https://{HOST}/robots.txt": Page(
+            body=f"User-agent: *\nDisallow:\nSitemap: {root}sitemap.xml\n"
+        ),
+        f"{root}sitemap.xml": Page(
+            body=(
+                "<urlset>"
+                f"<url><loc>{root}about/</loc></url>"
+                f"<url><loc>{root}one/</loc></url>"
+                "</urlset>"
+            )
+        ),
+        f"{root}about/": Page(body="<p>no onion here</p>"),
+        f"{root}one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(root,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert f"{root}one/" in transport.requested
+    assert [p.seed for p in report.proposals] == [FIRST]
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    assert any("names 1 new page(s)" in note for note in summary.notes), summary.notes
+
+
+def test_a_walk_that_reads_the_map_still_finishes_inside_its_budget(gate, clock):
+    """The map is a page, so a run that reads one must plan for it.
+
+    Before this, the cap was measured before the map fetch: the walk planned one page more
+    than it had, dropped the last entry, and never marked the directory done -- a run that
+    reads a map could not finish however large its budget.
+    """
+    root = f"https://{HOST}/"
+    pages = {
+        root: Page(body=f'<html><body><a href="/about/">About</a></body></html>'),
+        f"https://{HOST}/robots.txt": Page(
+            body=f"User-agent: *\nDisallow:\nSitemap: {root}sitemap.xml\n"
+        ),
+        f"{root}sitemap.xml": Page(
+            body=(
+                "<urlset>"
+                f"<url><loc>{root}about/</loc></url>"
+                + "".join(
+                    f"<url><loc>{root}{name}/</loc></url>"
+                    for name in ("one", "two", "three", "four", "five", "six")
+                )
+                + "</urlset>"
+            )
+        ),
+        f"{root}about/": Page(body="<p>no onion here</p>"),
+        f"{root}one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+        f"{root}two/": Page(body=f'<a href="http://{SECOND}/">two</a>'),
+        f"{root}three/": Page(body=f'<a href="http://{THIRD}/">three</a>'),
+    }
+    transport = make_transport(clock, pages)
+    collector = Collector(
+        gate=gate,
+        transport=transport,
+        clock=clock,
+        policy=CollectionPolicy(
+            politeness=Politeness(min_host_delay_seconds=0.0, max_pages_per_source=7)
+        ),
+    )
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(root,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    # Seven pages: the front page, robots, the map, and four pages under the directory.
+    # The map offered six pages and the run had room for three of them after paying for
+    # the map itself; the rest are for the next run, not for this one's budget.
+    assert len(transport.requested) == 7, transport.requested
+    assert f"{root}four/" not in transport.requested
+    assert {p.seed for p in report.proposals} == {FIRST, SECOND, THIRD}
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    assert not any("budget ran out" in note for note in summary.notes), summary.notes

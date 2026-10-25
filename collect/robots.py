@@ -136,6 +136,26 @@ def summarise(rules: Iterable[str]) -> str:
     return "; ".join(f"Disallow: {rule}" for rule in listed[:4]) or "no disallow rules"
 
 _CRAWL_DELAY_RE = re.compile(r"crawl-delay\s*:\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+_SITEMAP_RE = re.compile(r"^sitemap\s*:\s*(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def sitemaps(text: str) -> tuple[str, ...]:
+    """The sitemap URLs a host declares in its robots file, in the order it lists them.
+
+    This is the host telling a crawler where its own map is. Reading it is the difference
+    between a walk that has to be handed the right entry page and one that can start from
+    the host's front page, because a site that publishes a sitemap has already said which
+    of its pages it wants found.
+
+    Not group-scoped, unlike ``Disallow``: the standard puts ``Sitemap`` outside the agent
+    groups, so a file with several blocks still declares its maps exactly once.
+    """
+    declared: list[str] = []
+    for match in _SITEMAP_RE.findall(text or ""):
+        value = match.strip()
+        if value and value not in declared:
+            declared.append(value)
+    return tuple(declared)
 
 
 def crawl_delay(text: str, *, user_agent: str = PRODUCT_TOKEN) -> float | None:

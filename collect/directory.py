@@ -37,6 +37,7 @@ __all__ = [
     "looks_like_sitemap",
     "onions_in",
     "same_host_pages",
+    "sitemap_index_children",
     "sitemap_urls",
 ]
 
@@ -70,6 +71,19 @@ def sitemap_urls(text: str) -> tuple[str, ...]:
     return tuple(unescape(match).strip() for match in _LOC_RE.findall(text) if match.strip())
 
 
+def sitemap_index_children(text: str) -> tuple[str, ...]:
+    """The sitemaps a sitemap *index* points at, or nothing when this is a plain urlset.
+
+    A large site splits its map, and the declared URL then names other maps rather than
+    pages. Without this the walk reads an index, finds every ``<loc>`` ending in ``.xml``,
+    drops them as non-pages, and reports a host with a map as a host with nothing on it.
+    """
+    head = text[:2000].lower()
+    if "<sitemapindex" not in head:
+        return ()
+    return sitemap_urls(text)
+
+
 def same_host_pages(links: tuple[str, ...] | list[str], *, base_url: str) -> tuple[str, ...]:
     """Keep the http(s) links that stay on the host the walk started from."""
     base_host = (urlsplit(base_url).hostname or "").lower()
@@ -87,6 +101,11 @@ def same_host_pages(links: tuple[str, ...] | list[str], *, base_url: str) -> tup
         if cleaned not in kept:
             kept.append(cleaned)
     return tuple(kept)
+
+
+def _depth(url: str) -> int:
+    """How many path segments a URL has. Shallow pages are sections; deep ones are articles."""
+    return len([part for part in urlsplit(url).path.split("/") if part])
 
 
 def child_pages(
@@ -109,7 +128,11 @@ def child_pages(
     base_path = urlsplit(base_url).path
     prefix = base_path if base_path.endswith("/") else base_path + "/"
     if prefix == "/":
-        return candidates[:limit]
+        # Pointed at a front page there is no path prefix to prefer, and a sitemap lists a
+        # site in the order it published: `/news/2026/09/17/a-headline/` sits beside
+        # `/directory/`. Sections are shallower than articles, so depth orders the list.
+        # Python's sort is stable, so URLs of equal depth keep the host's own order.
+        return tuple(sorted(candidates, key=_depth))[:limit]
 
     under_prefix = tuple(url for url in candidates if urlsplit(url).path.startswith(prefix))
     elsewhere = tuple(url for url in candidates if url not in set(under_prefix))

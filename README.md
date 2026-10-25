@@ -689,6 +689,30 @@ sitemap names 316 URLs of which 55 are directory entries.
 from the sitemap or from the links, keeps the same host, orders distinct paths ahead of facet
 links such as `?country=3`, and spends the run's page budget like every other path.
 
+Nothing about that walk is hardcoded, and the entry point is the only thing an operator
+supplies. `--directory` has no default and appears nowhere in the source outside a docstring
+and one test. What the walk does with the URL it is given is the automatic part: it parses the
+page, follows the links, and now also reads the map the host declares for itself. A front page
+links to its navigation, not to its entries, so when the page leaves budget unclaimed the walk
+reads the `Sitemap:` line out of `robots.txt`, fetches that map once, follows a sitemap index
+one level, and tops the list up from it. The page always wins: a page that already supplies as
+many entries as the walk may carry does not trigger a sitemap fetch at all, because spending a
+page to be told nothing new is not politeness. The map cannot repeat the page either -- what it
+offers is filtered against the links the page already named, or a depth-ordered map would spend
+the room on `/about/` for a second time. And because a map is itself a page, its fetch is
+charged to the budget before the room it fills is measured; without that the walk plans one
+page more than it may spend, drops its last entry, and never marks the directory done. A map
+declared on another host is not read, since a robots file is the host's statement about itself
+and cannot widen the run's scope.
+
+Pointed at a front page there is no path prefix to prefer, and a sitemap lists a site in the
+order it published, so the walk orders what the map returns by path depth: sections are
+shallower than articles, and `/directory/` must not queue behind three hundred headlines.
+
+That means the operator can point the walk at `https://securedrop.org/` and let the site name
+its own pages, which is the difference between a crawler that is handed its answer and one
+that asks the publisher where to look.
+
 The crawl delay is honoured, and that is not a detail. A host that states ten seconds between
 requests has stated how it wants to be read; a walk that ignores it is not a polite crawler
 with a bug, it is a crawler reading on terms the publisher did not offer.
@@ -807,7 +831,8 @@ collect/
   ahmia.py       the public index parser, kept selectable and kept refusing: the index it
                  was written for answers automated queries with a redirect
   onionlocation.py  self-published pairs: the Onion-Location header and the meta tag
-  robots.py      the host's own policy: rules, wildcard matching, and the verdict
+  robots.py      the host's own policy: rules, wildcard matching, the crawl delay it
+                 asks for, and the sitemap it declares
   ctlog_direct.py  RFC 6962: operator list, signed tree heads, verified signatures,
                  Merkle leaves -- certificate transparency read at the source
   ctlog.py       certificate transparency: onion/clearnet associations, and their caveat
@@ -873,7 +898,7 @@ tests/
   test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
                   opened, every hit citing the page behind it, declared seeds never offered
                   back, and a query asked again only when the index has actually grown
-  test_directory_walk.py 15 tests; a directory walk that stays on its host, keeps the cap,
+  test_directory_walk.py 25 tests; a directory walk that stays on its host, keeps the cap,
                   waits the delay robots.txt asks for, resumes per page when the budget
                   stops it, and never mistakes a facet link for an entry
 ```
