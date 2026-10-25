@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from farm.model import Endpoint, Service
 
@@ -407,25 +407,38 @@ class MisconfigScoring:
         }
 
 
-def evaluate(farm, rules: dict[str, RuleFn] | None = None) -> MisconfigScoring:
+def evaluate(
+    farm,
+    rules: dict[str, RuleFn] | None = None,
+    *,
+    service_ids: Iterable[str] | None = None,
+) -> MisconfigScoring:
     """Score a rule table against the farm's injected single-scope flaws.
 
     FINGERPRINT-scope flaws are excluded from the truth set: they are a linking
     signal, scored by the correlator, and counting them here would inflate this
     module's recall with work it does not do.
+
+    `service_ids` restricts both the scanning and the truth set, so a held-out run scores
+    only the services it claims to score. The rule table itself is static: no threshold or
+    pattern is chosen from these numbers.
     """
     from farm.model import FlawScope
 
     table = RULES if rules is None else rules
+    allowed = None if service_ids is None else set(service_ids)
 
     hits: list[RuleHit] = []
     for service in farm.services:
+        if allowed is not None and service.service_id not in allowed:
+            continue
         hits.extend(scan_service(farm, service.service_id, table))
 
     truth: set[tuple[str, str]] = set()
     for flaw in farm.flaws_by_scope(FlawScope.SINGLE):
         for service_id in flaw.service_ids:
-            truth.add((service_id, flaw.kind))
+            if allowed is None or service_id in allowed:
+                truth.add((service_id, flaw.kind))
 
     detected = {(hit.service_id, hit.kind) for hit in hits}
     return MisconfigScoring(hits=hits, truth=truth, detected=detected)

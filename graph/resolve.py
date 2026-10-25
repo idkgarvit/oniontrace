@@ -96,22 +96,6 @@ def artefact_frequencies(artefacts: Iterable) -> Counter:
     return Counter({k: len(v) for k, v in services_per_value.items()})
 
 
-def _discriminative(art, freq: Mapping[tuple[str, str], int], cap: int) -> bool:
-    """Whether a value can carry operator signal at all.
-
-    Three separate reasons a value identifies nobody, all checked here so no caller
-    can forget one:
-
-    * it is empty;
-    * it is a vendor default or a published placeholder;
-    * it is shared by more services than the cap allows.
-    """
-
-    if not art.value or art.value in NON_IDENTIFYING_VALUES:
-        return False
-    return freq[(art.kind, art.value)] <= cap
-
-
 def _counter_reasons(
     a_arts: dict[str, str],
     b_arts: dict[str, str],

@@ -792,3 +792,92 @@ def test_the_reported_baseline_is_strictly_below_the_measured_score(farm):
     scores = correlation_experiment(farm, max_artifact_frequency=3)
     ranking = scores["ranking"]
     assert ranking["precision@1"]["value"] > ranking["random_baseline_precision@1"]
+
+
+# --------------------------------------------------------------------------- #
+# The split has to be used, not merely declared
+# --------------------------------------------------------------------------- #
+
+
+def test_the_held_out_block_scores_only_test_clusters(results):
+    """A split nobody scores on is a heading, not a held-out set.
+
+    The module tables cover the whole farm, so the report needs at least one block where
+    every scored service came from the test side of the split.
+    """
+    held_out = results["held_out"]
+    test_clusters = set(results["split"]["test_clusters"])
+
+    assert held_out["clusters"] == list(results["split"]["test_clusters"])
+    assert test_clusters, "a split with no test clusters holds nothing out"
+    assert held_out["query_count"] == held_out["service_count"]
+
+    # Every misconfiguration truth item, detection and miss is a test service.
+    rules = held_out["M2_misconfig_rules"]["careful_rules"]
+    for entry in (rules["missed"], rules["false_positives"]):
+        for item in entry:
+            assert item.split(":")[0] in _services_in_clusters(results, test_clusters)
+
+    # The ranking pool is the test services alone, so the baseline is 2/(n-1) not 2/13.
+    ranking = held_out["M2_correlation"]["at_frozen_threshold"]["ranking"]
+    assert ranking["pool_size"] == held_out["service_count"] - 1
+    assert ranking["n_queries"] == held_out["query_count"]
+    assert ranking["random_baseline_precision@1"] == pytest.approx(2 / 5)
+
+
+def _services_in_clusters(results, cluster_ids):
+    """The service ids the farm placed in these clusters, rebuilt from the recorded config."""
+    from farm.generator import generate_farm
+    from farm.model import FarmConfig
+
+    farm = generate_farm(FarmConfig(**results["meta"]["farm_config"]))
+    return {s.service_id for s in farm.services if s.cluster_id in cluster_ids}
+
+
+def test_a_held_out_pool_contains_no_dev_service(farm):
+    """The defect this guards: a test query answered by a dev service is not held out."""
+    from eval.harness import correlation_experiment
+    from eval.splits import cluster_split
+
+    split = cluster_split(farm)
+    dev = {s.service_id for s in farm.services if split.is_dev(s.cluster_id)}
+    test = {s.service_id for s in farm.services if split.is_test(s.cluster_id)}
+
+    for service_id in sorted(test):
+        pool = farm.correlation_pool(service_id, service_ids=test)
+        assert pool and not (set(pool) & dev)
+        assert service_id not in pool
+        baseline = farm.precision_at_1_baseline(service_ids=test)
+        assert baseline == pytest.approx(
+            2 / (len(test) - 1)
+        ), "the held-out baseline must describe the held-out pool"
+
+
+def test_the_limitations_do_not_claim_what_the_run_does_not_do(results):
+    """The sentence this replaces said the test split made evaluation held out.
+
+    It did not: the module tables scored the whole farm. A limitation that flatters the
+    method is the one kind of error the report exists to prevent.
+    """
+    joined = " ".join(results["limitations"]).lower()
+
+    assert "on unseen operators by construction" not in joined
+    assert "only the `held_out` block" in joined
+    assert "module tables score the whole farm" in joined
+
+
+def test_the_report_prints_the_held_out_numbers_beside_the_full_farm(results):
+    from eval import report
+
+    rendered = report.render(results)
+    section = rendered.split("## Held-out split", 1)[1].split("## Frozen thresholds", 1)[0]
+
+    assert "Measured on test clusters only" in section
+    assert "Correlation precision@1 (frozen threshold)" in section
+
+    held = results["held_out"]["M2_correlation"]["at_frozen_threshold"]["ranking"]["precision@1"]
+    whole = results["modules"]["M2_correlation"]["at_frozen_threshold"]["ranking"]["precision@1"]
+    # Each column carries its own denominator, so neither can be read as the other.
+    assert f"({held['successes']}/{held['total']})" in section
+    assert f"({whole['successes']}/{whole['total']})" in section
+    assert held["total"] != whole["total"], "both columns describe the same experiment"

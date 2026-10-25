@@ -79,10 +79,6 @@ class Case:
     def purged(self) -> bool:
         return self.purged_at is not None
 
-    @property
-    def accepts_collection(self) -> bool:
-        return not self.purged and not self.sealed
-
     def is_expired(self, now: str) -> bool:
         """Retention is a deadline, not a suggestion: at the expiry instant it is over."""
         return _parse(now) >= _parse(self.retention_until)

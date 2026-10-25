@@ -289,5 +289,27 @@ def test_a_query_is_not_asked_again_against_an_index_of_the_same_size(gate, cloc
 
 
 def test_the_run_report_says_which_index_answered(gate, clock):
-    scope = CollectionScope(search_queries=("market",))
-    assert "index: local" in "\n".join(scope.summary())
+    """Two providers can answer one query, so the record must name the one that did.
+
+    Checking `scope.summary()` alone proves only that the run was *asked* for the local
+    index. The snapshot is what a later reader has, so the provider has to be on it, and
+    the run notes have to say the query was answered rather than skipped.
+    """
+    seed_snapshot(gate, excerpt="mirrors for the market: " + FOUND)
+    collector = make_collector(gate, RefusingTransport(), clock)
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(search_queries=("market",)),
+    )
+
+    assert "index: local" in "\n".join(
+        CollectionScope(search_queries=("market",)).summary()
+    )
+    stored = next(
+        s for s in gate.collected_snapshots(OWNER, CASE) if s["origin"] == ORIGIN_AHMIA
+    )
+    assert stored["content"]["provider"] == SEARCH_PROVIDER_LOCAL
+    assert any(
+        "matched" in note for note in summary_for(report, ORIGIN_AHMIA).notes
+    ), summary_for(report, ORIGIN_AHMIA).notes

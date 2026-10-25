@@ -212,8 +212,10 @@ identities.
 
 ## The evaluation harness
 
-`python -m eval run` builds a farm, splits it by cluster, fits thresholds on dev, freezes
-them, then scores every module on the held-out clusters. Each detector is implemented in
+`python -m eval run` builds a farm, splits it by cluster, fits thresholds on dev and
+freezes them, then scores every module on the whole farm and repeats the M2 measurements
+on the held-out clusters alone, so an unseen-operator figure sits beside the full-farm one
+instead of being implied by the split's existence. Each detector is implemented in
 both a *naive* and a *careful* form, because a score with no comparable baseline is not a
 result. The gap between the two is the measurement of whether the farm's hard negatives
 are doing their job — if the careful and naive variants scored the same, the negative
@@ -875,7 +877,7 @@ tests/
   test_dashboard.py 25 tests; pins route refusals, traversal rejection, evidence-pack limits,
                    injection through collected values, and the origin/CSP boundary
   test_farm.py   65 tests; each locks in a property a reported metric depends on
-  test_eval.py   65 tests; each pins what a number in the report is allowed to mean
+  test_eval.py   69 tests; each pins what a number in the report is allowed to mean
   test_gates.py  95 tests; each asserts a refusal, or that the refusal is on the record
   test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its

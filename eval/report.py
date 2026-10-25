@@ -81,8 +81,62 @@ def render(results: dict[str, Any]) -> str:
         "## Held-out split",
         "",
         f"- **dev** (threshold fitting only): {', '.join(split['dev_clusters']) or 'none'}",
-        f"- **test** (reporting only): {', '.join(split['test_clusters']) or 'none'}",
+        f"- **test** (scored separately below): {', '.join(split['test_clusters']) or 'none'}",
         "",
+        "The module tables below score the whole farm. The figures in this table are the "
+        "same rules and the same frozen thresholds applied to the test clusters alone, "
+        "with the candidate pool and the ground truth restricted to them: the only "
+        "numbers here where every scored service was unseen when the thresholds were "
+        "chosen.",
+        "",
+    ]
+
+    held_out = results.get("held_out") or {}
+    if held_out:
+        test_rules = held_out["M2_misconfig_rules"]
+        test_corr = held_out["M2_correlation"]["at_frozen_threshold"]["ranking"]
+        farm_rules = modules["M2_misconfig_rules"]
+        farm_corr = modules["M2_correlation"]["at_frozen_threshold"]["ranking"]
+
+        def rule_cell(entry: dict[str, Any], metric: str) -> str:
+            payload = entry.get(metric) or {}
+            denominator = (entry["tp"] + entry["fn"]) if metric == "recall" else (
+                entry["tp"] + entry["fp"]
+            )
+            return (
+                f"{_pct(payload.get('value'))} {_ci(payload)} "
+                f"({entry['tp']}/{denominator})"
+            )
+
+        def corr_cell(payload: dict[str, Any]) -> str:
+            p1 = payload["precision@1"]
+            return (
+                f"{_pct(p1.get('value'))} {_ci(p1)} "
+                f"({p1['successes']}/{p1['total']})"
+            )
+
+        out += [
+            "| Measured on test clusters only | Result | Whole farm |",
+            "|---|---|---|",
+            f"| Careful-rule recall | {rule_cell(test_rules['careful_rules'], 'recall')} "
+            f"| {rule_cell(farm_rules['careful_rules'], 'recall')} |",
+            f"| Careful-rule precision | {rule_cell(test_rules['careful_rules'], 'precision')} "
+            f"| {rule_cell(farm_rules['careful_rules'], 'precision')} |",
+            f"| Naive-rule recall | {rule_cell(test_rules['naive_rules'], 'recall')} "
+            f"| {rule_cell(farm_rules['naive_rules'], 'recall')} |",
+            f"| Correlation precision@1 (frozen threshold) | {corr_cell(test_corr)} "
+            f"| {corr_cell(farm_corr)} |",
+            f"| Correlation MRR (frozen threshold) | {test_corr['mrr']:.3f} "
+            f"| {farm_corr['mrr']:.3f} |",
+            "",
+            f"> {held_out['note']} The test half is "
+            f"{held_out['query_count']} clustered services in "
+            f"{len(held_out['clusters'])} clusters, which is small enough that the "
+            "interval, not the point estimate, is the finding.",
+            "",
+        ]
+
+    out += [
         "## Frozen thresholds",
         "",
         "| Threshold | Value | Fitted on | dev precision | dev recall | dev n |",

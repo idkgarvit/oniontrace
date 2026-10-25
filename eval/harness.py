@@ -13,7 +13,7 @@ the dev fit.
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import Any, Iterable
 
 from farm.generator import generate_farm
 from farm.model import FarmConfig
@@ -44,6 +44,7 @@ def correlation_experiment(
     *,
     max_artifact_frequency: int | None,
     score_threshold: float = 0.0,
+    service_ids: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """Score the correlator as both a ranker and a link proposer.
 
@@ -57,17 +58,30 @@ def correlation_experiment(
 
     A correlator can look respectable on ranking while proposing a large number of
     spurious links, so both numbers are reported.
+
+    `service_ids` restricts queries, pool, truth and universe to one subset, which is how
+    the held-out block asks the question the split exists to ask: can the correlator find
+    a mate among operators it was not fitted on? The artefact-frequency statistic is still
+    computed over the whole farm, because it describes how common a value is in the
+    population, not who was fitted on.
     """
     from eval.metrics import hit_at_k, mean_reciprocal_rank, precision_at_1, recall_at_k
+
+    allowed = None if service_ids is None else set(service_ids)
+    in_scope = [
+        s for s in farm.services if allowed is None or s.service_id in allowed
+    ]
+    scope_ids = {s.service_id for s in in_scope}
+    queries = [s for s in in_scope if s.cluster_id]
 
     rankings: list[list[str]] = []
     relevant: list[set[str]] = []
     proposed: list[tuple[str, str]] = []
+    pool_size = 0
 
-    for service in farm.services:
-        if not service.cluster_id:
-            continue
-        pool = farm.correlation_pool(service.service_id)
+    for service in queries:
+        pool = farm.correlation_pool(service.service_id, service_ids=allowed)
+        pool_size = len(pool)
         ranked = correlation.rank_services(
             farm,
             service.service_id,
@@ -75,27 +89,44 @@ def correlation_experiment(
             max_artifact_frequency=max_artifact_frequency,
         )
         rankings.append([candidate for candidate, _ in ranked])
-        relevant.append(set(farm.cluster_mates(service.service_id)))
+        relevant.append(set(farm.cluster_mates(service.service_id)) & scope_ids)
         for candidate, score in ranked:
             if score >= score_threshold:
                 proposed.append((service.service_id, candidate))
 
     truth = {
         (a, b)
-        for service in farm.services
-        if service.cluster_id
+        for service in queries
         for b in farm.cluster_mates(service.service_id)
+        if b in scope_ids
         for a in [service.service_id]
     }
     universe = [
         (a.service_id, b.service_id)
-        for a in farm.services
-        for b in farm.services
+        for a in in_scope
+        for b in in_scope
         if a.service_id != b.service_id
     ]
 
     p1 = precision_at_1(rankings, relevant)
     links = score_links(proposed, truth, universe=universe, threshold=score_threshold)
+    full_baseline = farm.precision_at_1_baseline(
+        restricted_to_clustered=False, service_ids=allowed
+    )
+    restricted_baseline = farm.precision_at_1_baseline(
+        restricted_to_clustered=True, service_ids=allowed
+    )
+    restricted_pool = len([s for s in in_scope if s.cluster_id]) - 1
+    if restricted_pool > 0:
+        baseline_note = (
+            f"the baseline describes the pool actually ranked: {pool_size} candidates, "
+            f"singletons included ({full_baseline:.4f}). The restricted figure "
+            f"({restricted_baseline:.4f}) applies only if singletons are excluded from "
+            "the pool, which is not what this run does -- reporting it as the headline "
+            "would put a number next to a result that describes a different experiment."
+        )
+    else:
+        baseline_note = "no clustered query service in this subset; no baseline to state"
 
     return {
         "variant": (
@@ -104,25 +135,14 @@ def correlation_experiment(
         "max_artifact_frequency": max_artifact_frequency,
         "ranking": {
             "n_queries": p1.total,
-            "pool_size": len(farm.services) - 1,
+            "pool_size": pool_size,
             "precision@1": p1.to_dict(),
             "mrr": round(mean_reciprocal_rank(rankings, relevant), 6),
             "recall@3": round(recall_at_k(rankings, relevant, 3), 6),
             "hit@3": hit_at_k(rankings, relevant, 3).to_dict(),
-            "random_baseline_precision@1": round(
-                farm.precision_at_1_baseline(restricted_to_clustered=False), 6
-            ),
-            "random_baseline_precision@1_restricted": round(
-                farm.precision_at_1_baseline(restricted_to_clustered=True), 6
-            ),
-            "baseline_note": (
-                "the baseline describes the pool actually ranked: "
-                f"{len(farm.correlation_pool(next(s.service_id for s in farm.services if s.cluster_id)))} "
-                "candidates, singletons included (2/13 = 0.1538). The restricted figure "
-                "(2/11 = 0.1818) applies only if singletons are excluded from the pool, "
-                "which is not what this run does -- reporting it here would put a number "
-                "next to a result that describes a different experiment."
-            ),
+            "random_baseline_precision@1": round(full_baseline, 6),
+            "random_baseline_precision@1_restricted": round(restricted_baseline, 6),
+            "baseline_note": baseline_note,
         },
         "link_scoring": links.to_dict(),
     }
@@ -461,6 +481,50 @@ def run(
         "assumptions": ledger["assumptions"],
     }
 
+    # --- 2b. the same measurements, on the clusters held out of the fit ---------- #
+    # The tables above score the whole farm, because that is the population the report
+    # describes. The split only earns its name if something is actually scored on the
+    # other half, so the M2 measurements are repeated here with the queries, the candidate
+    # pool and the truth restricted to test-cluster services. No threshold is refitted:
+    # the frozen values come from the dev fit above.
+    test_ids = {s.service_id for s in farm.services if split.is_test(s.cluster_id)}
+    held_out = {
+        "clusters": list(split.test_clusters),
+        "service_count": len(test_ids),
+        "query_count": len(
+            [s for s in farm.services if s.cluster_id and s.service_id in test_ids]
+        ),
+        "note": (
+            "Scored only on services in the test clusters, with the candidate pool, the "
+            "link truth and the misconfiguration truth restricted to those services. The "
+            "thresholds applied were fitted on dev and were not adjusted once these "
+            "numbers existed. The tables under `modules` score the whole farm and are "
+            "not held out."
+        ),
+        "M2_misconfig_rules": {
+            "careful_rules": misconfig.evaluate(
+                farm, misconfig.RULES, service_ids=test_ids
+            ).to_dict(farm),
+            "naive_rules": misconfig.evaluate(
+                farm, misconfig.NAIVE_RULES, service_ids=test_ids
+            ).to_dict(farm),
+        },
+        "M2_correlation": {
+            "naive": correlation_experiment(
+                farm, max_artifact_frequency=None, service_ids=test_ids
+            ),
+            "frequency_filtered": correlation_experiment(
+                farm, max_artifact_frequency=frequency_cap, service_ids=test_ids
+            ),
+            "at_frozen_threshold": correlation_experiment(
+                farm,
+                max_artifact_frequency=None,
+                score_threshold=correlation_threshold.value,
+                service_ids=test_ids,
+            ),
+        },
+    }
+
     # --- 3. abstention ----------------------------------------------------------- #
     abstention = {
         "correlation_unthresholded": correlation_abstention(
@@ -503,6 +567,7 @@ def run(
             retrieval_threshold.to_dict(),
         ],
         "modules": modules,
+        "held_out": held_out,
         "abstention": abstention,
         "limitations": _limitations(farm, split),
     }
@@ -514,6 +579,7 @@ def _limitations(farm, split) -> list[str]:
     from farm.services import rules_with_hard_negative_fixture
 
     clustered = [s for s in farm.services if s.cluster_id]
+    test_ids = {s.service_id for s in farm.services if split.is_test(s.cluster_id)}
     gaps = sorted(
         {s.kind for s in SINGLE_FLAWS} - set(rules_with_hard_negative_fixture())
     )
@@ -526,9 +592,13 @@ def _limitations(farm, split) -> list[str]:
         f"{len(farm.clusters)} clusters, {len(farm.personas)} personas. Confidence "
         "intervals are reported because the point estimates alone would overstate what "
         "the sample supports.",
-        f"The test split holds out {len(split.test_clusters)} of {len(farm.clusters)} "
-        "clusters, so evaluation is on unseen operators by construction, but the test "
-        "set is small and the interval correspondingly wide.",
+        f"Thresholds are fitted on dev and frozen before any test score exists, but the "
+        f"module tables score the whole farm; only the `held_out` block is scored entirely "
+        f"on unseen operators ({len(split.test_clusters)} of {len(farm.clusters)} "
+        f"clusters, {len(test_ids)} services). A held-out figure from a sample that small "
+        f"carries a wide interval, and M3 and M5 are not split that way at all -- their "
+        f"truth is persona- and pair-based -- so their headline numbers include clusters "
+        f"the thresholds were fitted on.",
         "Frequency filtering addresses widespread vendor-default artefacts and not "
         "coincidental ones. The coincidental class needs a maintained blocklist of known "
         "defaults, which this implementation does not have.",
