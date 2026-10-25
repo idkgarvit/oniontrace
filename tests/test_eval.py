@@ -822,7 +822,10 @@ def test_the_held_out_block_scores_only_test_clusters(results):
     ranking = held_out["M2_correlation"]["at_frozen_threshold"]["ranking"]
     assert ranking["pool_size"] == held_out["service_count"] - 1
     assert ranking["n_queries"] == held_out["query_count"]
-    assert ranking["random_baseline_precision@1"] == pytest.approx(2 / 5)
+    mates = results["meta"]["farm_config"]["services_per_cluster"] - 1
+    assert ranking["random_baseline_precision@1"] == pytest.approx(
+        mates / (held_out["service_count"] - 1)
+    ), "the held-out baseline must be the one for the held-out pool"
 
 
 def _services_in_clusters(results, cluster_ids):
@@ -847,10 +850,11 @@ def test_a_held_out_pool_contains_no_dev_service(farm):
         pool = farm.correlation_pool(service_id, service_ids=test)
         assert pool and not (set(pool) & dev)
         assert service_id not in pool
-        baseline = farm.precision_at_1_baseline(service_ids=test)
-        assert baseline == pytest.approx(
-            2 / (len(test) - 1)
-        ), "the held-out baseline must describe the held-out pool"
+    baseline = farm.precision_at_1_baseline(service_ids=test)
+    expected = len(farm.cluster_mates(sorted(test)[0])) / (len(test) - 1)
+    assert baseline == pytest.approx(expected), (
+        "the held-out baseline must describe the held-out pool"
+    )
 
 
 def test_the_limitations_do_not_claim_what_the_run_does_not_do(results):
