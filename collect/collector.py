@@ -888,6 +888,108 @@ class Collector:
             )
         return outcome
 
+    def _record_walk_page(
+        self,
+        *,
+        case_id: str,
+        page_url: str,
+        directory_url: str,
+        result,
+        declared: set[str],
+        proposed: set[str],
+        seen: set[str],
+        outcome: _PathOutcome,
+        summary: OriginSummary,
+    ) -> set[str]:
+        """What one page a walk read says about onions: the header, the meta tag, the body.
+
+        This was body-only, and the live run says why that is not enough. freedom.press
+        advertises its onion in an ``Onion-Location`` header on every page and in none of the
+        markup, so a walk that read the body reported "0 address(es)" while the header sat in
+        the archived response it had just written. A host that publishes its onion the way
+        the standard provides is not a host with no onion, and the difference between those
+        two readings is the difference between evidence and a silent negative.
+        """
+        addresses: set[str] = set()
+        for advertisement in advertisements(
+            headers=result.headers, body=result.text, source_url=page_url
+        ):
+            addresses.add(advertisement.onion_address)
+            key = (
+                f"{ORIGIN_ONION_LOCATION}:{advertisement.onion_address}:{advertisement.form}"
+            )
+            if key in seen:
+                summary.skipped_duplicate += 1
+            else:
+                seen.add(key)
+                outcome.payloads.append(
+                    self._payload(
+                        case_id=case_id,
+                        origin=ORIGIN_ONION_LOCATION,
+                        target=advertisement.onion_address,
+                        dedupe_key=key,
+                        captured_at=result.retrieved_at,
+                        source_url=page_url,
+                        content=asdict(advertisement),
+                    )
+                )
+            if advertisement.onion_address in declared or advertisement.onion_address in proposed:
+                continue
+            proposed.add(advertisement.onion_address)
+            outcome.proposals.append(
+                SeedProposal(
+                    seed=advertisement.onion_address,
+                    origin=ORIGIN_ONION_LOCATION,
+                    discovered_from=page_url,
+                    reason=(
+                        f"advertised in the page's {advertisement.form} under the directory "
+                        f"{urlsplit(directory_url).hostname}"
+                    ),
+                )
+            )
+
+        mentions = onions_in(result.text)
+        if mentions:
+            addresses.update(mentions)
+            inventory = page_title(result.text) or page_url
+            key = f"{ORIGIN_ONION_LOCATION}:walk:{page_url}"
+            if key in seen:
+                summary.skipped_duplicate += 1
+            else:
+                seen.add(key)
+                outcome.payloads.append(
+                    self._payload(
+                        case_id=case_id,
+                        origin=ORIGIN_ONION_LOCATION,
+                        target=inventory,
+                        dedupe_key=key,
+                        captured_at=result.retrieved_at,
+                        source_url=page_url,
+                        content={
+                            "directory": directory_url,
+                            "title": inventory,
+                            "excerpt": result.text[:EXCERPT_CHARS],
+                            "onions": list(mentions),
+                        },
+                    )
+                )
+            for address in mentions:
+                if address in declared or address in proposed:
+                    continue
+                proposed.add(address)
+                outcome.proposals.append(
+                    SeedProposal(
+                        seed=address,
+                        origin=ORIGIN_ONION_LOCATION,
+                        discovered_from=page_url,
+                        reason=(
+                            f"listed on {urlsplit(page_url).hostname} under the directory "
+                            f"{urlsplit(directory_url).hostname}"
+                        ),
+                    )
+                )
+        return addresses
+
     def _walk_directory(
         self,
         case_id: str,
@@ -1005,7 +1107,25 @@ class Collector:
             return
 
         declared = set(scope.onion_addresses)
-        carried = 0
+        # Proposed once per address, however many pages name it: a queue that lists the same
+        # onion eleven times is a queue nobody finishes reading.
+        proposed: set[str] = set()
+        # The index page is a page the walk read, so what it advertises is recorded like any
+        # other read. freedom.press advertises its onion in the header of its front page and
+        # nowhere in the markup, which is the page a front-page walk starts from.
+        carried = len(
+            self._record_walk_page(
+                case_id=case_id,
+                page_url=directory_url,
+                directory_url=directory_url,
+                result=index_result,
+                declared=declared,
+                proposed=proposed,
+                seen=seen,
+                outcome=outcome,
+                summary=summary,
+            )
+        )
         for position, child in enumerate(children):
             child_source = checkpoint_source(ORIGIN_ONION_LOCATION, child)
             child_prior = checkpoints.load(case_id, child_source)
@@ -1059,46 +1179,18 @@ class Collector:
                     completed=True,
                 )
             )
-            addresses = onions_in(result.text)
-            if not addresses:
-                continue
-            carried += len(addresses)
-            inventory = page_title(result.text) or child
-            key = f"{ORIGIN_ONION_LOCATION}:{directory_url}:{child}"
-            if key in seen:
-                summary.skipped_duplicate += 1
-                continue
-            seen.add(key)
-            outcome.payloads.append(
-                self._payload(
-                    case_id=case_id,
-                    origin=ORIGIN_ONION_LOCATION,
-                    target=inventory,
-                    dedupe_key=key,
-                    captured_at=result.retrieved_at,
-                    source_url=child,
-                    content={
-                        "directory": directory_url,
-                        "title": inventory,
-                        "excerpt": result.text[:EXCERPT_CHARS],
-                        "onions": list(addresses),
-                    },
-                )
+            addresses = self._record_walk_page(
+                case_id=case_id,
+                page_url=child,
+                directory_url=directory_url,
+                result=result,
+                declared=declared,
+                proposed=proposed,
+                seen=seen,
+                outcome=outcome,
+                summary=summary,
             )
-            for address in addresses:
-                if address in declared:
-                    continue
-                outcome.proposals.append(
-                    SeedProposal(
-                        seed=address,
-                        origin=ORIGIN_ONION_LOCATION,
-                        discovered_from=child,
-                        reason=(
-                            f"listed on {urlsplit(child).hostname} under the directory "
-                            f"{urlsplit(directory_url).hostname}"
-                        ),
-                    )
-                )
+            carried += len(addresses)
         summary.notes.append(
             f"{directory_url}: {carried} address(es) across {len(children)} page(s)"
         )

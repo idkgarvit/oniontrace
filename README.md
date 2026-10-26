@@ -771,6 +771,29 @@ had already read, walked eleven it had not, and the case now holds nineteen snap
 eleven distinct addresses, among them Der Spiegel's, the Financial Times' and Forbes' own
 onions, each still a proposal and none of them a seed.
 
+A third defect came out of the same run, and it is the worst of the three because it looked
+like a result. Pointed at `https://freedom.press/`, the walk read eleven of its pages, archived
+each response into the case, and reported `0 address(es) across 11 page(s)`. The archive it had
+just written contained this, on every one of those pages:
+
+```
+onion-location: http://fpfjxcrmw437h6z2xl3w4czl55kvkmxpapg37bbopsafdu7q454byxid.onion/
+```
+
+The walk read page bodies, and freedom.press publishes its onion in the header and nowhere in
+the markup. So a host that advertises its onion exactly the way the standard provides was
+reported as a host with no onion, which is the one kind of wrong answer this project cannot
+ship. Every page a walk reads now gets the same treatment as any other read page: what it
+advertises in `Onion-Location`, in a `meta` tag, and what it merely mentions in its body are
+all recorded, and the payload says which of the three it was. Re-run into a fresh case, the
+same host yields:
+
+```
+1 proposal(s) written to the case's queue:
+  fpfjxcrmw437h6z2xl3w4czl55kvkmxpapg37bbopsafdu7q454byxid.onion
+      advertised in the page's header under the directory freedom.press
+```
+
 Then the index, on the same case, with no socket opened:
 
 ```
@@ -925,7 +948,7 @@ tests/
   test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
                   opened, every hit citing the page behind it, declared seeds never offered
                   back, and a query asked again only when the index has actually grown
-  test_directory_walk.py 30 tests; a directory walk that stays on its host, keeps the cap,
+  test_directory_walk.py 33 tests; a directory walk that stays on its host, keeps the cap,
                   waits the delay robots.txt asks for, resumes per page when the budget
                   stops it, stops before its permit expires rather than losing the pages,
                   and never mistakes a facet link for an entry
@@ -1088,7 +1111,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   97-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (663 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (666 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and

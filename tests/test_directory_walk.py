@@ -847,3 +847,84 @@ def test_a_truncated_index_says_that_the_cap_chose_not_the_site(gate, clock):
     truncated = [n for n in summary.notes if "more pages than this walk may carry" in n]
     assert truncated, summary.notes
     assert "a larger page budget walks further" in truncated[0]
+
+
+def test_a_page_that_advertises_only_in_a_header_is_not_read_as_empty(gate, clock):
+    """The live case: freedom.press publishes its onion in `Onion-Location` and nowhere else.
+
+    The walk read eleven of its pages, wrote each response into the case's archive, and
+    reported "0 address(es) across 11 page(s)" -- while the header naming fpfjxcrmw...onion
+    sat in the WARC it had just written. A host that publishes its onion the way the standard
+    provides is not a host with no onion.
+    """
+    pages = {
+        BASE: Page(body='<html><body><a href="/directory/one/">One</a></body></html>'),
+        f"{BASE}one/": Page(
+            body="<html><body>nothing but prose</body></html>",
+            headers={"Onion-Location": f"http://{FIRST}/"},
+        ),
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(BASE,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert [proposal.seed for proposal in report.proposals] == [FIRST]
+    stored = gate.collected_snapshots(OWNER, CASE)
+    advertised = [s for s in stored if s["content"].get("form") == "header"]
+    assert advertised, "the header advertisement was not stored as evidence"
+    assert advertised[0]["source_url"] == f"{BASE}one/"
+    assert advertised[0]["content"]["advertised_url"] == f"http://{FIRST}/"
+    assert advertised[0]["content"]["onion_address"] == FIRST
+
+
+def test_the_index_page_is_read_for_what_it_advertises_too(gate, clock):
+    """A front-page walk starts on the front page, which is where the header usually is."""
+    pages = {
+        BASE: Page(
+            body="<html><body>no links and no mentions</body></html>",
+            headers={"Onion-Location": f"http://{SECOND}/"},
+        )
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(BASE,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert [proposal.seed for proposal in report.proposals] == [SECOND]
+
+
+def test_an_address_named_on_many_pages_is_proposed_once(gate, clock):
+    pages = {
+        BASE: Page(
+            body='<html><body><a href="/directory/one/">One</a>'
+            '<a href="/directory/two/">Two</a></body></html>'
+        ),
+        f"{BASE}one/": Page(
+            body="<p>nothing</p>", headers={"Onion-Location": f"http://{FIRST}/"}
+        ),
+        f"{BASE}two/": Page(
+            body="<p>nothing</p>", headers={"Onion-Location": f"http://{FIRST}/"}
+        ),
+    }
+    transport = make_transport(clock, pages)
+    collector = collector_for(gate, transport, clock)
+
+    report = collector.collect(
+        case_id=CASE,
+        principal=OWNER,
+        scope=CollectionScope(directories=(BASE,)),
+        origins=(ORIGIN_ONION_LOCATION,),
+    )
+
+    assert [proposal.seed for proposal in report.proposals] == [FIRST]
