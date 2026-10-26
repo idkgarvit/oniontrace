@@ -758,3 +758,92 @@ def test_a_path_that_raises_does_not_leave_its_permit_deadline_behind(gate, cloc
         )
 
     assert collector._permit_expires_at is None
+
+
+def test_a_page_that_links_home_does_not_walk_itself_as_a_child(gate, clock):
+    """The live failure, in one fixture.
+
+    `https://freedom.press/` links to `/` from its own masthead. The walk read that link as
+    a page underneath the directory, fetched the index a second time, and recorded it under
+    the same checkpoint key the directory marker used -- so the directory was marked as
+    walked while the note beside it said it was not. The next run then refused to continue
+    and the site was frozen at seven pages.
+
+    The first assertion is the fault: a home link must not become a child. The second is the
+    symptom the fault caused, and it is the one an operator saw: the next run, handed a
+    larger budget, fetched nothing at all and reported the index as already walked. Measured
+    rather than assumed: removing the self-link drop fails the first assertion, while
+    reverting the marker's key alone still passes this test. So the self-link drop is what
+    makes the walk resume here, and the key change is why a page form nobody has written yet
+    cannot collide the same way. Both are in place because a marker that can collide is a
+    bug waiting for one.
+    """
+    # A front page, because that is where the bug bit: with no path prefix to prefer, the
+    # list is depth-ordered and `/` has depth zero, so the self-link was the first child the
+    # walk reached rather than the last.
+    front = f"https://{HOST}/"
+    pages = {
+        front: Page(
+            body="<html><body>"
+            '<a href="/">Home</a>'
+            '<a href="/one/">One</a>'
+            '<a href="/two/">Two</a>'
+            '<a href="/three/">Three</a>'
+            "</body></html>"
+        ),
+        f"{front}one/": Page(body=f'<a href="http://{FIRST}/">one</a>'),
+        f"{front}two/": Page(body=f'<a href="http://{SECOND}/">two</a>'),
+        f"{front}three/": Page(body=f'<a href="http://{THIRD}/">three</a>'),
+    }
+    transport = make_transport(clock, pages)
+    collector = Collector(
+        gate=gate,
+        transport=transport,
+        clock=clock,
+        policy=CollectionPolicy(
+            politeness=Politeness(min_host_delay_seconds=0.0, max_pages_per_source=4)
+        ),
+    )
+    scope = CollectionScope(directories=(front,))
+
+    collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
+    first_run = list(transport.requested)
+    assert first_run.count(front) == 1, "the walk fetched its own index page as a child"
+
+    transport.requested.clear()
+    collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
+    second_run = list(transport.requested)
+
+    assert f"{front}three/" in second_run, (
+        "a page linking home froze the directory: the next run thought it was finished"
+    )
+    assert f"{front}one/" not in second_run
+
+
+def test_a_truncated_index_says_that_the_cap_chose_not_the_site(gate, clock):
+    """A capped list read as complete is how a walk reports a site it never finished."""
+    links = "".join(f'<a href="/directory/p{i}/">{i}</a>' for i in range(6))
+    pages = {
+        BASE: Page(body=f"<html><body>{links}</body></html>"),
+    }
+    for i in range(6):
+        pages[f"{BASE}p{i}/"] = Page(body=f"<p>page {i}</p>")
+    transport = make_transport(clock, pages)
+    collector = Collector(
+        gate=gate,
+        transport=transport,
+        clock=clock,
+        policy=CollectionPolicy(
+            politeness=Politeness(min_host_delay_seconds=0.0, max_pages_per_source=3)
+        ),
+    )
+    scope = CollectionScope(directories=(BASE,))
+
+    report = collector.collect(
+        case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,)
+    )
+
+    summary = next(s for s in report.origins if s.origin == ORIGIN_ONION_LOCATION)
+    truncated = [n for n in summary.notes if "more pages than this walk may carry" in n]
+    assert truncated, summary.notes
+    assert "a larger page budget walks further" in truncated[0]

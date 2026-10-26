@@ -912,7 +912,11 @@ class Collector:
         how it wants to be read and deciding that did not apply. Where a host states no
         delay the run's own politeness setting governs, as it does everywhere else.
         """
-        source = checkpoint_source(ORIGIN_ONION_LOCATION, directory_url)
+        # A different key from any page this walk reads. The directory's marker and a
+        # page's "already read" marker used to be the same string when a page linked to
+        # itself, so fetching the index as its own child marked the directory as walked
+        # and the next run refused to continue. The marker now names the walk, not the URL.
+        source = checkpoint_source(ORIGIN_ONION_LOCATION, f"walk {directory_url}")
         prior = checkpoints.load(case_id, source)
         if prior and prior.completed:
             summary.notes.append(
@@ -938,7 +942,12 @@ class Collector:
             return
         remaining = max(0, budget.politeness.max_pages_per_source - budget.pages)
         cap = min(DEFAULT_PAGE_CAP, remaining)
-        children = child_pages(index_result.text, base_url=directory_url, limit=cap)
+        # One more than the walk may carry, so the list itself can report that it was cut.
+        # A walk that silently keeps the first N of an unknown number has no way to say
+        # whether it finished the index or stopped in the middle of it.
+        listed = child_pages(index_result.text, base_url=directory_url, limit=cap + 1)
+        truncated = len(listed) > cap
+        children = listed[:cap]
         robots_text = (
             self._robots_text(
                 directory_url, scope=scope, case_id=case_id, budget=budget
@@ -980,6 +989,14 @@ class Collector:
         summary.notes.append(
             f"{directory_url}: {len(children)} page(s) under it, cap {cap} for this run"
         )
+        if truncated:
+            # The cap chose, not the site. Saying so is the difference between "this
+            # index has 7 pages" and "this index has more than 7 and you read 7".
+            summary.notes.append(
+                f"{directory_url}: the page names more pages than this walk may carry, so "
+                f"the first {len(children)} were taken in the order the page lists them; "
+                "a larger page budget walks further into the same index"
+            )
         if not children and budget.exhausted:
             summary.notes.append(
                 "the page budget was spent before any page under this directory could be "

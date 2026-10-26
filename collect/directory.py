@@ -85,8 +85,17 @@ def sitemap_index_children(text: str) -> tuple[str, ...]:
 
 
 def same_host_pages(links: tuple[str, ...] | list[str], *, base_url: str) -> tuple[str, ...]:
-    """Keep the http(s) links that stay on the host the walk started from."""
+    """Keep the http(s) links that stay on the host the walk started from.
+
+    The page's own address is dropped. Almost every page links home -- the logo, the
+    breadcrumb, the wordmark in the footer -- and a self-link is not a page underneath the
+    one being read. Keeping it costs a fetch of a page already in hand, and, worse, it used
+    to be recorded under the same checkpoint key as the directory itself, so reading the
+    page a second time as its own child marked the whole directory as walked. That is how a
+    capped walk became unresumable: the second run was told the directory had been done.
+    """
     base_host = (urlsplit(base_url).hostname or "").lower()
+    base_page = urlsplit(base_url)._replace(fragment="").geturl().rstrip("/")
     kept: list[str] = []
     for link in links:
         absolute = urljoin(base_url, link.strip())
@@ -98,6 +107,8 @@ def same_host_pages(links: tuple[str, ...] | list[str], *, base_url: str) -> tup
         if parts.path.lower().endswith(_SKIP_SUFFIXES):
             continue
         cleaned = parts._replace(fragment="").geturl()
+        if cleaned.rstrip("/") == base_page:
+            continue
         if cleaned not in kept:
             kept.append(cleaned)
     return tuple(kept)

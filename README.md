@@ -925,7 +925,7 @@ tests/
   test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
                   opened, every hit citing the page behind it, declared seeds never offered
                   back, and a query asked again only when the index has actually grown
-  test_directory_walk.py 28 tests; a directory walk that stays on its host, keeps the cap,
+  test_directory_walk.py 30 tests; a directory walk that stays on its host, keeps the cap,
                   waits the delay robots.txt asks for, resumes per page when the budget
                   stops it, stops before its permit expires rather than losing the pages,
                   and never mistakes a facet link for an entry
@@ -1088,7 +1088,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   97-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (661 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (663 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
