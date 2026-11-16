@@ -107,6 +107,14 @@ def cmd_authorise(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_key_rotate(args: argparse.Namespace) -> int:
+    gate = _gate(args)
+    report = gate.rotate_permit_key(_principal(args), reason=args.reason)
+    print(json.dumps(report, indent=2))
+    print("every permit issued under the retired key stops verifying; mint a new one per case")
+    return 0
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     """Store one demonstration snapshot through the gate.
 
@@ -384,6 +392,13 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--method", default="shared favicon hash")
     _add_actor(render)
     render.set_defaults(func=cmd_render)
+
+    key = sub.add_parser("key", help="permit key operations")
+    key_sub = key.add_subparsers(dest="key_command", required=True)
+    rotate = key_sub.add_parser("rotate", help="replace the permit key and record why (admin only)")
+    rotate.add_argument("--reason", required=True, help="why the key is being replaced")
+    _add_actor(rotate)
+    rotate.set_defaults(func=cmd_key_rotate)
 
     audit = sub.add_parser("audit", help="audit log operations")
     audit_sub = audit.add_subparsers(dest="audit_command", required=True)

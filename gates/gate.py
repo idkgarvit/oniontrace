@@ -20,6 +20,12 @@ trying to start collection into a case that had already been purged?".
 
 from __future__ import annotations
 
+import logging
+
+from . import permissions
+
+logger = logging.getLogger(__name__)
+
 import hashlib
 import hmac
 import json
@@ -97,20 +103,147 @@ class CollectionGate:
         self.acknowledgements = AcknowledgementStore(self.root)
         self.confirm_threshold = confirm_threshold
         self._clock = clock
+        # A tree written before this module existed is the one that matters: it has been sitting
+        # there with a world-readable permit key. Close it, and report what was open rather than
+        # repairing it in silence -- an operator whose key was exposed needs to know.
+        self.permission_repairs = permissions.harden_tree(self.root)
+        if self.permission_repairs:
+            logger.warning(
+                "closed %d path(s) under %s that were readable or writable beyond their owner; "
+                "the first few were: %s",
+                len(self.permission_repairs), self.root,
+                ", ".join(str(p.relative_to(self.root)) for p in self.permission_repairs[:5]),
+            )
+
         self._key = self._load_key()
 
     # -- signing key ------------------------------------------------------- #
+
+    def rotate_permit_key(self, principal: Principal, *, reason: str) -> dict[str, str]:
+        """Replace the permit key, keep the old one as a record, and write down why.
+
+        The key was readable beyond its owner for as long as nobody looked, and a key that has been
+        readable cannot be told from a forged one -- `_load_key` says exactly that when it tightens
+        the mode, and then offered nothing to do about it. Deleting the file would mint a fresh key
+        on the next write, silently and without a record; this does the same thing deliberately,
+        with a reason attached and the retired key kept.
+
+        Every permit signed under the old key stops verifying. That is the point rather than a
+        side effect: after an exposure, permits that some unknown party may have minted are
+        precisely what has to stop working. A case mid-collection wants a new permit afterwards.
+
+        Deliberately *not* gated on the acceptable-use acknowledgement, for the reason `purge` is
+        not: an operator must always be able to answer a security problem, including when
+        something else has already gone wrong.
+        """
+
+        try:
+            require(principal, Permission.ROTATE_KEY)
+        except GateRefused as error:
+            self._refuse_now(principal, None, error)
+            raise
+
+        reason = (reason or "").strip()
+        if not reason:
+            raise GateRefused(
+                "E2.3",
+                "a rotation needs a reason: the trail is the only place a future reader can learn "
+                "why every permit issued before this date stopped verifying",
+            )
+
+        path = self._key_path()
+        if not path.exists():
+            raise GateRefused(
+                "E2.2",
+                f"there is no permit key at {path} to rotate. One is created on first use, and a "
+                "rotation records what it replaced, so there is nothing here to record.",
+            )
+
+        retired = bytes.fromhex(path.read_text(encoding="utf-8").strip())
+        replacement = secrets.token_bytes(32)
+        archived = self.root / f"permit.key.superseded-{self._clock()}"
+        # Archive before overwriting: if the archive fails, the live key is untouched and the
+        # rotation has simply not happened.
+        permissions.secure_write_text(archived, retired.hex())
+        permissions.secure_write_text(path, replacement.hex())
+        self._key = replacement
+
+        def fingerprint(key: bytes) -> str:
+            """Enough to tell two keys apart in the trail, not enough to use one.
+
+            The record says *that* the key changed and which one is which. Writing the key itself
+            into the audit would put the secret in the file more people read.
+            """
+
+            return hashlib.sha256(key).hexdigest()[:16]
+
+        self.audit._append(
+            action=AuditAction.KEY_ROTATED,
+            actor=principal,
+            case_id=None,
+            detail={
+                "reason": reason,
+                "retired_fingerprint": fingerprint(retired),
+                "replacement_fingerprint": fingerprint(replacement),
+                "retired_key_kept_as": archived.name,
+            },
+        )
+        return {
+            "retired_fingerprint": fingerprint(retired),
+            "replacement_fingerprint": fingerprint(replacement),
+            "retired_key_kept_as": str(archived),
+        }
 
     def _key_path(self) -> Path:
         return self.root / "permit.key"
 
     def _load_key(self) -> bytes:
+        """The HMAC key every permit is verified against.
+
+        Written owner-only. `write_text` gave this file the process umask, which on this machine
+        made it 0664: world-readable, so any local user could mint a permit for any case, and
+        group-writable, so any of them could replace the key instead. Either one defeats the check
+        the key exists to support, and a permit is this project's legal control.
+        """
         path = self._key_path()
         if path.exists():
+            if permissions._chmod(path, permissions.FILE_MODE):
+                logger.warning(
+                    "permit.key was readable beyond its owner; tightened to %s. Treat the key as "
+                    "exposed: a permit signed with it cannot be told from a forged one.",
+                    oct(permissions.FILE_MODE),
+                )
             return bytes.fromhex(path.read_text(encoding="utf-8").strip())
         key = secrets.token_bytes(32)
-        path.write_text(key.hex(), encoding="utf-8")
+        permissions.secure_write_text(path, key.hex())
         return key
+
+    def _current_key(self) -> bytes:
+        """The key on disk, re-read whenever it has changed.
+
+        A rotation happens in another process: an operator runs `python -m gates key rotate` while
+        a collector or the console is already up. Trusting the key this object read at construction
+        means that process keeps honouring permits signed with the retired key until it restarts,
+        which is the one outcome a rotation exists to prevent. One small file read per signature
+        settles it, and signing is not the hot path -- collection is network-bound.
+
+        A change is reported rather than absorbed, because "the key under me changed" is something
+        an operator wants to be told.
+        """
+
+        path = self._key_path()
+        if not path.exists():
+            # No key at all: create or re-read one rather than verify against a key nobody holds.
+            self._key = self._load_key()
+            return self._key
+        on_disk = bytes.fromhex(path.read_text(encoding="utf-8").strip())
+        if on_disk != self._key:
+            logger.warning(
+                "permit.key changed on disk since this process started; using the current key. "
+                "Permits signed under the previous key no longer verify."
+            )
+            self._key = on_disk
+        return self._key
 
     def _sign(self, permit: CollectionPermit) -> str:
         payload = json.dumps(
@@ -124,7 +257,7 @@ class CollectionGate:
             sort_keys=True,
             separators=(",", ":"),
         )
-        return hmac.new(self._key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.new(self._current_key(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
     # -- acknowledgements (E2.6) ------------------------------------------- #
 

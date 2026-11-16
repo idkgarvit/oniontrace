@@ -495,3 +495,37 @@ def test_a_hostile_payload_in_a_finding_renders_as_text(case):
     text = _pdf_text(r.content).replace(" ", "").replace("\n", "")
     assert "<img" in text
     assert 'data:image/x-eps;base64,AAAA">' in text
+
+
+# --------------------------------------------------------------------------------------- #
+# The icon, and why it is a test and not a flourish.
+# --------------------------------------------------------------------------------------- #
+
+
+def test_every_page_declares_its_own_icon(case):
+    """A page that declares no icon makes the browser ask for /favicon.ico, and the console
+    answered that with a 404 -- one failed request on every load.
+
+    It is recorded as a defect rather than a nicety because the project's own standard is
+    "zero errors, warnings or failed requests", and the console walkthrough reported this one
+    as its only problem: `console problems: 1`. A QA run that ends on a known 404 teaches the
+    next person to read past the count.
+
+    The icon is inline, so this also pins the reason it cannot rot: there is no file to lose
+    and no route that can start returning 404 again.
+    """
+    import base64
+    import re
+
+    client, cid, _ = case
+    for path in ("/", f"/case/{cid}"):
+        page = client.get(path).text
+        match = re.search(r'<link rel="icon" href="([^"]+)"', page)
+        assert match, f"{path} declares no icon, so the browser will request /favicon.ico"
+        uri = match.group(1)
+        assert uri.startswith("data:image/svg+xml;base64,"), (
+            f"{path} points its icon at {uri[:40]!r}; an external reference is a request that can fail"
+        )
+        svg = base64.b64decode(uri.split("base64,", 1)[1]).decode()
+        assert svg.startswith("<svg") and svg.endswith("</svg>"), "the icon is not a complete SVG"
+        assert 'viewBox="0 0 32 32"' in svg, "the icon has no viewBox, so it does not scale"

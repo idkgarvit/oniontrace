@@ -290,6 +290,42 @@ def render(results: dict[str, Any]) -> str:
         "aggregate it is often collapsed into.",
     ]
 
+    # --- M5 by writing regime -------------------------------------------------- #
+    # The code-mix block is the project's differentiator, and a lift reported only in aggregate
+    # cannot show that the block helps where it is supposed to and does not hurt the controls.
+    # Grouped here rather than in a note so the claim has a command behind it: if a regime is
+    # missing from this table, the block was never measured on it.
+    base = attribution["models"].get("combined")
+    gated = attribution["models"].get("combined_gated")
+    if base and gated:
+        regimes = sorted(set(base.get("style_breakdown") or {}))
+        out += [
+            "",
+            "### By writing regime (why the code-mix block exists)",
+            "",
+            "`combined` is function words plus behaviour; `combined_gated` adds code-mix features "
+            "only when the corpus that was observed actually mixes. Each row's `n` is the number "
+            "of queries in that regime, and a row with a small `n` moves a whole query at a time.",
+            "",
+            "| Regime | n | `combined` hit@1 | `combined_gated` hit@1 | change |",
+            "|---|---|---|---|---|",
+        ]
+        for regime in regimes:
+            a = (base["style_breakdown"][regime]["hit@1"])
+            b = (gated["style_breakdown"][regime]["hit@1"])
+            av = a["value"] if isinstance(a, dict) else a
+            bv = b["value"] if isinstance(b, dict) else b
+            out.append(
+                f"| `{regime}` | {base['style_breakdown'][regime]['n_queries']} "
+                f"| {_pct(av)} | {_pct(bv)} | {bv - av:+.3f} |"
+            )
+        out += [
+            "",
+            "A `pure_english` row that moves is not a contradiction: the gate changes how the "
+            "**candidates** are represented, so a monolingual query against a mixed pool can "
+            "shift by a query or two. That is why `n` sits beside every row.",
+        ]
+
     # --- E4 provenance -------------------------------------------------------- #
     provenance_result = modules["E4_provenance"]
     verification = provenance_result["verification"]

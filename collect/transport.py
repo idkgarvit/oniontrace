@@ -53,6 +53,10 @@ class FetchResult:
     body: bytes
     retrieved_at: str
     transport: str
+    #: The body was cut at the transport's byte cap, so what is stored is a prefix of what the
+    #: server sent. Recorded rather than inferred, because a truncated page and a short page look
+    #: identical once they are bytes, and an analyst reading a finding off one needs to know which.
+    truncated: bool = False
 
     @property
     def body_sha256(self) -> str:

@@ -34,6 +34,8 @@ can be checked afterwards.
 
 from __future__ import annotations
 
+from . import permissions
+
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -67,6 +69,7 @@ class AuditAction(str, Enum):
     EXPORT = "export"
     PURGE = "purge"
     GATE_REFUSED = "gate_refused"
+    KEY_ROTATED = "key_rotated"
 
 
 def _utc_now() -> str:
@@ -213,7 +216,7 @@ class AuditLog:
         self.path = self.root / "audit.jsonl"
         self.anchor_path = self.root / "audit.anchor.json"
         self._clock = clock
-        self.root.mkdir(parents=True, exist_ok=True)
+        permissions.secure_dir(self.root)
 
     # -- reading ----------------------------------------------------------- #
 
@@ -305,9 +308,9 @@ class AuditLog:
         chain-only check calls it clean. The anchor is the second, independent fact that
         makes removal-from-the-end detectable.
         """
-        self.anchor_path.write_text(
+        permissions.secure_write_text(
+            self.anchor_path,
             json.dumps({"count": count, "head_hash": head_hash}, sort_keys=True) + "\n",
-            encoding="utf-8",
         )
 
     # -- verification ------------------------------------------------------ #
@@ -480,8 +483,9 @@ class AuditLog:
             prev_hash=prev_hash,
             entry_hash=entry_hash,
         )
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry.to_dict(), sort_keys=True, default=str) + "\n")
+        permissions.secure_append_text(
+            self.path, json.dumps(entry.to_dict(), sort_keys=True, default=str) + "\n"
+        )
         # The anchor is updated only after the entry is durably written, so it never
         # claims an entry the log does not have.
         self._write_anchor(count=seq + 1, head_hash=entry_hash)

@@ -49,10 +49,16 @@ _TOPICS: tuple[str, ...] = tuple(TOPIC_VOCABULARY)
 # share a *kind* with the same value. Two clusters sharing a kind is fine and
 # realistic (both operators enabled mod_status); sharing a *value* is not, because
 # that would create an unlabelled false link in the ground truth.
+#: One entry per persona slot in a cluster, so the mix is deterministic and each regime the farm
+#: declares is actually built. Its length must equal `FarmConfig.personas_per_cluster`: with a
+#: longer cycle the trailing regimes fall past the last slot and are silently never generated. `HINGLISH_HEAVY` was in `StyleRegime` and absent from this tuple,
+#: which meant the one regime the code-mix block exists for was never generated: the feature was
+#: scored on light mixing only, at n=4, while the report described it as the differentiator.
+#: A regime that is declared and never instantiated is a design gap, not a smaller sample.
 _STYLE_CYCLE: tuple[StyleRegime, ...] = (
     StyleRegime.PURE_ENGLISH,
     StyleRegime.HINGLISH_LIGHT,
-    StyleRegime.PURE_ENGLISH,
+    StyleRegime.HINGLISH_HEAVY,
     StyleRegime.TEMPLATE_REUSER,
 )
 
@@ -617,6 +623,25 @@ def _build_abstention_cases(
 # --------------------------------------------------------------------------- #
 
 
+def assert_every_regime_is_instantiated(personas) -> None:
+    """Every style the farm declares must appear in the farm it generates.
+
+    This is not a completeness nicety. `HINGLISH_HEAVY` was declared in `StyleRegime` and never
+    instantiated, because the style cycle assigned slots by index and the regime sat past the last
+    persona slot in a cluster. Nothing noticed for the life of the project: the code-mix block was
+    scored on light mixing alone while the report called it the differentiator. A regime with no
+    personas is a claim with no data behind it, so the generator refuses to produce one.
+    """
+    built = {p.style for p in personas}
+    missing = [r.value for r in StyleRegime if r not in built]
+    if missing:
+        raise FarmConfigError(
+            f"style regime(s) {missing} are declared but no persona was generated with them; "
+            f"either widen n_personas_per_cluster to cover the style cycle "
+            f"({len(_STYLE_CYCLE)} slots) or remove the regime from StyleRegime"
+        )
+
+
 def generate_farm(cfg: FarmConfig | None = None) -> FarmTruth:
     """Build a complete, deterministic synthetic farm.
 
@@ -626,6 +651,7 @@ def generate_farm(cfg: FarmConfig | None = None) -> FarmTruth:
     """
     cfg = cfg or FarmConfig()
     validate_config(cfg)
+    # (the persona regimes are checked once they exist, below)
 
     rng = random.Random(cfg.seed)
 
@@ -671,6 +697,10 @@ def generate_farm(cfg: FarmConfig | None = None) -> FarmTruth:
         )
 
     abstention_cases = _build_abstention_cases(cfg, services, subjects, decoys)
+
+    # Checked over every persona the farm contains, subjects and decoys, because a regime that only
+    # exists on a decoy is still a regime the report will claim it measured.
+    assert_every_regime_is_instantiated(list(subjects) + list(decoys))
 
     return FarmTruth(
         config=cfg,

@@ -476,3 +476,38 @@ def test_real_farm_recovers_every_true_pair_with_no_false_positive(tmp_path):
     assert proposed == truth, (
         f"missed {sorted(truth - proposed)} / invented {sorted(proposed - truth)}"
     )
+
+
+def test_merge_reverse_merge_again_is_not_a_primary_key_collision(arts):
+    """Merge, undo, merge again has to work, and it is what an analyst actually does.
+
+    `merge_id` was a digest of (survivor, absorbed, utc_now()) at second resolution. `reverse_merge`
+    keeps the record it reverses, on purpose: "we merged these and changed our mind" is evidence.
+    So the second merge of the same pair inside the same second collided with the kept record and
+    died with `IntegrityError: UNIQUE constraint failed: merge_log.merge_id` -- a database error
+    where the operator expected their decision to be recorded. This project's own console
+    walkthrough performs exactly that sequence.
+    """
+    with GraphStore(":memory:", case_id="C") as store:
+        store.add_entity("ent-A", "A")
+        store.add_entity("ent-B", "B")
+        store.attach_service("ent-A", "s1")
+        store.attach_service("ent-B", "s2")
+        store.add_edge(
+            _edge("ent-A", ["s1"], {"favicon_sha256": "f"},
+                  "ent-B", ["s2"], {"favicon_sha256": "f"},
+                  {("favicon_sha256", "f"): 2})
+        )
+
+        ids = []
+        for round_ in range(3):
+            record = store.merge("ent-A", "ent-B", actor="a.sharma",
+                                 rationale=f"same favicon, attempt {round_ + 1}")
+            ids.append(record.merge_id)
+            store.reverse_merge(record.merge_id, actor="a.sharma", reason="not convinced")
+
+        assert len(set(ids)) == 3, f"merge ids collided: {ids}"
+        assert len(store.merge_log()) == 3, (
+            "every decision must survive in the log, including the reversed ones"
+        )
+        assert all(record.reversed_at for record in store.merge_log())

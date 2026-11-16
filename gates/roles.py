@@ -54,6 +54,7 @@ class Permission(str, Enum):
     EXPORT = "export"
     PURGE = "purge"
     READ_AUDIT = "read_audit"
+    ROTATE_KEY = "rotate_key"
 
 
 #: The minimum role for each permission. E2.4 fixes three of these explicitly: candidate
@@ -70,6 +71,9 @@ MINIMUM_ROLE: dict[Permission, Role] = {
     Permission.CLOSE_CASE: Role.CASE_OWNER,
     Permission.EXPORT: Role.CASE_OWNER,
     Permission.PURGE: Role.ADMIN,
+    # Rotating the permit key is how an exposure is answered, so it sits with purge rather than
+    # with the record-keeping permissions.
+    Permission.ROTATE_KEY: Role.ADMIN,
     Permission.READ_AUDIT: Role.ADMIN,
 }
 

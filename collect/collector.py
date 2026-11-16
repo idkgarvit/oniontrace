@@ -559,13 +559,17 @@ class Collector:
         seed_label: str,
         summary: OriginSummary,
         budget: Budget,
+        check_robots: bool = True,
     ) -> FetchResult | None:
-        """One fetch: scoped, throttled, recorded, and not raised out of for a dead host.
+        """One fetch: scoped, robots-checked, throttled, recorded, and not raised out of for a dead
+        host.
 
-        Scope is checked here rather than at the call sites because there are four call
-        sites and there must not be a fifth way to reach the transport. The check runs
-        before the throttle records a wait, so a refused target costs nothing and appears
-        nowhere in the exchange record.
+        Scope is checked here rather than at the call sites because there are nine of them, not
+        the four this comment claimed, and there must not be a tenth way to reach the transport.
+        The check runs before the throttle records a wait, so a refused target costs nothing and
+        appears nowhere in the exchange record.
+
+        See the note below about robots, which is enforced at the call sites and not here.
 
         A host that is gone is a finding, not an exception -- the audit and the WARC are
         better places to learn that than a crashed run. A crossed budget is also handled
@@ -583,6 +587,25 @@ class Collector:
                 "scope. The target list is what the case authorised; a request outside it "
                 "would be scope creep carried by a parser bug."
             )
+        if check_robots:
+            refusal = self._robots_refusal(
+                url, scope=scope, case_id=case_id, budget=budget, summary=summary
+            )
+            if refusal is not None:
+                summary.blocked_by_policy = True
+                summary.notes.append(refusal)
+                return None
+            # The lookup is a request to the same host and pays the same budget, so it can be the
+            # request that reaches the ceiling. Asking again here is the difference between
+            # stopping at the limit and stopping one request past it, and `Budget.exhausted` is
+            # explicit that the limit is on requests: "the requests it allowed after the limit are
+            # exactly the ones the limit exists to prevent".
+            if budget.exhausted:
+                summary.notes.append(
+                    f"{budget.label}: {self._budget_reason(budget)} on the robots lookup for "
+                    f"{host}; {url} was not requested"
+                )
+                return None
         if self._permit_closing():
             # A permit gates the ingest, not the request, so a page started a second before
             # it expires is fetched and then refused -- and the refusal takes every page the
@@ -596,15 +619,7 @@ class Collector:
             )
             return None
         if budget.exhausted:
-            # Named rather than assumed: "the page budget was reached" printed for a run
-            # stopped by bytes would send a reader looking in the wrong place.
-            if budget.pages >= budget.politeness.max_pages_per_source:
-                reason = f"page budget of {budget.politeness.max_pages_per_source} reached"
-            else:
-                reason = (
-                    f"byte budget of {budget.politeness.max_bytes_per_run} reached after "
-                    f"{budget.bytes} bytes"
-                )
+            reason = self._budget_reason(budget)
             summary.notes.append(
                 f"{budget.label}: {reason}; {url} was not requested -- the budget is a "
                 "ceiling on requests, not only on what is kept"
@@ -1044,12 +1059,25 @@ class Collector:
             return
         remaining = max(0, budget.politeness.max_pages_per_source - budget.pages)
         cap = min(DEFAULT_PAGE_CAP, remaining)
-        # One more than the walk may carry, so the list itself can report that it was cut.
-        # A walk that silently keeps the first N of an unknown number has no way to say
-        # whether it finished the index or stopped in the middle of it.
-        listed = child_pages(index_result.text, base_url=directory_url, limit=cap + 1)
-        truncated = len(listed) > cap
-        children = listed[:cap]
+        # Read the whole index before applying the cap. The cap is a page budget, not a
+        # prefix of the listing: filtering completed pages *after* truncating to the cap
+        # meant a resumed run looked at the same first N entries it had already read and
+        # never reached the entries behind them. That is what made a capped walk
+        # unresumable even though it correctly refused to mark itself finished.
+        listed = child_pages(index_result.text, base_url=directory_url, limit=None)
+        completed = {
+            child
+            for child in listed
+            if (
+                prior_child := checkpoints.load(
+                    case_id, checkpoint_source(ORIGIN_ONION_LOCATION, child)
+                )
+            )
+            and prior_child.completed
+        }
+        pending = [child for child in listed if child not in completed]
+        truncated = len(pending) > cap
+        children = pending[:cap]
         robots_text = (
             self._robots_text(
                 directory_url, scope=scope, case_id=case_id, budget=budget
@@ -1075,7 +1103,9 @@ class Collector:
             budget=budget,
             limit=cap - len(children),
             delay=delay,
-            exclude=children,
+            # Completed pages are excluded as well as the ones this run will read, or the
+            # map spends the walk's remaining room naming pages it has already read.
+            exclude=tuple(children) + tuple(completed),
         )
         if extra:
             # The map was fetched, and a map is a page. What it may fill is the room left
@@ -1083,7 +1113,19 @@ class Collector:
             # walk plans one page more than it may spend and always drops its last page.
             left = max(0, budget.politeness.max_pages_per_source - budget.pages)
             room = max(0, left - len(children))
-            children = children + extra[:room]
+            fresh = [
+                page
+                for page in extra
+                if not (
+                    (
+                        prior_page := checkpoints.load(
+                            case_id, checkpoint_source(ORIGIN_ONION_LOCATION, page)
+                        )
+                    )
+                    and prior_page.completed
+                )
+            ]
+            children = children + fresh[:room]
         # Reading a sitemap is a fetch like any other, so a walk that spent pages on the map
         # stops sooner. The list is not trimmed to the remaining budget here: pages already
         # read are skipped without spending any, so a trim would drop the very entries the
@@ -1194,15 +1236,25 @@ class Collector:
         summary.notes.append(
             f"{directory_url}: {carried} address(es) across {len(children)} page(s)"
         )
+        # `completed` has to mean "there was nothing left", and `truncated` is exactly the
+        # statement that there was: the index names more unread pages than this run's cap. Writing
+        # True beside it told the next run the directory was finished, so the entries the cap
+        # dropped were never read at all. A second visit is cheap because pages already read are
+        # skipped without spending budget.
         outcome.checkpoints.append(
             Checkpoint(
                 case_id=case_id,
                 source=source,
                 cursor=None,
                 pages_fetched=budget.pages - pages_before,
-                completed=True,
+                completed=not truncated,
             )
         )
+        if truncated:
+            summary.notes.append(
+                f"{directory_url}: read {len(children)} page(s) and left more, so this walk is "
+                "not marked finished -- a later run continues into the same index"
+            )
 
     #: How many sitemaps one walk may read, counting an index and the maps it names. A
     #: declared sitemap is a list of everything a site ever published; two is enough to find
@@ -1457,6 +1509,54 @@ class Collector:
 
     # -- path 3b: the public search engine, kept for the record ------------- #
 
+    def _budget_reason(self, budget: Budget) -> str:
+        """Which ceiling was reached, named rather than assumed.
+
+        "The page budget was reached" printed for a run stopped by bytes would send a reader
+        looking in the wrong place, and a robots lookup makes that easier to get wrong: it is a
+        request with no content behind it, so a byte ceiling can stop a run on a page nobody reads.
+        """
+
+        if budget.pages >= budget.politeness.max_pages_per_source:
+            return f"page budget of {budget.politeness.max_pages_per_source} reached"
+        return (
+            f"byte budget of {budget.politeness.max_bytes_per_run} reached after "
+            f"{budget.bytes} bytes"
+        )
+
+    def _robots_refusal(
+        self, url: str, *, scope, case_id, budget, summary: OriginSummary
+    ) -> str | None:
+        """The note explaining a policy refusal, or ``None`` when the path may be requested.
+
+        Robots was checked at each call site, and four of the nine `_fetch` call sites never
+        checked it -- the onion seeds, the declared clearnet pages, the directory children and the
+        Telegram walk. A rule that every caller has to remember is a rule that some of them
+        eventually do not, so it is enforced here, where scope is enforced, for the same reason:
+        nine call sites and no tenth way to reach the transport.
+
+        The operator override is honoured here rather than only at the call sites. A central check
+        that ignored `accept_source_policy` would quietly overrule a recorded human decision, which
+        is a worse failure than the missing check it replaces.
+        """
+
+        text = self._robots_text(url, scope=scope, case_id=case_id, budget=budget)
+        parts = urlsplit(url)
+        path = parts.path + (f"?{parts.query}" if parts.query else "")
+        allowed, why = verdict(text, path, user_agent=PRODUCT_TOKEN)
+        if allowed:
+            return None
+        if self.accept_source_policy:
+            summary.notes.append(
+                f"{parts.hostname}: {why}. --accept-source-policy records a human decision to use "
+                "the source anyway, and this run repeats it"
+            )
+            return None
+        return (
+            f"{parts.hostname}: {why}, so {url} was not requested. robots.txt is the host's own "
+            "statement of what it does not want requested"
+        )
+
     def _robots_text(self, url: str, *, scope, case_id, budget) -> str | None:
         """The host's robots file, fetched at most once per run.
 
@@ -1483,6 +1583,9 @@ class Collector:
                 seed_label="robots",
                 summary=probe,
                 budget=budget,
+                # Fetching robots.txt cannot ask robots.txt for permission first: the query is
+                # what would recurse, not the answer.
+                check_robots=False,
             )
             if result is not None and result.status == 200:
                 text = result.text

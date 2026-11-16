@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}ONIONTRACE{% endblock %}</title>
+<!-- A page that declares no icon makes every browser ask for /favicon.ico, and the console
+     answered that with a 404 -- one failed request on every load, which is exactly what the
+     console walkthrough reported as its only problem. Inline, so it costs no route, no file
+     and no request: the page cannot 404 for an icon it never asks for. -->
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzBlMTExNiIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjkuNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNGVhMWZmIiBzdHJva2Utd2lkdGg9IjIuMiIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjQuOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjN2VlMGMwIiBzdHJva2Utd2lkdGg9IjIuMiIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjEuNyIgZmlsbD0iIzdlZTBjMCIvPjwvc3ZnPg==">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>

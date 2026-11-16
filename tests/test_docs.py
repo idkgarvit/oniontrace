@@ -11,6 +11,7 @@ Both checks are cheap and neither needs the optional dependencies.
 
 from __future__ import annotations
 
+import functools
 import re
 import subprocess
 import sys
@@ -30,21 +31,40 @@ def _readme() -> str:
     return README.read_text(encoding="utf-8")
 
 
-def _collected(path: Path) -> int:
-    """Count tests without importing them into this session.
+@functools.lru_cache(maxsize=1)
+def _collected_everywhere() -> dict[str, int]:
+    """Test counts for the whole tests/ directory, in one collection pass.
 
-    Collecting in-process would register the module in this run's own suite and skew the
-    very number being checked.
+    Collecting in-process would register these modules in this run's own suite and skew the very
+    number being checked, so collection happens in a subprocess. One pass, not one per file: the
+    ratchet tests together walked every test file, and a subprocess each time cost 17 seconds of a
+    57 second suite to re-derive a number that cannot change while the run is going. The cache is
+    per-process, so a fresh run still collects freshly.
     """
 
     out = subprocess.run(
-        [sys.executable, "-m", "pytest", str(path), "--collect-only", "-q"],
+        [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q"],
         cwd=ROOT, capture_output=True, text=True,
     )
-    match = re.search(r"(\d+) tests? collected", out.stdout)
-    if match is None:
-        pytest.fail(f"could not collect {path}:\n{out.stdout}\n{out.stderr}")
-    return int(match.group(1))
+    counts: dict[str, int] = {}
+    for line in out.stdout.splitlines():
+        entry = line.strip()
+        if not entry.startswith("tests/") or "::" not in entry:
+            continue
+        counts[entry.split("::", 1)[0]] = counts.get(entry.split("::", 1)[0], 0) + 1
+    if not counts:
+        pytest.fail(f"could not collect tests/:\n{out.stdout}\n{out.stderr}")
+    return counts
+
+
+def _collected(path: Path) -> int:
+    """How many tests one file contributes, read from the single pass above."""
+
+    key = path.relative_to(ROOT).as_posix()
+    counts = _collected_everywhere()
+    if key not in counts:
+        pytest.fail(f"could not collect {path}; the pass found {len(counts)} files")
+    return counts[key]
 
 
 def test_readme_test_counts_match_the_suite():
@@ -171,3 +191,88 @@ def test_every_documented_command_has_a_parser_entry_point():
             broken.append(f"{name}: `python -m {name}` would not run ({where} missing or inert)")
 
     assert not broken, "README commands that do not resolve:\n  " + "\n  ".join(broken)
+
+
+# --------------------------------------------------------------------------------------- #
+# The milestone report carries numbers too, so the same rule applies to it.
+# --------------------------------------------------------------------------------------- #
+
+M2_REPORT = ROOT / "docs" / "m2" / "M2_REPORT.md"
+
+
+def _m2() -> str:
+    assert M2_REPORT.exists(), "the M2 report is a delivered artefact; its absence is a defect"
+    return M2_REPORT.read_text(encoding="utf-8")
+
+
+def test_m2_report_test_count_matches_the_suite():
+    """The report states the suite size in three places. A milestone document that overstates its
+    own evidence is the failure this whole file exists to prevent, so the number is checked against
+    the suite rather than trusted."""
+    text = _m2()
+    cited = {int(n) for n in re.findall(r"(\d{3,4}) tests", text)}
+    assert cited, "the report no longer states a test count; update this test"
+
+    collected = sum(_collected(f) for f in sorted((ROOT / "tests").glob("test_*.py")))
+    assert cited == {collected}, (
+        f"the M2 report cites {sorted(cited)} tests; the suite collects {collected}"
+    )
+
+
+def test_m2_report_farm_table_matches_the_built_farm():
+    """Every count in §3.2 is checked against out/farm.json, which is the artefact that produced it.
+
+    The first draft of that table said "approximately six clean controls" because it was written
+    from the plan's design target rather than from the farm that was built, which has two. The plan
+    and the artefact disagreed and nobody would have noticed.
+    """
+    import json
+
+    farm_path = ROOT / "out" / "farm.json"
+    if not farm_path.exists():
+        pytest.skip("no built farm to compare against; run `python -m farm write` first")
+    farm = json.loads(farm_path.read_text(encoding="utf-8"))
+
+    services = farm["services"]
+    clean = sum(1 for s in services if not s.get("flaws"))
+    expected = {
+        "Services": len(services),
+        "Deliberately clean controls": clean,
+        "Injected flaw entries": len(farm["flaws"]),
+        "Hard negatives (decoys and near-misses)": len(farm["hard_negatives"]),
+        "Personas": len(farm["personas"]),
+        "Abstention cases": len(farm["abstention_cases"]),
+    }
+
+    text = _m2()
+    wrong = []
+    for label, value in expected.items():
+        row = re.search(rf"^\|\s*{re.escape(label)}\s*\|\s*(\d+)", text, re.MULTILINE)
+        if row is None:
+            wrong.append(f"{label}: row not found in the report")
+            continue
+        if int(row.group(1)) != value:
+            wrong.append(f"{label}: report says {row.group(1)}, farm.json says {value}")
+
+    assert not wrong, "the M2 report's farm table has drifted from out/farm.json:\n  " + "\n  ".join(wrong)
+
+
+def test_m2_report_verdict_matches_the_full_check():
+    """A report may not claim a clean full check the project did not record."""
+    import json
+
+    result = ROOT / "out" / "full-check.json"
+    if not result.exists():
+        pytest.skip("no full-check result to compare against; run scripts/full_check.py first")
+    recorded = json.loads(result.read_text(encoding="utf-8"))
+    verdict = recorded.get("verdict") or ""
+    counts = recorded.get("counts") or {}
+
+    text = _m2()
+    assert "all 10 stages passed" in text, "the report no longer states the full-check verdict"
+
+    if counts.get("PASS", 0) != len(recorded.get("stages") or []):
+        pytest.fail(
+            f"the recorded full check is not clean ({counts}), so the report cannot say it is. "
+            f"Recorded verdict: {verdict!r}"
+        )

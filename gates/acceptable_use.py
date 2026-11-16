@@ -12,6 +12,8 @@ author, which is the thing that can be pointed at later.
 
 from __future__ import annotations
 
+from . import permissions
+
 import hashlib
 import json
 from dataclasses import asdict, dataclass
@@ -52,7 +54,7 @@ class AcknowledgementStore:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
         self.path = self.root / "acceptable-use-ack.json"
-        self.root.mkdir(parents=True, exist_ok=True)
+        permissions.secure_dir(self.root)
 
     def is_acknowledged(self) -> bool:
         return self.path.exists()
@@ -82,8 +84,9 @@ class AcknowledgementStore:
             acknowledged_at=now or utc_now(),
             statement_digest=statement_digest(),
         )
-        self.path.write_text(
-            json.dumps(asdict(record), indent=2, sort_keys=True), encoding="utf-8"
+        # Names a person and the digest of the statement they accepted.
+        permissions.secure_write_text(
+            self.path, json.dumps(asdict(record), indent=2, sort_keys=True)
         )
         return record
 

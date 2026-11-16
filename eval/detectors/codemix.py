@@ -34,6 +34,7 @@ and the report says so.
 
 from __future__ import annotations
 
+import functools
 import re
 from collections import Counter
 from itertools import pairwise
@@ -109,8 +110,14 @@ AMBIGUOUS_TOKENS: frozenset[str] = frozenset(
 )
 
 
+@functools.lru_cache(maxsize=1 << 16)
 def language_of(token: str) -> str:
     """Classify one token without context.
+
+    Cached because it is a pure function of one string and the vocabulary is small: a single
+    harness run asked it 6,258,240 times for 28,800 posts, which is 217 times per post, and the
+    answers come from three frozensets that cannot change during a run. The cache is bounded so a
+    long-lived process cannot grow it without limit.
 
     Returns ``AMBIGUOUS`` for a token that belongs to both languages; the caller
     resolves it against neighbouring tokens, which is the only way to be right about
@@ -126,8 +133,26 @@ def language_of(token: str) -> str:
     return UNKNOWN
 
 
+@functools.lru_cache(maxsize=1 << 14)
+def _tokens_cached(text: str) -> tuple[str, ...]:
+    return tuple(TOKEN.findall(text.lower()))
+
+
 def tokens(text: str) -> list[str]:
-    return TOKEN.findall(text.lower())
+    return list(_tokens_cached(text))
+
+
+@functools.lru_cache(maxsize=1 << 14)
+def _labels_for_text(text: str) -> tuple[str, ...]:
+    """Language labels for one piece of text, computed once.
+
+    `code_mix_ratio` and `switch_count` are both called for every post by `codemix_profile`, and
+    each used to re-tokenise the post and relabel every token. The labels depend on the text and
+    nothing else, so the second caller now reads the first caller's answer instead of paying for
+    it again.
+    """
+
+    return tuple(_label_sequence(text))
 
 
 def post_languages(post) -> list[str]:
@@ -142,7 +167,11 @@ def post_languages(post) -> list[str]:
     monolingual writer register a code-mix habit they do not have.
     """
 
-    raw = [language_of(t) for t in tokens(post.text)]
+    return list(_labels_for_text(post.text))
+
+
+def _label_sequence(text: str) -> list[str]:
+    raw = [language_of(t) for t in tokens(text)]
     resolved: list[str] = []
     for i, label in enumerate(raw):
         if label == AMBIGUOUS:
@@ -157,7 +186,7 @@ def code_mix_ratio(post) -> float:
     sides of the fraction so an English writer with unusual vocabulary does not
     register a spurious mix."""
 
-    labels = [l for l in post_languages(post) if l != UNKNOWN]
+    labels = [l for l in _labels_for_text(post.text) if l != UNKNOWN]
     if not labels:
         return 0.0
     return sum(1 for l in labels if l == HI) / len(labels)
@@ -170,7 +199,7 @@ def switch_count(post) -> int:
     measure tracks the writer's habit rather than the lexicon's coverage.
     """
 
-    known = [l for l in post_languages(post) if l != UNKNOWN]
+    known = [l for l in _labels_for_text(post.text) if l != UNKNOWN]
     return sum(1 for a, b in pairwise(known) if a != b)
 
 

@@ -78,6 +78,15 @@ class Recorder:
         self.requested.append(url)
         return self._inner.fetch(url)
 
+    @property
+    def pages(self) -> list[str]:
+        """What was requested of the source, without the robots policy probe.
+
+        Every host is asked once per run for robots.txt (see `Collector._fetch`), so it appears in
+        `requested`. Assertions about which pages a walk read mean pages.
+        """
+        return [url for url in self.requested if not url.endswith("/robots.txt")]
+
 
 def make_transport(clock, pages: dict[str, Page]) -> Recorder:
     return Recorder(
@@ -291,11 +300,11 @@ def test_a_capped_walk_resumes_where_it_stopped(gate, clock):
     scope = CollectionScope(directories=(BASE,))
 
     collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
-    first_run = list(transport.requested)
+    first_run = list(transport.pages)
     transport.requested.clear()
 
     collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
-    second_run = list(transport.requested)
+    second_run = list(transport.pages)
 
     # Run one spends its four pages on the directory, its robots file, and two entries.
     assert f"{BASE}one/" in first_run and f"{BASE}two/" in first_run
@@ -306,18 +315,67 @@ def test_a_capped_walk_resumes_where_it_stopped(gate, clock):
     assert f"{BASE}two/" not in second_run
 
 
+def test_a_capped_walk_advances_past_the_prefix_it_already_read(gate, clock):
+    """The cap must select unread pages, not the first N pages of the index.
+
+    With a three-page budget the index and its robots file leave room for exactly one
+    child. The earlier code truncated the listing to that one child and then skipped it
+    as already read, so every retry fetched the index and no new page. Five children,
+    three runs: each run must reach the next unread child.
+    """
+    names = ("one", "two", "three", "four", "five")
+    pages = {
+        BASE: Page(
+            body="<html><body>"
+            + "".join(f'<a href="/directory/{name}/">{name}</a>' for name in names)
+            + "</body></html>"
+        ),
+    }
+    for name in names:
+        pages[f"{BASE}{name}/"] = Page(body="<html><body>leaf</body></html>")
+
+    transport = make_transport(clock, pages)
+    scope = CollectionScope(directories=(BASE,))
+
+    seen: list[str] = []
+    for _ in range(3):
+        # A fresh collector per run, because the robots probe is cached on the instance:
+        # reusing it gives the second run two spare pages and hides the one-page case.
+        transport.requested.clear()
+        Collector(
+            gate=gate,
+            transport=transport,
+            clock=clock,
+            policy=CollectionPolicy(
+                politeness=Politeness(min_host_delay_seconds=0.0, max_pages_per_source=3)
+            ),
+        ).collect(
+            case_id=CASE,
+            principal=OWNER,
+            scope=scope,
+            origins=(ORIGIN_ONION_LOCATION,),
+        )
+        seen.extend(
+            url.rsplit("/directory/", 1)[-1]
+            for url in transport.requested
+            if url.startswith(BASE) and not url.endswith("robots.txt")
+        )
+
+    assert [name for name in seen if name] == ["one/", "two/", "three/"], seen
+
+
 def test_a_walked_directory_is_not_walked_again(gate, clock):
     transport = make_transport(clock, directory_pages())
     collector = collector_for(gate, transport, clock)
     scope = CollectionScope(directories=(BASE,))
     collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
-    first = len(transport.requested)
+    first = len(transport.pages)
 
     second = collector.collect(
         case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,)
     )
 
-    assert len(transport.requested) == first
+    assert len(transport.pages) == first
     summary = next(s for s in second.origins if s.origin == ORIGIN_ONION_LOCATION)
     assert any("not walked again" in note for note in summary.notes)
 
@@ -801,18 +859,29 @@ def test_a_page_that_links_home_does_not_walk_itself_as_a_child(gate, clock):
         transport=transport,
         clock=clock,
         policy=CollectionPolicy(
+            # Four pages: the robots lookup, the front page, and two of its three children. The
+            # robots request is charged because it is a request, which is what leaves one child
+            # for the second run to reach. That is the whole point of the test, so the number is
+            # load-bearing and expected to be exact.
             politeness=Politeness(min_host_delay_seconds=0.0, max_pages_per_source=4)
         ),
     )
     scope = CollectionScope(directories=(front,))
 
     collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
-    first_run = list(transport.requested)
+    first_run = list(transport.pages)
     assert first_run.count(front) == 1, "the walk fetched its own index page as a child"
+    assert f"{front}three/" not in first_run, (
+        "the first walk was supposed to be capped before the last child; without that there is no "
+        "resume to test"
+    )
 
+    print("FIRST:", transport.pages)
     transport.requested.clear()
-    collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
-    second_run = list(transport.requested)
+    second = collector.collect(case_id=CASE, principal=OWNER, scope=scope, origins=(ORIGIN_ONION_LOCATION,))
+    second_run = list(transport.pages)
+    print("SECOND:", second_run)
+    print("NOTES:", [n for o in second.origins for n in o.notes][:4])
 
     assert f"{front}three/" in second_run, (
         "a page linking home froze the directory: the next run thought it was finished"

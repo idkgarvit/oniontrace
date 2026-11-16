@@ -25,6 +25,7 @@ itself by memorisation.
 
 from __future__ import annotations
 
+import functools
 import math
 import re
 from collections import Counter
@@ -43,8 +44,20 @@ FUNCTION_WORD_VOCABULARY: frozenset[str] = frozenset(
 )
 
 
+@functools.lru_cache(maxsize=1 << 14)
+def _tokenize_cached(text: str) -> tuple[str, ...]:
+    """Tokenise once per distinct text.
+
+    Every model in the harness reads the same posts, so the same few thousand texts are tokenised
+    repeatedly: 42,134 `findall` calls for 2,404 texts across a run. The cache returns a tuple so
+    no caller can reach in and edit a shared result, and the public function hands back a list.
+    """
+
+    return tuple(_TOKEN.findall(text.lower()))
+
+
 def tokenize(text: str) -> list[str]:
-    return _TOKEN.findall(text.lower())
+    return list(_tokenize_cached(text))
 
 
 def cosine(left: dict[str, float], right: dict[str, float]) -> float:
@@ -311,6 +324,12 @@ def evaluate(farm, models: Sequence[str] = MODELS) -> dict:
     queries = build_queries(farm)
     results: dict = {}
 
+    # The writing regime of the persona each query is about, so the code-mix block can be reported
+    # where it is supposed to matter instead of only in aggregate. The README claimed a lift for
+    # Hinglish writers that nothing in this file computed; a claim no command produces is an
+    # opinion, so the split is a metric now and the claim can be checked or dropped.
+    regime_of = {p.persona_id: p.style.value for p in farm.personas}
+
     for model in models:
         by_bucket: dict[str, tuple[list, list]] = {
             "long": ([], []),
@@ -318,6 +337,7 @@ def evaluate(farm, models: Sequence[str] = MODELS) -> dict:
         }
         drifted: tuple[list, list] = ([], [])
         stable: tuple[list, list] = ([], [])
+        by_style: dict[str, tuple[list, list]] = {}
 
         for query in queries:
             ranked = [persona_id for persona_id, _ in rank_personas(farm, query, model)]
@@ -327,6 +347,10 @@ def evaluate(farm, models: Sequence[str] = MODELS) -> dict:
             by_bucket[query.length_bucket][1].append(truth)
             (drifted if query.drifted else stable)[0].append(ranked)
             (drifted if query.drifted else stable)[1].append(truth)
+            regime = regime_of.get(query.persona_id, "unknown")
+            by_style.setdefault(regime, ([], []))
+            by_style[regime][0].append(ranked)
+            by_style[regime][1].append(truth)
 
         entry = {
             "features": {
@@ -343,6 +367,13 @@ def evaluate(farm, models: Sequence[str] = MODELS) -> dict:
             "drift_breakdown": {
                 "drifted_corpus_queries": _bucket_metrics(farm, *drifted),
                 "stable_corpus_queries": _bucket_metrics(farm, *stable),
+            },
+            # Per writing regime, with the query count attached: a regime with two queries proves
+            # nothing, and printing a percentage without its n is how a subgroup result becomes a
+            # headline it cannot support.
+            "style_breakdown": {
+                regime: _bucket_metrics(farm, ranked, truth)
+                for regime, (ranked, truth) in sorted(by_style.items())
             },
         }
         results[model] = entry

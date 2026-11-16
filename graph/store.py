@@ -368,8 +368,20 @@ class GraphStore:
             "absorbed": self.entity(absorbed).to_dict(),
             "edge_status": EdgeStatus.CONFIRMED.value,
         }
+        # The id must be unique per *record*, not per pair-and-second. It was a digest of
+        # (survivor, absorbed, now) at second resolution, and `reverse_merge` keeps the record it
+        # reverses -- deliberately, because "we merged these and changed our mind" is evidence.
+        # So merge, undo, merge again inside one second collided on the primary key and the second
+        # merge died with an IntegrityError instead of working. That is not a rare sequence: it is
+        # what an analyst does when they are unsure, and it is what this project's own console
+        # walkthrough does. Counting the pair's prior merges keeps the id stable for a given state
+        # and distinct for every actual decision.
+        prior_merges = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM merge_log WHERE survivor = ? AND absorbed = ?",
+            (survivor, absorbed),
+        ).fetchone()["n"]
         rec = MergeRecord(
-            merge_id=f"mrg-{_digest([survivor, absorbed, utc_now()])[:16]}",
+            merge_id=f"mrg-{_digest([survivor, absorbed, utc_now(), str(prior_merges)])[:16]}",
             survivor=survivor,
             absorbed=absorbed,
             actor=actor,

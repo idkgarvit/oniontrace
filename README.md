@@ -39,6 +39,23 @@ acquisition package below runs against those same generated fixtures unless a hu
 
 ## Quick start
 
+### The console, in a window
+
+```bash
+run/oniontrace-gui                     # the analyst console, in a window of its own
+run/oniontrace-gui --case CASE-1       # open straight into a case
+```
+
+One command starts the local service on a free loopback port, waits until it answers, opens a
+Chromium app window (no address bar, no tabs, its own window class) and stops the service when you
+close the window. Nothing is left running behind it. There is no terminal interface to learn and no
+browser address to paste: the console is the product, so it opens like one.
+
+If no window shell is installed the launcher says so and prints the URL rather than failing
+silently, and `python -m dashboard` still serves the same console for a headless machine.
+
+### The pipeline, from the command line
+
 ```bash
 # The whole chain in one command: farm -> gates -> detect -> correlate -> attribute -> graph
 python -m oniontrace run --seed 20260925 --case CASE-1
@@ -221,20 +238,20 @@ result. The gap between the two is the measurement of whether the farm's hard ne
 are doing their job — if the careful and naive variants scored the same, the negative
 fixtures would be decoration.
 
-### Headline results (seed 20260925, farm `95fc7dacad08648c`)
+### Headline results (seed 20260925, farm `d1c3f9e8ef1ab5b3`)
 
 | Claim | Result |
 |---|---|
 | M2 rule detection — careful | **100% recall, 0 false positives** |
-| M2 rule detection — naive substring | 89.5% recall, 54.8% precision, 14 FP |
-| M2 correlation precision@1 — naive → frequency-filtered | **0.750 → 1.000** (random baseline 0.182) |
+| M2 rule detection — naive substring | 89.5% recall, 44.7% precision, 21 FP |
+| M2 correlation precision@1 — naive → frequency-filtered | **0.750 → 1.000** (random baseline 0.154) |
 | M2 correlation link precision — naive → filtered | **0.207 → 1.000** (false-merge 0.793 → 0.000) |
 | M2 correlation at the frozen threshold | link precision **0.571** — thresholding alone does *not* fix it |
 | M3 entity precision — exact → placeholder-blocklisted | **0.571 → 1.000** (decoy false merges 6/6 → 0/6) |
-| M5 style drift — content vs function words | **100% → 31.2%** vs **50% → 75.0%** (a crossover) |
-| E4 provenance | 83 entries verified; a planted mutation detected, then restored clean |
+| M5 style drift — paired within-persona | content **16/16 → 0/16**; function words **11/16 → 13/16** (McNemar p=3.1e-05 vs 0.50); four stable personas are the placebo |
+| E4 provenance | 88 entries verified; a planted mutation detected, then restored clean |
 | Retrieval abstention | **0/4 → 4/4** correct abstentions once the frozen threshold is applied |
-| M5 code-mix block (gated at mix ≥ 0.20) | Hinglish writers **0.500 → 0.750**; English and template reusers unchanged |
+| M5 code-mix block (gated at mix ≥ 0.20) | Hinglish-heavy writers **0.500 → 0.750**, Hinglish-light **0.250 → 0.750**, template reusers **unchanged**; pure English +0.125 (n=8, one query) |
 
 Two of these are worth reading closely.
 
@@ -244,11 +261,14 @@ produce *perfect* scores, so no threshold can separate them from genuine cluster
 artefacts. Only frequency filtering does (1.000). Publishing the thresholded number
 without the unthresholded one would have hidden this.
 
-**The drift result is a crossover, not a ranking.** Under drift, content words collapse
-(100% → 31.2%) while function words hold (50% → 75.0%). Reported one-sided, "function
-words are drift-robust" would be indistinguishable from "function words are always
-weak" — which is why the pre-drift column is kept as a control and
-`test_drift_separates_content_words_from_function_words` asserts *both* directions.
+**The drift result is paired, and the pairing is the point.** The earlier table compared different
+personas before and after drift. With `posts_per_persona=12`, every drifted persona's held-out
+posts sit after the drift point, so its "pre-drift" column could only contain template reusers:
+two populations, not one. The replacement fixes one profile per persona, generates 24 posts, puts
+the drift at post 12, and moves only the query window. Content vocabulary collapses from 16/16 to
+0/16 (McNemar p=3.1e-05) while function words move from 11/16 to 13/16 (p=0.50). Four stable
+personas are the placebo, and their small movements are why the 16/16 collapse is the number that
+matters. Full record: `out/experiments.json` and `out/experiments.md`.
 
 ### Two measurement defects found by attacking the harness
 
@@ -360,9 +380,19 @@ python -m gates ingest --case CASE-1 --actor a.sharma --role case_owner
 python -m gates audit verify
 python -m gates audit tail --case CASE-1 --actor root --role admin
 
+# If the permit key has ever been readable beyond its owner, answer it rather than live with it
+python -m gates key rotate --actor root --role admin \
+    --reason "permit.key was 0664 until the mode repair on 2026-11-10"
+
 # The demo: every refusal, in order
 python -m gates demo
 ```
+
+`key rotate` archives the retired key, writes the reason and a fingerprint of each key onto the
+trail, and mints a replacement. Every permit the old key signed stops verifying, which is the
+point: after an exposure, permits that some unknown party may have minted are exactly what has to
+stop working. A process that is already running picks the change up on its next signature check
+rather than at restart, because rotation only works if it reaches the collector that is mid-run.
 
 ### What is enforced, and how
 
@@ -907,16 +937,18 @@ oniontrace/
   cli.py         `run`, `show` and `env`; exit code 1 when any stage failed or the preflight failed
 tests/
   test_pipeline.py 13 tests; pins stage failure recording, reproducibility, per-case run dirs
-  test_graph.py  27 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
-  test_dashboard.py 25 tests; pins route refusals, traversal rejection, evidence-pack limits,
+  test_graph.py  28 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
+  test_dashboard.py 26 tests; pins route refusals, traversal rejection, evidence-pack limits,
                    injection through collected values, and the origin/CSP boundary
+  test_demo_accuracy.py 6 tests; scores the built demo case against the farm it came from --
+                  per-link precision and recall, hard negatives, singletons, findings
   test_farm.py   65 tests; each locks in a property a reported metric depends on
   test_eval.py   69 tests; each pins what a number in the report is allowed to mean
-  test_gates.py  97 tests; each asserts a refusal, or that the refusal is on the record
-  test_docs.py    5 tests; README counts, layout paths and documented commands vs reality
+  test_gates.py 105 tests; each asserts a refusal, or that the refusal is on the record
+  test_docs.py    8 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
-  test_collect.py 77 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 81 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
   test_environment.py 26 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
@@ -948,10 +980,14 @@ tests/
   test_local_index.py 12 tests; the keyword origin answered by the local index -- no socket
                   opened, every hit citing the page behind it, declared seeds never offered
                   back, and a query asked again only when the index has actually grown
-  test_directory_walk.py 33 tests; a directory walk that stays on its host, keeps the cap,
+  test_directory_walk.py 34 tests; a directory walk that stays on its host, keeps the cap,
                   waits the delay robots.txt asks for, resumes per page when the budget
-                  stops it, stops before its permit expires rather than losing the pages,
-                  and never mistakes a facet link for an entry
+                  stops it, advances past a prefix it has already read, stops before its
+                  permit expires rather than losing the pages, and never mistakes a facet
+                  link for an entry
+  test_experiments.py 5 tests; the paired drift design, the seed and topology sweeps,
+                  the cap ablation, and the query-level significance tests stay paired
+                  and deterministic
 ```
 
 ## Base rates are measured, not chosen
@@ -1099,7 +1135,7 @@ Implemented:
   resumable cursors that advance only after an ingest, a seed-proposal queue an analyst
   decides on, WARC records for the raw exchanges, and an operator CLI with no default
   transport. Fixture-verified: every test runs against in-memory pages, and the live
-  transport is dark. 85-test suite across `tests/test_collect.py` and
+  transport is dark. 97-test suite across `tests/test_collect.py` and
   `tests/test_collect_cli.py`.
 - **Evaluation harness** (Part G item 4) — by-cluster splits, threshold freezing with a
   safe-abstain fallback, six modules scored (M1 collection integrity on the fixture seam,
@@ -1110,8 +1146,8 @@ Implemented:
   signed collection permits, per-case seeds, purge with a kept tombstone, append-only
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
-  97-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (666 today, after `graph/`, `dashboard/`, the code-mix
+  105-test suite (nine of them pinning audit-trail truncation and damage reporting).
+  **284 tests pass in total.** (695 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
@@ -1210,11 +1246,27 @@ python3 scripts/full_check.py                # terminal
 python3 scripts/full_check.py --live --html out/full-check.html   # page that fills in as it goes
 ```
 
-Eight stages in order: the test suite, the paper verifier, the diagrams, the deck, the
-pipeline end to end, the gates' refusals, the execution environment, and certificate
-transparency against real logs. Exit code is 0 only when every stage passed, and a stage whose
-precondition is absent reports SKIP rather than PASS, because an unrun check that reports
-success is the failure mode the script exists to catch.
+Ten stages in order: the test suite, the paper verifier, the diagrams, the deck, the pipeline
+end to end, the base-rate sensitivity check, the certificate-transparency ground truth, the
+gates' refusals, the execution environment, and certificate transparency against real logs.
+(The count is checked against the report by `tests/test_docs.py`, so this list and the run
+have to agree.) Exit code is 0 only when every stage passed, and a stage whose precondition is
+absent reports SKIP rather than PASS, because an unrun check that reports success is the
+failure mode the script exists to catch.
+
+**A stale result file can block its own replacement.** `out/full-check.json` is both written by
+this script and read by `tests/test_docs.py`, which refuses to let the M2 report claim a clean
+check the project has not recorded. A run that ends dirty therefore fails its own test suite
+stage on the next attempt, and no amount of re-running makes the file clean again. To record a
+fresh clean check, move the old file aside first, then run:
+
+```bash
+mv out/full-check.json /tmp/full-check.stale.json   # so the ratchet skips instead of failing
+python3 scripts/full_check.py                       # with Tor running, for the two live stages
+```
+
+Removing a stale artefact is not editing evidence: the replacement is produced by the run.
+Hand-editing the file to make it pass would be, and the ratchet exists to stop exactly that.
 
 ### The stage has to say it passed
 
@@ -1289,6 +1341,47 @@ These found four defects that the route tests could not: the case and index page
 with no `H1` at all (headings started at `H2` and `H3`), the merge operation had a route but
 no control, edge cards carried no stable identifier in the DOM, and the render audit counted
 the "No notes yet" placeholder as a note.
+
+## Is the demo case actually right?
+
+The console shows a case, and a case with twelve links on it looks the same whether those
+twelve are the twelve true pairs or twelve plausible-looking wrong ones. So the demo case is
+scored against the ground truth it was generated from, item by item:
+
+```bash
+python3 scripts/qa/demo_accuracy.py                  # prints the report, exit 0 whenever it ran
+python3 scripts/qa/demo_accuracy.py --json out/demo/demo-accuracy.json
+```
+
+It answers four questions, and each one names the wrong answers rather than counting them:
+every proposed link against the real operator clusters (precision and recall, with false
+proposals listed alongside the artefacts that supported them and missed pairs listed by
+address); whether any link rests *only* on a widespread artefact, which is this project's
+headline failure; every injected single-service flaw against the findings, with the missed
+ones listed; and whether anything was linked to a service that has no cluster-mate at all,
+which is what the abstention cases exist to catch.
+
+Measured on 2026-11-11, `CASE-DEMO` against `out/farm.json` (seed 20260925):
+
+```
+links
+  proposed 12, of which true 12, false 0
+  true pairs in the farm 12, of which found 12, missed 0
+  precision 1.000   recall 1.000
+  0 proposals are supported only by hard-negative class artefacts
+  no link touches a singleton service, which is what the abstention cases test
+
+findings
+  recorded 19, explained by a single-service injected flaw 19 of 19
+  18 further injected entries are cluster-scope shared artefacts, which are linking
+  evidence and are scored above, not findings
+  no finding fires on a service with nothing injected
+```
+
+`tests/test_demo_accuracy.py` runs the same scoring and pins those numbers, so the demo
+cannot quietly stop being right. The farm's correlation ground truth is synthetic: these
+numbers say the pipeline is right about a world that was built to be scored, not about a world
+nobody has labelled.
 
 ## Rebuilding the deck
 

@@ -123,13 +123,18 @@ def child_pages(
     text: str,
     *,
     base_url: str,
-    limit: int = DEFAULT_PAGE_CAP,
+    limit: int | None = DEFAULT_PAGE_CAP,
 ) -> tuple[str, ...]:
     """The pages worth reading underneath ``base_url``, from a sitemap or from links.
 
     Pages under the same path prefix as the page that was read come first, because a
     directory entry lives beside the directory. Pages elsewhere on the host follow, in
     document order, so a site that lists its entries somewhere else still yields them.
+
+    ``limit=None`` returns every candidate. A resumable walk needs that: to find the
+    pages it has not read yet it has to look past the prefix the previous run already
+    consumed, and a limit applied before completion is filtered is what made a capped
+    walk re-read its own first pages for ever.
     """
     if looks_like_sitemap(text):
         candidates = same_host_pages(sitemap_urls(text), base_url=base_url)
@@ -143,7 +148,8 @@ def child_pages(
         # site in the order it published: `/news/2026/09/17/a-headline/` sits beside
         # `/directory/`. Sections are shallower than articles, so depth orders the list.
         # Python's sort is stable, so URLs of equal depth keep the host's own order.
-        return tuple(sorted(candidates, key=_depth))[:limit]
+        ordered = sorted(candidates, key=_depth)
+        return tuple(ordered if limit is None else ordered[:limit])
 
     under_prefix = tuple(url for url in candidates if urlsplit(url).path.startswith(prefix))
     elsewhere = tuple(url for url in candidates if url not in set(under_prefix))
@@ -154,7 +160,7 @@ def child_pages(
     plain = tuple(url for url in under_prefix if not urlsplit(url).query)
     faceted = tuple(url for url in under_prefix if urlsplit(url).query)
     ordered = plain + faceted + elsewhere
-    return ordered[:limit]
+    return ordered if limit is None else ordered[:limit]
 
 
 def onions_in(text: str) -> tuple[str, ...]:

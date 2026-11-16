@@ -11,12 +11,56 @@ purge would leave a residue describing collection that no longer exists. Nothing
 """
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
 from .errors import CheckpointError
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """Write so a reader sees the old file or the new one, never half of either.
+
+    `Path.write_text` truncates and then writes, so a crash, a kill or a full disk between those
+    two steps leaves a file that parses only by luck. A checkpoint is the thing that makes a walk
+    resumable, and a torn one is worse than a missing one: the cursor is gone either way, but a
+    corrupt file is *present*, so the walk cannot quietly start over and the operator finds a
+    decode error instead of a decision to make. Write to a sibling, flush it, and rename it into
+    place, which on POSIX is atomic.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def _read_json(path: Path, what: str) -> Any:
+    """Parse a state file, or say what is wrong with it in the caller's own words.
+
+    An unhandled `JSONDecodeError` from here reaches the operator as a Python traceback naming a
+    line inside `json`, which tells them nothing about the file or what to do with it.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CheckpointError(
+            f"the {what} at {path} could not be read ({type(exc).__name__}: {exc}). It is most "
+            "likely a write that was interrupted, since these files are replaced atomically now. "
+            "Deleting it makes that source walk again from the start, which re-fetches pages that "
+            "were already stored -- decide that deliberately rather than by accident."
+        ) from exc
 
 
 @dataclass
@@ -70,7 +114,7 @@ class CheckpointStore:
         path = self._path(source)
         if not path.exists():
             return None
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = _read_json(path, "checkpoint")
         payload["_expected_case"] = case_id
         checkpoint = Checkpoint.from_dict(payload)
         if checkpoint.case_id != case_id:
@@ -83,9 +127,7 @@ class CheckpointStore:
         path = self._path(checkpoint.source)
         path.parent.mkdir(parents=True, exist_ok=True)
         checkpoint.updated_at = self._clock.now().isoformat()
-        path.write_text(
-            json.dumps(checkpoint.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
-        )
+        _write_atomic(path, json.dumps(checkpoint.to_dict(), indent=2, sort_keys=True))
         return checkpoint
 
     def sources(self) -> tuple[str, ...]:
@@ -119,8 +161,7 @@ class ProposalStore:
     def pending(self) -> tuple[dict[str, Any], ...]:
         if not self.path.exists():
             return ()
-        payload = json.loads(self.path.read_text(encoding="utf-8"))
-        return tuple(payload.get("proposals", ()))
+        return tuple(_read_json(self.path, "proposal queue").get("proposals", ()))
 
     def record(self, case_id: str, proposals: Iterable[dict[str, Any]]) -> int:
         """Merge proposals by seed, keeping the first discovery note. Return new count.
@@ -129,8 +170,11 @@ class ProposalStore:
         produce three identical review items, or the queue an analyst works through stops
         being a list of things they have not decided yet.
         """
-        known = {str(item.get("seed")) for item in self.pending()}
-        merged = list(self.pending())
+        # Read once: `pending()` parses the file, and this method used to call it twice per
+        # record, which is a parse of the whole queue for every batch appended to it.
+        existing = self.pending()
+        known = {str(item.get("seed")) for item in existing}
+        merged = list(existing)
         added = 0
         for item in proposals:
             seed = str(item.get("seed", ""))
@@ -147,9 +191,9 @@ class ProposalStore:
             added += 1
         if added:
             self._dir.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(
+            _write_atomic(
+                self.path,
                 json.dumps({"case_id": case_id, "proposals": merged}, indent=2, sort_keys=True),
-                encoding="utf-8",
             )
         return added
 

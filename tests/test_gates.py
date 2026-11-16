@@ -1221,3 +1221,168 @@ def test_a_clean_trail_reports_that_it_was_anchored(acked, open_case):
     assert unanchored["verified"] is True
     assert unanchored["anchored"] is False
     assert "cannot be ruled out" in unanchored["anchor_note"]
+
+
+# --------------------------------------------------------------------------------------- #
+# File modes. The gate tree is evidence and secrets at once, and it shipped at 0664.
+# --------------------------------------------------------------------------------------- #
+
+
+def test_the_permit_key_is_not_readable_by_anyone_but_its_owner(tmp_path):
+    """`permit.key` signs collection permits, and a permit is this project's legal control.
+
+    It was written with `Path.write_text` and inherited the process umask, which made it 0664:
+    world-readable, so any local user could mint a permit for any case and any principal, and
+    group-writable, so any of them could replace the key instead. Every gate check still passes
+    when the signature is theirs to produce, so nothing else in this file would have caught it.
+    """
+    import stat
+
+    from gates.gate import CollectionGate
+
+    root = tmp_path / "gate"
+    CollectionGate(root)
+    mode = stat.S_IMODE((root / "permit.key").stat().st_mode)
+
+    assert not mode & stat.S_IROTH, f"the permit key is world-readable ({oct(mode)})"
+    assert not mode & stat.S_IWGRP, f"the permit key is group-writable ({oct(mode)})"
+    assert mode == 0o600, f"expected owner-only, got {oct(mode)}"
+
+
+def test_no_file_in_the_gate_tree_is_open_to_group_or_other(tmp_path):
+    """Snapshots hold a target's page, the audit log is the record, and the anchor is what the
+    audit is checked against. Group-writable log *and* anchor means a group member can rewrite
+    both consistently, which is the forgery the E4 stage assumes an adversary cannot do without
+    privilege. Confidentiality and integrity, in one assertion."""
+    from gates import permissions
+    from gates.gate import CollectionGate
+
+    root = tmp_path / "gate"
+    gate = CollectionGate(root)
+    gate.acknowledge(Principal(principal_id="analyst", role=Role.CASE_OWNER))
+
+    open_ = permissions.loosened_paths(root)
+    assert not open_, "paths readable or writable beyond their owner: " + ", ".join(
+        str(p.relative_to(root)) for p in open_
+    )
+
+
+def test_an_existing_loose_tree_is_repaired_and_the_repair_is_reported(tmp_path):
+    """The tree already on disk is the one that matters: it has had a world-readable permit key
+    since the day it was created. Repairing it silently would leave the operator unaware their
+    key was exposed, so the gate records what it closed."""
+    import os
+    import stat
+
+    from gates import permissions
+    from gates.gate import CollectionGate
+
+    root = tmp_path / "gate"
+    root.mkdir()
+    key = root / "permit.key"
+    key.write_bytes(b"0" * 64)
+    os.chmod(key, 0o664)
+
+    gate = CollectionGate(root)
+
+    assert stat.S_IMODE(key.stat().st_mode) == 0o600
+    assert any(p.name == "permit.key" for p in gate.permission_repairs), (
+        "the key was tightened without being reported"
+    )
+    assert not permissions.loosened_paths(root)
+
+
+# --------------------------------------------------------------------------- #
+# Rotating the permit key
+# --------------------------------------------------------------------------- #
+
+
+def test_a_rotation_stops_every_permit_the_exposed_key_signed(acked, open_case):
+    """What an exposure needs is invalidation, and there was no way to ask for it.
+
+    `_load_key` warns that a key which has been readable cannot be told from a forged one, and
+    until this operation existed the only answers were to leave it or to delete the file and let
+    the next write mint a key in silence. The property below is the one that matters: a permit
+    minted before the rotation stops verifying after it, because permits that some unknown party
+    minted with the exposed key are exactly what has to stop working.
+    """
+
+    permit = acked.authorise_collection(open_case, OWNER)
+    acked.verify_permit(permit, OWNER)  # valid while the key it was signed under is the key
+
+    report = acked.rotate_permit_key(
+        ADMIN, reason="permit.key was world-readable until 2026-11-10"
+    )
+    assert len(report["retired_fingerprint"]) == 16, "a fingerprint, not the key"
+    assert report["replacement_fingerprint"] != report["retired_fingerprint"]
+
+    with pytest.raises(GateRefused):
+        acked.verify_permit(permit, OWNER)
+
+    fresh = acked.authorise_collection(open_case, OWNER)
+    acked.verify_permit(fresh, OWNER)
+
+
+def test_the_retired_key_is_kept_owner_only_and_the_trail_says_why(acked, open_case):
+    """The old key is a record, not a spare: it stays, it is closed, and the reason is written.
+
+    Deleting it would make the rotation unreviewable -- nobody could later check which key signed
+    what and when it stopped. Writing *the key* into the audit would put the secret in the file
+    more people can read, so the trail carries a fingerprint instead.
+    """
+
+    live_before = (acked.root / "permit.key").read_text(encoding="utf-8").strip()
+    report = acked.rotate_permit_key(ADMIN, reason="routine rotation after the mode repair")
+    archived = Path(report["retired_key_kept_as"])
+    assert archived.exists(), "the retired key is kept for the record"
+    assert oct(archived.stat().st_mode & 0o777) == "0o600"
+
+    logged = [e for e in acked.audit.entries() if e.action == AuditAction.KEY_ROTATED]
+    assert len(logged) == 1
+    assert "routine rotation" in logged[0].detail["reason"]
+    assert logged[0].detail["retired_fingerprint"] == report["retired_fingerprint"]
+    assert logged[0].detail["replacement_fingerprint"] == report["replacement_fingerprint"]
+    # The trail records that the key changed and which one is which. It must not record the key:
+    # the audit is read by more people than the key file is.
+    assert live_before not in json.dumps(logged[0].detail), "the key itself must not be in the trail"
+    assert (acked.root / "permit.key").read_text(encoding="utf-8").strip() != live_before
+    assert acked.audit.verify()["verified"], "the rotation appends to a chain it keeps intact"
+
+
+def test_only_an_admin_may_rotate_the_key_and_the_refusal_is_recorded(acked):
+    """A key rotation is a security response, so it sits with purge rather than with reading."""
+
+    with pytest.raises(GateRefused):
+        acked.rotate_permit_key(OWNER, reason="because I would like to")
+
+    assert not [e for e in acked.audit.entries() if e.action == AuditAction.KEY_ROTATED]
+    assert [e for e in acked.audit.entries() if e.action == AuditAction.GATE_REFUSED]
+
+
+def test_a_rotation_without_a_reason_is_refused(acked):
+    """The reason is the only thing that explains a date full of permits that stopped verifying."""
+
+    with pytest.raises(GateRefused):
+        acked.rotate_permit_key(ADMIN, reason="   ")
+
+
+def test_a_rotation_in_another_process_reaches_a_gate_that_is_already_running(
+    acked, open_case, clock
+):
+    """The process that minted the permit is not the process that rotates the key.
+
+    An operator rotates from the CLI while a collector or the console is already up. A gate that
+    trusted the key it read at construction would keep honouring permits signed with the exposed
+    key until it was restarted, which is the failure a rotation exists to prevent -- and it is
+    invisible, because everything it does looks like a successful verification.
+    """
+
+    permit = acked.authorise_collection(open_case, OWNER)
+    acked.verify_permit(permit, OWNER)
+
+    # A second gate on the same tree stands in for the rotating process.
+    elsewhere = CollectionGate(acked.root, clock=clock)
+    elsewhere.rotate_permit_key(ADMIN, reason="rotated from another process")
+
+    with pytest.raises(GateRefused):
+        acked.verify_permit(permit, OWNER)

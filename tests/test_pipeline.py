@@ -88,14 +88,26 @@ def test_ambiguous_tokens_are_resolved_by_context():
 
 # -- models ------------------------------------------------------------- #
 def test_existing_models_are_unchanged_by_the_new_block(farm):
-    """The paper quotes these. A refactor must not move them."""
+    """The `combined` model must not be disturbed by the code-mix block being added beside it.
+
+    The values moved once, deliberately, and this comment is here so the next person does not
+    treat that as drift to be reverted. `_STYLE_CYCLE` used to be `(PE, HL, PE, TR)`, so of 16
+    subject personas half were pure English and `HINGLISH_HEAVY` was never generated at all: the
+    regime the code-mix block exists for had no data, and the farm did not match the plan's own
+    "M = 4 personas per cluster, each with a controlled style regime". The cycle is now one
+    persona per regime, which is what moved these numbers: the corpus contains heavy-mix writers,
+    so retrieving a persona from it is a different task than it was.
+
+    The invariant this test protects is that `combined` is still the published `combined`; the
+    paper quotes these values and must be re-run when they move.
+    """
 
     from eval.detectors import attribution
 
     result = attribution.evaluate(farm, models=("combined",))
     long_hit = result["models"]["combined"]["long"]["hit@1"]["value"]
     short_hit = result["models"]["combined"]["short"]["hit@1"]["value"]
-    assert (long_hit, short_hit) == (0.5, pytest.approx(0.357143, abs=1e-5))
+    assert (long_hit, short_hit) == (0.5, pytest.approx(0.571429, abs=1e-5))
 
 
 def test_gated_model_scores_and_never_falls_below_ungated(farm):

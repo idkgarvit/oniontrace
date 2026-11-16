@@ -332,17 +332,57 @@ class LiveTransport:
                 proxies=proxies or None,
                 timeout=self.settings.timeout_seconds,
                 allow_redirects=False,
+                # `max_bytes` is a memory bound, and reading the whole body before slicing it is
+                # not one. Onion content is attacker-controlled: a page that answers with
+                # gigabytes was buffered in full by the client and only then truncated, so the
+                # cap protected the database and not the process.
+                stream=True,
             )
+            body, truncated = self._read_capped(response, self.settings.max_bytes)
         except Exception as exc:  # noqa: BLE001 - dependency errors are opaque by nature
             raise TransportUnavailable(f"live fetch of {url} failed: {exc}") from exc
         return FetchResult(
             url=url,
             status=int(response.status_code),
             headers={str(k): str(v) for k, v in dict(response.headers).items()},
-            body=response.content[: self.settings.max_bytes],
+            body=body,
             retrieved_at=self._clock.now().isoformat(),
             transport=self.name,
+            truncated=truncated,
         )
+
+    @staticmethod
+    def _read_capped(response, limit: int) -> tuple[bytes, bool]:
+        """Read at most `limit` bytes and stop, rather than reading everything and slicing.
+
+        Returns the bytes and whether the cap was reached, so a caller can tell a truncated page
+        from a short one. The connection is closed either way: an abandoned stream holds a socket
+        and a Tor circuit open for as long as the process lives.
+        """
+        read_chunk = getattr(response, "iter_content", None)
+        if read_chunk is None:
+            # A stand-in without streaming in front of it still gets capped, not trusted.
+            body = bytes(getattr(response, "content", b"") or b"")[:limit]
+            return body, len(body) >= limit
+        chunks: list[bytes] = []
+        total = 0
+        try:
+            for chunk in read_chunk(chunk_size=65536):
+                if total >= limit:
+                    break
+                if not chunk:
+                    continue
+                take = chunk[: limit - total]
+                chunks.append(take)
+                total += len(take)
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 - closing is best effort on the way out
+                    pass
+        return b"".join(chunks), total >= limit
 
     @staticmethod
     def _require_dependency():

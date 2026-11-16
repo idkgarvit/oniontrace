@@ -18,6 +18,8 @@ deletion unaccountable. The audit log is in a separate tree and is untouched by 
 
 from __future__ import annotations
 
+from . import permissions
+
 import json
 import shutil
 from dataclasses import asdict, dataclass, field
@@ -93,7 +95,7 @@ class CaseStore:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
         self.cases_root = self.root / "cases"
-        self.cases_root.mkdir(parents=True, exist_ok=True)
+        permissions.secure_dir(self.cases_root)
 
     def _dir(self, case_id: str) -> Path:
         if not case_id or "/" in case_id or case_id in {".", ".."}:
@@ -184,9 +186,9 @@ class CaseStore:
         return Case(**json.loads(path.read_text(encoding="utf-8")))
 
     def _write(self, case: Case) -> None:
-        self._dir(case.case_id).mkdir(parents=True, exist_ok=True)
-        self._record(case.case_id).write_text(
-            json.dumps(case.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
+        permissions.secure_dir(self._dir(case.case_id))
+        permissions.secure_write_text(
+            self._record(case.case_id), json.dumps(case.to_dict(), indent=2, sort_keys=True)
         )
 
     def seal(self, case_id: str, now: str | None = None) -> Case:
@@ -232,10 +234,12 @@ class CaseStore:
         """Persist one captured snapshot under the case, returning its name."""
         self.require_collectable(case_id)
         directory = self.snapshots_dir(case_id)
-        directory.mkdir(parents=True, exist_ok=True)
+        permissions.secure_dir(directory)
         name = f"snapshot-{len(list(directory.glob('snapshot-*.json'))):04d}.json"
-        (directory / name).write_text(
-            json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8"
+        # A snapshot holds a target's page. It is the last file in this tree that should be
+        # readable by whoever happens to be logged in.
+        permissions.secure_write_text(
+            directory / name, json.dumps(payload, indent=2, sort_keys=True, default=str)
         )
         return name
 
@@ -273,13 +277,13 @@ class CaseStore:
         self.require_collectable(case_id)
         current = self.decisions(case_id)
         current[self.link_key(left, right)] = decision
-        self._decisions_path(case_id).write_text(
+        permissions.secure_write_text(
+            self._decisions_path(case_id),
             json.dumps(
                 {key: value.to_dict() for key, value in current.items()},
                 indent=2,
                 sort_keys=True,
             ),
-            encoding="utf-8",
         )
 
     def clear_decision(self, case_id: str, left: str, right: str) -> LinkDecision | None:
@@ -293,13 +297,13 @@ class CaseStore:
         removed = current.pop(self.link_key(left, right), None)
         if removed is None:
             return None
-        self._decisions_path(case_id).write_text(
+        permissions.secure_write_text(
+            self._decisions_path(case_id),
             json.dumps(
                 {key: value.to_dict() for key, value in current.items()},
                 indent=2,
                 sort_keys=True,
             ),
-            encoding="utf-8",
         )
         return removed
 

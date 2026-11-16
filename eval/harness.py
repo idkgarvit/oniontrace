@@ -602,9 +602,15 @@ def _limitations(farm, split) -> list[str]:
         "Frequency filtering addresses widespread vendor-default artefacts and not "
         "coincidental ones. The coincidental class needs a maintained blocklist of known "
         "defaults, which this implementation does not have.",
-        f"Rules without an implemented negative fixture: {gaps}. Their false-positive "
-        "rates are measured only against true positives and are therefore optimistic; "
-        "this is reported rather than left implied.",
+        (
+            "Every rule has an implemented hard-negative fixture: the false-positive "
+            "rate is measured against a fixture that trips the rule's pattern without "
+            "its meaning, so no rule is scored only against true positives."
+            if not gaps
+            else f"Rules without an implemented negative fixture: {gaps}. Their "
+            "false-positive rates are measured only against true positives and are "
+            "therefore optimistic; this is reported rather than left implied."
+        ),
         "Provenance establishes byte consistency against a recorded digest. It is not "
         "chain of custody and does not establish admissibility.",
     ]

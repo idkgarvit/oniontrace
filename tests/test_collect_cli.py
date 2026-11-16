@@ -15,6 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 
+import re
+
 import pytest
 
 from collect.cli import main
@@ -178,7 +180,13 @@ def test_a_fixture_run_stores_findings_and_leaves_the_seed_list_to_the_analyst(r
     out = capsys.readouterr().out
 
     assert code == 0
-    assert "BUDGET" in out and "pages=1/" in out
+    # Two requests, one page. The budget is a ceiling on requests and the run asked the host for
+    # robots.txt before reading the index, so the BUDGET line counts the lookup. The README's own
+    # example says the same thing in words: "twenty-six bytes is the robots file itself". The
+    # per-origin row below counts pages, and that is one, because a policy lookup is not a page of
+    # the source. Both numbers are right and they answer different questions.
+    assert "BUDGET" in out and "pages=2/50" in out, out
+    assert re.search(r"public_index\s+pages=1\s", out), out
     assert gate.cases.get(CASE).seeds == [], "a search result must never become a seed"
     names = gate.cases.snapshot_names(CASE)
     assert len(names) == 1, "the results page is stored whole, once"

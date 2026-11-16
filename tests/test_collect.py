@@ -73,6 +73,16 @@ def gate(tmp_path, clock) -> CollectionGate:
     return gate
 
 
+def pages_fetched(transport) -> list[str]:
+    """What the collector requested of the source, without the robots probe.
+
+    Every host is asked for robots.txt once per run, deliberately (see `_fetch`), so the probe
+    appears in a transport's record alongside the pages. Assertions below are about the pages a
+    walk asked for; counting the probe would make them fail for the right behaviour.
+    """
+    return [url for url in transport.fetched if not url.endswith("/robots.txt")]
+
+
 @pytest.fixture
 def case(gate) -> str:
     gate.open_case(
@@ -479,7 +489,7 @@ def test_the_history_walk_visits_every_page_and_stops_on_the_empty_one(clock, ga
     report = collector.collect(case_id=case, principal=OWNER, scope=scope)
 
     # Three pages of messages, then the page that says there is no more history.
-    assert transport.fetched == [
+    assert pages_fetched(transport) == [
         preview_url(CHANNEL),
         preview_url(CHANNEL, before=1005),
         preview_url(CHANNEL, before=1002),
@@ -492,7 +502,11 @@ def test_the_history_walk_visits_every_page_and_stops_on_the_empty_one(clock, ga
     store = CheckpointStore(gate.cases.derived_dir(case), clock=clock)
     saved = store.load(case, checkpoint_source(ORIGIN_TELEGRAM, CHANNEL))
     assert saved is not None and saved.completed is True
-    assert saved.pages_fetched == 4
+    # Five, not four: the four message pages plus the robots lookup for the host. The checkpoint
+    # records what the run spent on this source and the budget counts requests rather than pages of
+    # content, so the lookup is in here -- and a resume that ignored it would under-count the
+    # budget it has already used.
+    assert saved.pages_fetched == 5
 
     keys = {s["dedupe_key"] for s in stored_snapshots(gate) if s["origin"] == ORIGIN_TELEGRAM}
     assert keys == {f"{CHANNEL}/{1000 + index}" for index in range(1, 8)}
@@ -533,7 +547,7 @@ def test_a_cursor_that_will_not_advance_stops_the_walk(clock, gate, case):
 
     report = collector.collect(case_id=case, principal=OWNER, scope=scope)
 
-    assert len(transport.fetched) == 2, "the walk must not re-request the same page"
+    assert len(pages_fetched(transport)) == 2, "the walk must not re-request the same page"
     assert any(
         "cursor did not advance" in note for note in summary_for(report, ORIGIN_TELEGRAM).notes
     )
@@ -547,7 +561,10 @@ def test_the_page_budget_stops_a_walk_and_the_stored_cursor_resumes_it(clock, ga
     """A budget stop mid-history must leave a cursor, or the older messages are lost."""
     messages = messages_for(CHANNEL, 9)
     transport = telegram_transport(clock, CHANNEL, messages, page_size=3)
-    tight = Politeness(min_host_delay_seconds=0.0, max_pages_per_source=2)
+    # Three, not two: one request goes on the robots lookup for the host and two on message
+    # pages, which is the two-page stop this test is about. With a budget of two the walk reads a
+    # single message page, which is a stop but not the one described below.
+    tight = Politeness(min_host_delay_seconds=0.0, max_pages_per_source=3)
     scope = CollectionScope(telegram_channels=(CHANNEL,))
 
     first = make_collector(gate, transport, clock, politeness=tight).collect(
@@ -568,7 +585,7 @@ def test_the_page_budget_stops_a_walk_and_the_stored_cursor_resumes_it(clock, ga
         case_id=case, principal=OWNER, scope=scope
     )
 
-    assert transport.fetched[2] == preview_url(CHANNEL, before=1004)
+    assert pages_fetched(transport)[2] == preview_url(CHANNEL, before=1004)
     assert summary_for(second, ORIGIN_TELEGRAM).stored == 3
     finished = store.load(case, checkpoint_source(ORIGIN_TELEGRAM, CHANNEL))
     assert finished is not None and finished.completed is True
@@ -590,7 +607,12 @@ def test_the_budget_is_one_ceiling_for_the_whole_run(gate, case, fixtures, scope
 
     assert report.page_ceiling == 4
     assert report.budget_pages == 4
+    # Four requests, counted as requests: two pages of content and the two robots lookups that
+    # asked permission for their hosts first. This test pins that the ceiling is shared across the
+    # whole run rather than granted per path, so it has to count everything the ceiling stopped --
+    # counting only content pages would hide half of what it is measuring.
     assert len(fixtures.transport.fetched) == 4
+    assert len(pages_fetched(fixtures.transport)) == 2
     notes = [note for summary in report.origins for note in summary.notes]
     assert any("was not requested" in note for note in notes), notes
 
@@ -604,12 +626,56 @@ def test_a_request_that_crosses_the_byte_ceiling_is_the_last_request_of_the_run(
 
     report = collector.collect(case_id=case, principal=OWNER, scope=scope)
 
+    # One request, and it is the robots lookup: a byte ceiling of one stops the run on its first
+    # request, and asking permission is a request. What the test pins is that the limit stopped
+    # the run rather than only stopping the filing, so the count is of requests, not of bodies.
     assert len(fixtures.transport.fetched) == 1
+    assert len(pages_fetched(fixtures.transport)) == 0
     assert report.snapshots_stored == 0
     assert report.budget_bytes > report.byte_ceiling
     notes = [note for summary in report.origins for note in summary.notes]
-    assert any("budget stop" in note for note in notes), notes
+    # The run stops before the next request rather than after it: the robots lookup crossed the
+    # ceiling, and the note names the ceiling and reports the request that was not made. That is
+    # the stronger half of what this test was written for -- a limit that still allowed requests
+    # would be a filing rule. The fetched-but-not-recorded path is its own test below, because
+    # reaching it needs a ceiling the lookup fits under.
     assert any("byte budget" in note for note in notes), notes
+    assert any("was not requested" in note for note in notes), notes
+
+
+def test_a_page_whose_own_body_crosses_the_byte_ceiling_is_not_recorded(gate, case, clock):
+    """The request that crosses the ceiling cannot be un-made, so the page is fetched and dropped.
+
+    The ceiling is measured once the body has arrived, which means one request can always be the
+    one that crosses it. What matters then is that the page is not kept and that the run says so:
+    a case holding a page whose ceiling was supposedly already reached is a case whose own limit
+    nobody can check. This is the `budget stop` branch, and it needs a ceiling the robots lookup
+    fits under -- with the lookup over the limit the run stops before the content request and the
+    branch is never reached at all.
+    """
+    page = "https://publisher.example/where-to-find-us"
+    robots = "User-agent: *\n"
+    transport = FixtureTransport(
+        clock=clock,
+        hosts=("publisher.example",),
+        pages={
+            "https://publisher.example/robots.txt": Page(body=robots),
+            page: Page(body="<html><body>" + ("y" * 400) + "</body></html>"),
+        },
+    )
+    # One byte more than the robots file, so the lookup is paid for and the page is not.
+    tight = Politeness(min_host_delay_seconds=0.0, max_bytes_per_run=len(robots.encode()) + 1)
+    collector = make_collector(gate, transport, clock, politeness=tight)
+    report = collector.collect(
+        case_id=case, principal=OWNER, scope=CollectionScope(clearnet_pages=(page,))
+    )
+
+    assert transport.fetched[0].endswith("/robots.txt"), "the lookup goes first"
+    assert page in transport.fetched, "the page is requested before the ceiling can stop it"
+    assert report.snapshots_stored == 0, "a page past the ceiling must not be recorded"
+    notes = [note for summary in report.origins for note in summary.notes]
+    assert any("budget stop" in note for note in notes), notes
+    assert any("no partial body" in note for note in notes), notes
 
 
 def test_the_report_prints_what_the_run_spent_against_which_ceiling(
@@ -851,8 +917,9 @@ def test_a_search_query_with_a_slash_does_not_break_its_checkpoint(gate, case, f
     store = CheckpointStore(gate.cases.derived_dir(case), clock=clock)
     assert store.sources() == (checkpoint_source(ORIGIN_AHMIA, query),)
     saved = store.load(case, checkpoint_source(ORIGIN_AHMIA, query))
-    # Per source, not the run total: the field is named for the source it describes.
-    assert saved is not None and saved.pages_fetched == 1
+    # Per source, not the run total: the field is named for the source it describes. Two, because
+    # the source was also asked for its robots file, and that request was made to this source.
+    assert saved is not None and saved.pages_fetched == 2
 
 
 def test_a_corrupt_cursor_is_refused_before_the_request(clock, gate, case):
@@ -1211,13 +1278,18 @@ def test_ahmia_resolves_and_is_permitted_on_this_network():
 def test_a_redirect_is_recorded_as_a_refusal_not_as_an_empty_ranking(
     gate, case, fixtures, clock
 ):
-    """A 302 is a refusal wearing a status code.
+    """A refusal is not an empty ranking, and the host is asked before we find out which it is.
 
-    Found against the live index: ahmia.fi answered 302 to '/' for a search query, and the
-    run reported "0 candidate addresses parsed" with errors=0. Both of those are true and
-    together they are a lie -- the source refused the query, and a reader would have
-    concluded nothing ranked. Nothing is stored for a refusal either, because an empty
-    results page and a refusal are different facts about the world.
+    Found against the live index: ahmia.fi answered 302 to '/' for a search query, and the run
+    reported "0 candidate addresses parsed" with errors=0. Both true, and together a lie: the
+    source refused the query and a reader would have concluded nothing ranked.
+
+    The first version of this test pinned a note that quoted the host's own `Disallow: /search/`
+    while the collector fetched the path anyway. That note was papering over a hole: robots was
+    enforced at some call sites and not others, and the search path was one of the others. It is
+    enforced in `_fetch` now, so the same fixture produces the stronger outcome -- nothing is
+    requested at all -- and the note says so instead of explaining a 302 that should not have
+    been reached.
     """
     query = fixtures.seed_query
     transport = FixtureTransport(
@@ -1246,10 +1318,9 @@ def test_a_redirect_is_recorded_as_a_refusal_not_as_an_empty_ranking(
 
     summary = next(s for s in report.origins if s.origin == ORIGIN_AHMIA)
     note = " ".join(summary.notes)
-    assert "302" in note
-    assert "refusal" in note
     assert "Disallow: /search/" in note, "the source's own rule is the explanation"
-    assert "Onion-Location" in note, "a refusal can still publish an address for itself"
+    assert "was not requested" in note, "the disallowed path was fetched anyway"
+    assert "302" not in note, "a request that is never made cannot come back a redirect"
     assert summary.stored == 0, "a refusal is not a results page and must not be stored"
     assert not [s for s in stored_snapshots(gate) if s["origin"] == ORIGIN_AHMIA]
     assert not report.proposals, "a refused query proposes nothing"
@@ -1441,3 +1512,175 @@ def test_the_certificate_log_host_is_no_longer_allowed():
 
     assert "crt.sh" not in CLEARNET_ALLOWANCE
     assert "t.me" in CLEARNET_ALLOWANCE
+
+
+# --------------------------------------------------------------------------------------- #
+# The byte cap is a memory bound, which means it has to be enforced while reading.
+# --------------------------------------------------------------------------------------- #
+
+
+class _BigResponse:
+    """A response that could hand over far more than the cap, and remembers how much was taken."""
+
+    def __init__(self, chunk: bytes, chunk_count: int) -> None:
+        self.status_code = 200
+        self.headers = {"Content-Type": "text/html"}
+        self._chunk = chunk
+        self._chunk_count = chunk_count
+        self.chunks_served = 0
+        self.closed = False
+        #: Set if anything reads `.content`, which in a real client means the whole body was
+        #: already pulled into memory. This is the property under test, so it is observable.
+        self.content_buffered = False
+
+    @property
+    def content(self) -> bytes:
+        self.content_buffered = True
+        return self._chunk * self._chunk_count
+
+    def iter_content(self, chunk_size: int = 0):
+        for _ in range(self._chunk_count):
+            self.chunks_served += 1
+            yield self._chunk
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_a_live_fetch_stops_reading_at_the_byte_cap(monkeypatch):
+    """`max_bytes` was applied to `response.content`, which is after the whole body is in memory.
+
+    Onion pages are attacker-controlled, so a host that answers with gigabytes was buffered in
+    full by the client and only then truncated: the cap protected the database and not the
+    process. The property that matters is not "the stored bytes were cut" but "the client stopped
+    reading", which is what this asserts.
+    """
+    import sys
+    import types
+
+    from collect.live import LiveSettings, LiveTransport, is_non_public_address
+
+    cap = 1024
+    response = _BigResponse(b"x" * 4096, chunk_count=1000)
+    calls: dict[str, object] = {}
+
+    def fake_get(url, **kwargs):
+        calls.update(kwargs)
+        calls["url"] = url
+        return response
+
+    fake = types.ModuleType("requests")
+    fake.get = fake_get
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    # The real guard resolves the host over DNS, which a test must not do.
+    monkeypatch.setattr("collect.live.is_non_public_address", lambda host: (False, "public"))
+
+    class Clock:
+        def now(self):
+            from datetime import datetime, timezone
+            return datetime.now(timezone.utc)
+
+    transport = LiveTransport(
+        authorised_mode=True,
+        settings=LiveSettings(socks_host=None, max_bytes=cap),
+        clock=Clock(),
+    )
+    result = transport.fetch("https://t.me/s/example")
+
+    assert calls.get("stream") is True, (
+        "the body was fetched without stream=True, so the cap is applied after buffering"
+    )
+    assert len(result.body) == cap, f"stored {len(result.body)} bytes against a cap of {cap}"
+    assert result.truncated is True, "a cut body was not reported as cut"
+    assert response.chunks_served < 1000, (
+        f"read all {response.chunks_served} chunks; the client did not stop at the cap"
+    )
+    assert not response.content_buffered, (
+        "the body was buffered in full before being capped, which is what max_bytes must prevent"
+    )
+    assert response.closed, "the stream was left open, holding a socket and a circuit"
+
+
+# --------------------------------------------------------------------------------------- #
+# Resumability. A checkpoint that cannot be read is worse than one that is missing.
+# --------------------------------------------------------------------------------------- #
+
+
+def test_a_torn_checkpoint_says_what_is_wrong_instead_of_a_json_traceback(gate, clock):
+    """`write_text` truncates then writes, so an interrupted write leaves a partial file.
+
+    `load` called `json.loads` with nothing around it, so that partial file surfaced as a
+    JSONDecodeError raised from inside the json module: no path, no cause, and nothing about the
+    choice the operator actually faces. A file that is present but unreadable is also worse than a
+    missing one, because it blocks the source instead of letting the walk start it again.
+    """
+    opened = gate.open_case(
+        OWNER, case_id="CASE-TORN",
+        title="t", authorisation_ref="AUTH-1", retention_days=30,
+    )
+    derived = gate.cases.derived_dir(opened.case_id)
+    store = CheckpointStore(derived, clock=clock)
+
+    path = derived / "checkpoints" / "telegram-demo.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"case_id": "CASE-TORN", "source": "telegram-demo", "curs', encoding="utf-8")
+
+    with pytest.raises(CheckpointError) as raised:
+        store.load("CASE-TORN", "telegram-demo")
+
+    message = str(raised.value)
+    assert str(path) in message, "the error does not name the file to look at"
+    assert "could not be read" in message, message
+    assert "walk again from the start" in message, (
+        "the error does not say what deleting it would cost"
+    )
+
+
+def test_saving_a_checkpoint_replaces_it_rather_than_writing_over_it(gate, clock, monkeypatch):
+    """The cursor being replaced must be intact until the instant it is replaced.
+
+    The first version of this test made `json.dumps` raise and asserted the old file survived. It
+    passed against a plain `write_text` too, because the failure happened before any write: it was
+    testing argument evaluation, not atomicity. The property that actually matters is that the
+    target is never truncated -- so this watches the rename. With `write_text` there is no rename
+    at all and the assertion below fails, which is the bite.
+    """
+    import os as os_module
+    from pathlib import Path
+
+    case = gate.open_case(
+        OWNER, case_id="CASE-ATOMIC",
+        title="t", authorisation_ref="AUTH-1", retention_days=30,
+    )
+    derived = gate.cases.derived_dir(case.case_id)
+    store = CheckpointStore(derived, clock=clock)
+
+    store.save(Checkpoint(case_id="CASE-ATOMIC", source="telegram-demo", cursor="page-7",
+                          pages_fetched=7, completed=False, updated_at=""))
+
+    import collect.checkpoints as checkpoints
+
+    seen: dict[str, str] = {}
+    real_replace = os_module.replace
+
+    def vibing_replace(src, dst, *args, **kwargs):
+        # Whatever is at the destination right now is the old cursor, because the new one has only
+        # been written to the sibling file so far.
+        seen["target_at_replace"] = Path(dst).read_text(encoding="utf-8")
+        return real_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(checkpoints.os, "replace", vibing_replace)
+    store.save(Checkpoint(case_id="CASE-ATOMIC", source="telegram-demo", cursor="page-9",
+                          pages_fetched=9, completed=False, updated_at=""))
+    monkeypatch.undo()
+
+    assert "target_at_replace" in seen, (
+        "no rename happened, so the checkpoint was written in place and a crash mid-write would "
+        "leave a truncated file where a readable one used to be"
+    )
+    assert '"page-7"' in seen["target_at_replace"], (
+        "the file was truncated before the new content was ready"
+    )
+    assert store.load("CASE-ATOMIC", "telegram-demo").cursor == "page-9"
+    leftovers = [p for p in (derived / "checkpoints").iterdir() if p.suffix == ".tmp"]
+    assert not leftovers, f"a temporary file was left behind: {leftovers}"

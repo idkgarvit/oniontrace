@@ -85,6 +85,11 @@ def main() -> int:
         if src.exists():
             shutil.copy2(src, DROP / "frozen" / name)
     (DROP / "frozen").mkdir(parents=True, exist_ok=True)
+    for name in ("experiments.json", "experiments.md"):
+        src = ROOT / "out" / name
+        if src.exists():
+            (DROP / "experiments").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, DROP / "experiments" / name)
     env = "\n".join([
         f"git rev-parse HEAD : {sh('git', 'rev-parse', 'HEAD')}",
         f"git status         : {sh('git', 'status', '--porcelain') or '(clean)'}",
@@ -100,6 +105,19 @@ def main() -> int:
         "reproduce:  python -m pytest -q",
     ])
     write("frozen/ENVIRONMENT.txt", env)
+
+    # The limitations travel with every report, and a drop that quotes an older
+    # limitation list is exactly the kind of stale evidence this project keeps finding.
+    # Write them from the same results object the rest of the drop uses.
+    limitations = results_for(SEEDS[0])["limitations"]
+    write(
+        "LIMITATIONS_VERBATIM.md",
+        "# Limitations, verbatim from the harness output\n\n"
+        "These are emitted by `eval/harness.py::_limitations()` and travel with every "
+        "report. The researcher may quote them directly.\n\n"
+        + "\n\n".join(f"{n}. {text}" for n, text in enumerate(limitations, 1))
+        + "\n",
+    )
 
     # ---- (b) per-number provenance table ------------------------------------ #
     d = results_for(SEEDS[0])

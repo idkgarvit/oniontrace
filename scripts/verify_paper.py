@@ -212,7 +212,11 @@ def main() -> int:
     source_tex = (ROOT / "paper" / "ieee" / "oniontrace.tex").read_text(encoding="utf-8")
     check("clean control careful findings = 0",
           s["clean_control"]["careful_collapsed_count"] == 0
-          and "0 findings, 0 false positives" in source_tex)
+          and "clean control & 0 & 0 & 5 & 1 (dot\\_git on 404)" in source_tex)
+
+    check("real-world table header names the four counts",
+          all(h in source_tex for h in
+              ("careful hits", "careful FP", "naive hits", "naive FP")))
     check("clean control naive findings = 5",
           s["clean_control"]["naive_collapsed_count"] == 5)
     check("naive false positive is dot_git on a 404",
