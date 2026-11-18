@@ -20,7 +20,7 @@ Nothing here touches an onion service, and nothing here probes any host we do no
 The only network calls are to crt.sh (a public certificate log query) and to
 example.com (a public page). Both are the same requests any visitor's browser makes.
 
-Output: out/paper-drop/real_world/*.json and *.md
+Output: data/evidence/real_world/*.json and *.md
 
 Run:  python3 scripts/real_world_validation.py
 """
@@ -37,9 +37,9 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "out" / "paper-drop" / "real_world"
+OUT = ROOT / "data" / "evidence" / "real_world"
 LAB = Path("/tmp/labtest")
-CT_CACHE = ROOT / "out" / "paper-drop" / "real_world" / "_ct_cache.json"
+CT_CACHE = ROOT / "data" / "evidence" / "real_world" / "_ct_cache.json"
 
 CT_QUERY = "https://crt.sh/?q=%25.onion&output=json"
 UA = "ONIONTRACE-research/0.1 (academic measurement; contact via corresponding author)"

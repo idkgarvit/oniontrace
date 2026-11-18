@@ -1,10 +1,5 @@
-# Generated farm output -- regenerate with `python -m farm generate`
-# `out/*` rather than `out/`, so the exclusion does not cover the directory itself and
-# the negation below can re-include a subdirectory. `out/` would make git skip the whole
-# tree and never see the rule underneath it.
+# Generated output -- regenerate with the documented commands. Nothing here is source.
 out/*
-# ...except the paper data drop, which is a citable artefact and must be durable.
-!out/paper-drop/
 
 # Gate working directory -- case data, audit trail, permits. Never commit casework.
 casework/
@@ -13,6 +8,11 @@ casework/
 # itself: the paper, its PDF and the demo video are not distributed here. `paper/` is
 # ignored so a local build cannot be added back by accident.
 paper/
+
+# College reports, proposals and agent handoff notes stay local. GitHub carries the
+# working project, not the paperwork around it.
+docs/
+HANDOFF.md
 
 # Python
 __pycache__/

@@ -1,0 +1,353 @@
+{
+  "case_id": "CASE-LAB-LIVE-5",
+  "correlation": {
+    "cap": 3,
+    "filtered": {
+      "link_scoring": {
+        "actual": 6,
+        "false_merge_rate": 0.0,
+        "false_omit_rate": 0.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "precision_ci95": [
+          0.609666,
+          1.0
+        ],
+        "proposed": 6,
+        "recall": 1.0,
+        "threshold": 0.0,
+        "tn": 22,
+        "tp": 6
+      },
+      "max_artifact_frequency": 3,
+      "ranking": {
+        "baseline_note": "the baseline describes the pool actually ranked: 7 candidates, singletons included (0.2857). The restricted figure (0.4000) applies only if singletons are excluded from the pool, which is not what this run does -- reporting it as the headline would put a number next to a result that describes a different experiment.",
+        "hit@3": {
+          "abstained": 0,
+          "ci95": [
+            0.609666,
+            1.0
+          ],
+          "skipped_no_answer": 0,
+          "successes": 6,
+          "total": 6,
+          "value": 1.0
+        },
+        "mrr": 1.0,
+        "n_queries": 6,
+        "pool_size": 7,
+        "precision@1": {
+          "abstained": 0,
+          "ci95": [
+            0.609666,
+            1.0
+          ],
+          "skipped_no_answer": 0,
+          "successes": 6,
+          "total": 6,
+          "value": 1.0
+        },
+        "random_baseline_precision@1": 0.285714,
+        "random_baseline_precision@1_restricted": 0.4,
+        "recall@3": 1.0
+      },
+      "variant": "frequency-filtered"
+    },
+    "naive": {
+      "link_scoring": {
+        "actual": 6,
+        "false_merge_rate": 0.454545,
+        "false_omit_rate": 0.0,
+        "fn": 0,
+        "fp": 5,
+        "precision": 0.545455,
+        "precision_ci95": [
+          0.280092,
+          0.787287
+        ],
+        "proposed": 11,
+        "recall": 1.0,
+        "threshold": 0.0,
+        "tn": 17,
+        "tp": 6
+      },
+      "max_artifact_frequency": null,
+      "ranking": {
+        "baseline_note": "the baseline describes the pool actually ranked: 7 candidates, singletons included (0.2857). The restricted figure (0.4000) applies only if singletons are excluded from the pool, which is not what this run does -- reporting it as the headline would put a number next to a result that describes a different experiment.",
+        "hit@3": {
+          "abstained": 0,
+          "ci95": [
+            0.609666,
+            1.0
+          ],
+          "skipped_no_answer": 0,
+          "successes": 6,
+          "total": 6,
+          "value": 1.0
+        },
+        "mrr": 1.0,
+        "n_queries": 6,
+        "pool_size": 7,
+        "precision@1": {
+          "abstained": 0,
+          "ci95": [
+            0.609666,
+            1.0
+          ],
+          "skipped_no_answer": 0,
+          "successes": 6,
+          "total": 6,
+          "value": 1.0
+        },
+        "random_baseline_precision@1": 0.285714,
+        "random_baseline_precision@1_restricted": 0.4,
+        "recall@3": 1.0
+      },
+      "variant": "naive"
+    },
+    "singleton_abstention": {
+      "filtered": 2,
+      "naive": 0,
+      "queries": 2
+    }
+  },
+  "detection": {
+    "careful": {
+      "detections": 19,
+      "false_positives": [],
+      "fn": 0,
+      "fp": 0,
+      "fp_on_clean_control_endpoints": [],
+      "injected_flaws": 19,
+      "missed": [],
+      "precision": {
+        "abstained": 0,
+        "ci95": [
+          0.831821,
+          1.0
+        ],
+        "skipped_no_answer": 0,
+        "successes": 19,
+        "total": 19,
+        "value": 1.0
+      },
+      "recall": {
+        "abstained": 0,
+        "ci95": [
+          0.831821,
+          1.0
+        ],
+        "skipped_no_answer": 0,
+        "successes": 19,
+        "total": 19,
+        "value": 1.0
+      },
+      "tp": 19
+    },
+    "naive": {
+      "detections": 76,
+      "false_positives": [
+        "alpha-1:backup_file",
+        "alpha-1:debug_endpoint",
+        "alpha-1:default_admin_panel",
+        "alpha-1:dot_env",
+        "alpha-1:dot_git",
+        "alpha-1:exif_gps_in_image",
+        "alpha-1:nginx_version_banner",
+        "alpha-1:timezone_leak",
+        "alpha-2:backup_file",
+        "alpha-2:debug_endpoint",
+        "alpha-2:default_admin_panel",
+        "alpha-2:dot_env",
+        "alpha-2:dot_git",
+        "alpha-2:exif_gps_in_image",
+        "alpha-2:nginx_version_banner",
+        "alpha-3:backup_file",
+        "alpha-3:default_admin_panel",
+        "alpha-3:dot_env",
+        "alpha-3:dot_git",
+        "alpha-3:exif_gps_in_image",
+        "alpha-3:nginx_version_banner",
+        "alpha-3:timezone_leak",
+        "beta-1:backup_file",
+        "beta-1:debug_endpoint",
+        "beta-1:default_admin_panel",
+        "beta-1:dot_env",
+        "beta-1:exif_gps_in_image",
+        "beta-1:nginx_version_banner",
+        "beta-1:timezone_leak",
+        "beta-2:backup_file",
+        "beta-2:debug_endpoint",
+        "beta-2:default_admin_panel",
+        "beta-2:dot_git",
+        "beta-2:nginx_version_banner",
+        "beta-2:timezone_leak",
+        "beta-3:debug_endpoint",
+        "beta-3:default_admin_panel",
+        "beta-3:dot_env",
+        "beta-3:dot_git",
+        "beta-3:exif_gps_in_image",
+        "beta-3:nginx_version_banner",
+        "beta-3:timezone_leak",
+        "gamma-1:backup_file",
+        "gamma-1:debug_endpoint",
+        "gamma-1:dot_env",
+        "gamma-1:dot_git",
+        "gamma-1:exif_gps_in_image",
+        "gamma-1:nginx_version_banner",
+        "gamma-1:readme_internal_hostname",
+        "gamma-1:robots_path_leak",
+        "gamma-1:timezone_leak",
+        "gamma-2:backup_file",
+        "gamma-2:debug_endpoint",
+        "gamma-2:default_admin_panel",
+        "gamma-2:dot_env",
+        "gamma-2:dot_git",
+        "gamma-2:exif_gps_in_image",
+        "gamma-2:timezone_leak",
+        "gamma-2:verbose_error_path_disclosure"
+      ],
+      "fn": 2,
+      "fp": 59,
+      "fp_on_clean_control_endpoints": [
+        {
+          "evidence": "GPS tag present",
+          "kind": "exif_gps_in_image",
+          "path": "/photo.jpg",
+          "service_id": "alpha-1"
+        },
+        {
+          "evidence": "nginx in Server header",
+          "kind": "nginx_version_banner",
+          "path": "/photo.jpg",
+          "service_id": "alpha-1"
+        },
+        {
+          "evidence": "a Date header exists",
+          "kind": "timezone_leak",
+          "path": "/photo.jpg",
+          "service_id": "alpha-1"
+        },
+        {
+          "evidence": "admin login form",
+          "kind": "default_admin_panel",
+          "path": "/admin/",
+          "service_id": "alpha-3"
+        },
+        {
+          "evidence": "nginx in Server header",
+          "kind": "nginx_version_banner",
+          "path": "/admin/",
+          "service_id": "alpha-3"
+        },
+        {
+          "evidence": "a Date header exists",
+          "kind": "timezone_leak",
+          "path": "/admin/",
+          "service_id": "alpha-3"
+        },
+        {
+          "evidence": "an address appears",
+          "kind": "readme_internal_hostname",
+          "path": "/README.txt",
+          "service_id": "gamma-1"
+        },
+        {
+          "evidence": "nginx in Server header",
+          "kind": "nginx_version_banner",
+          "path": "/README.txt",
+          "service_id": "gamma-1"
+        },
+        {
+          "evidence": "a Date header exists",
+          "kind": "timezone_leak",
+          "path": "/README.txt",
+          "service_id": "gamma-1"
+        },
+        {
+          "evidence": "robots disallows something",
+          "kind": "robots_path_leak",
+          "path": "/robots.txt",
+          "service_id": "gamma-1"
+        },
+        {
+          "evidence": "nginx in Server header",
+          "kind": "nginx_version_banner",
+          "path": "/robots.txt",
+          "service_id": "gamma-1"
+        },
+        {
+          "evidence": "a Date header exists",
+          "kind": "timezone_leak",
+          "path": "/robots.txt",
+          "service_id": "gamma-1"
+        },
+        {
+          "evidence": "traceback present",
+          "kind": "verbose_error_path_disclosure",
+          "path": "/error",
+          "service_id": "gamma-2"
+        },
+        {
+          "evidence": "nginx in Server header",
+          "kind": "nginx_version_banner",
+          "path": "/error",
+          "service_id": "gamma-2"
+        },
+        {
+          "evidence": "a Date header exists",
+          "kind": "timezone_leak",
+          "path": "/error",
+          "service_id": "gamma-2"
+        }
+      ],
+      "injected_flaws": 19,
+      "missed": [
+        "alpha-1:server_status",
+        "alpha-3:phpinfo"
+      ],
+      "precision": {
+        "abstained": 0,
+        "ci95": [
+          0.144612,
+          0.329346
+        ],
+        "skipped_no_answer": 0,
+        "successes": 17,
+        "total": 76,
+        "value": 0.223684
+      },
+      "recall": {
+        "abstained": 0,
+        "ci95": [
+          0.686059,
+          0.970641
+        ],
+        "skipped_no_answer": 0,
+        "successes": 17,
+        "total": 19,
+        "value": 0.894737
+      },
+      "tp": 17
+    },
+    "path_accuracy": {
+      "expected": 19,
+      "on_planted_path": 19,
+      "on_wrong_path": 0
+    }
+  },
+  "generated_at": "2026-11-17T03:24:38Z",
+  "live": {
+    "addresses": 8,
+    "clean_controls": 5,
+    "clusters": 2,
+    "lab_fingerprint": "aa73822ae80a7f1f",
+    "routes_observed": 112,
+    "services": 8
+  },
+  "scope_limit": "live bytes, constructed truth: the services are ours and the flaws are planted; this measures the live path, not accuracy on third-party services",
+  "warc_files": [
+    "CASE-LAB-LIVE-5-20261117T031934Z.warc"
+  ]
+}

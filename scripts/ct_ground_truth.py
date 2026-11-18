@@ -6,7 +6,7 @@ Reads the cached CT records, builds the groupings a certificate asserts (one cer
 several onions means one holder owns them all), then asks how much of that is recoverable from
 the public fields alone: issuer, and issuer plus issue date.
 
-Writes out/paper-drop/real_world/ct_ground_truth.json and prints a VERDICT line.
+Writes data/evidence/real_world/ct_ground_truth.json and prints a VERDICT line.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ sys.path.insert(0, str(ROOT))
 
 from eval.ct_ground_truth import run  # noqa: E402
 
-CACHE = ROOT / "out" / "paper-drop" / "real_world" / "_ct_cache.json"
-DESTINATION = ROOT / "out" / "paper-drop" / "real_world" / "ct_ground_truth.json"
+CACHE = ROOT / "data" / "evidence" / "real_world" / "_ct_cache.json"
+DESTINATION = ROOT / "data" / "evidence" / "real_world" / "ct_ground_truth.json"
 
 
 def main() -> int:

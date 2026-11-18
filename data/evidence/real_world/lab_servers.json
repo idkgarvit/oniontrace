@@ -1,0 +1,114 @@
+{
+  "config": "pid /tmp/labtest/nginx.pid;\nevents {}\n\nhttp {\n    access_log off;\n    error_log /tmp/labtest/error.log;\n    client_body_temp_path /tmp/labtest/body;\n    proxy_temp_path /tmp/labtest/proxy;\n    fastcgi_temp_path /tmp/labtest/fcgi;\n    uwsgi_temp_path /tmp/labtest/uwsgi;\n    scgi_temp_path /tmp/labtest/scgi;\n\n    # Deliberately misconfigured: directory listing on, version banner on.\n    server {\n        listen 8091;\n        server_name lab-misconfig;\n        root /tmp/labtest/www;\n        autoindex on;\n        server_tokens on;\n    }\n\n    # Clean control: no listing, no banner.\n    server {\n        listen 8092;\n        server_name lab-clean;\n        root /tmp/labtest/clean;\n        autoindex off;\n        server_tokens off;\n    }\n}\n",
+  "interpretation": "Both rules fire on the real misconfigured instance and neither fires on the real clean instance, so the detectors are exercised against actual server behaviour rather than planted fixtures. This validates rule detection only; correlation ground truth remains synthetic.",
+  "probes": [
+    "/",
+    "/.env",
+    "/.git/config",
+    "/server-status",
+    "/phpinfo.php",
+    "/backup.bak",
+    "/robots.txt"
+  ],
+  "responses": {
+    "clean": {
+      "/": {
+        "bytes": 68,
+        "looks_like_listing": false,
+        "server_header": "nginx",
+        "status": 200
+      },
+      "/.env": {
+        "bytes": 146,
+        "looks_like_listing": false,
+        "server_header": "nginx",
+        "status": 404
+      },
+      "/.git/config": {
+        "bytes": 146,
+        "looks_like_listing": false,
+        "server_header": "nginx",
+        "status": 404
+      },
+      "/backup.bak": {
+        "bytes": 146,
+        "looks_like_listing": false,
+        "server_header": "nginx",
+        "status": 404
+      },
+      "/phpinfo.php": {
+        "bytes": 146,
+        "looks_like_listing": false,
+        "server_header": "nginx",
+        "status": 404
+      },
+      "/robots.txt": {
+        "bytes": 146,
+        "looks_like_listing": false,
+        "server_header": "nginx",
+        "status": 404
+      },
+      "/server-status": {
+        "bytes": 146,
+        "looks_like_listing": false,
+        "server_header": "nginx",
+        "status": 404
+      }
+    },
+    "misconfigured": {
+      "/": {
+        "bytes": 72,
+        "looks_like_listing": false,
+        "server_header": "nginx/1.30.4",
+        "status": 200
+      },
+      "/.env": {
+        "bytes": 25,
+        "looks_like_listing": false,
+        "server_header": "nginx/1.30.4",
+        "status": 200
+      },
+      "/.git/config": {
+        "bytes": 153,
+        "looks_like_listing": false,
+        "server_header": "nginx/1.30.4",
+        "status": 404
+      },
+      "/backup.bak": {
+        "bytes": 153,
+        "looks_like_listing": false,
+        "server_header": "nginx/1.30.4",
+        "status": 404
+      },
+      "/phpinfo.php": {
+        "bytes": 153,
+        "looks_like_listing": false,
+        "server_header": "nginx/1.30.4",
+        "status": 404
+      },
+      "/robots.txt": {
+        "bytes": 153,
+        "looks_like_listing": false,
+        "server_header": "nginx/1.30.4",
+        "status": 404
+      },
+      "/server-status": {
+        "bytes": 153,
+        "looks_like_listing": false,
+        "server_header": "nginx/1.30.4",
+        "status": 404
+      }
+    }
+  },
+  "rules_on_real_responses": {
+    "dot_env_exposed": {
+      "clean": false,
+      "misconfigured": true
+    },
+    "version_disclosure": {
+      "clean": false,
+      "misconfigured": true
+    }
+  },
+  "source": "nginx 1.30.4, lab-hosted, unprivileged, 127.0.0.1 only"
+}

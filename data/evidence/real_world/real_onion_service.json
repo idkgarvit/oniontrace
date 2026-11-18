@@ -1,0 +1,466 @@
+{
+  "note": "Two v3 onion services published by the operator, fronting lab nginx instances on loopback, fetched over the real Tor network. Both ends are ours; no third party is involved. The clean instance is a real hard negative: a correct rule must stay silent on it. This validates that the rule tables behave correctly on real onion-served content. It is not a prevalence measurement, and no claim is made about how common any of these misconfigurations is in the wild.",
+  "retrieved_at": "2026-10-15T15:10:12+00:00",
+  "services": {
+    "clean_control": {
+      "address": "64zuuctkvlq4g2pd7jf2fk3kdawijpd32ejvgwb7ptpwrmi6qk3nyiid.onion",
+      "careful": {
+        "collapsed": [],
+        "collapsed_count": 0,
+        "false_positives": [],
+        "fired_kinds": [],
+        "hit_count": 0,
+        "hits": []
+      },
+      "naive": {
+        "collapsed": [
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/"
+          },
+          {
+            "evidence": "an ETag exists",
+            "kind": "etag_pattern",
+            "path": "/"
+          },
+          {
+            "evidence": "env path answers",
+            "kind": "dot_env",
+            "path": "/.env"
+          },
+          {
+            "evidence": "git path answers",
+            "kind": "dot_git",
+            "path": "/.git/config"
+          }
+        ],
+        "collapsed_count": 5,
+        "false_positives": [
+          {
+            "evidence": "git path answers",
+            "kind": "dot_git",
+            "path": "/.git/config"
+          }
+        ],
+        "fired_kinds": [
+          "dot_env",
+          "dot_git",
+          "etag_pattern",
+          "nginx_version_banner",
+          "timezone_leak"
+        ],
+        "hit_count": 11,
+        "hits": [
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/"
+          },
+          {
+            "evidence": "an ETag exists",
+            "kind": "etag_pattern",
+            "path": "/"
+          },
+          {
+            "evidence": "env path answers",
+            "kind": "dot_env",
+            "path": "/.env"
+          },
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/.env"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/.env"
+          },
+          {
+            "evidence": "git path answers",
+            "kind": "dot_git",
+            "path": "/.git/config"
+          },
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/.git/config"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/.git/config"
+          },
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/nope-does-not-exist"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/nope-does-not-exist"
+          }
+        ]
+      },
+      "responses": [
+        {
+          "body": "<html><head><title>clean</title></head><body>clean</body></html>",
+          "body_sha256": "389defd4419b2366412b0396c9364f798c9f2d4b5720944b48f745b5f5787eec",
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Connection": "keep-alive",
+            "Content-Length": "64",
+            "Content-Type": "text/html",
+            "Date": "Thu, 15 Oct 2026 15:10:06 GMT",
+            "ETag": "\"6ad0e9d3-40\"",
+            "Last-Modified": "Thu, 15 Oct 2026 14:57:23 GMT",
+            "Server": "nginx"
+          },
+          "path": "/",
+          "retrieved_at": "2026-10-15T15:10:07+00:00",
+          "status": 200,
+          "stderr": "",
+          "url": "http://64zuuctkvlq4g2pd7jf2fk3kdawijpd32ejvgwb7ptpwrmi6qk3nyiid.onion/"
+        },
+        {
+          "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n",
+          "body_sha256": "55f7d9e99b8e2d4e0e193b2f0275501e6d9c1ebd29cadbea6a0da48a8587e3e0",
+          "headers": {
+            "Connection": "keep-alive",
+            "Content-Length": "146",
+            "Content-Type": "text/html",
+            "Date": "Thu, 15 Oct 2026 15:10:08 GMT",
+            "Server": "nginx"
+          },
+          "path": "/.env",
+          "retrieved_at": "2026-10-15T15:10:08+00:00",
+          "status": 404,
+          "stderr": "",
+          "url": "http://64zuuctkvlq4g2pd7jf2fk3kdawijpd32ejvgwb7ptpwrmi6qk3nyiid.onion/.env"
+        },
+        {
+          "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n",
+          "body_sha256": "55f7d9e99b8e2d4e0e193b2f0275501e6d9c1ebd29cadbea6a0da48a8587e3e0",
+          "headers": {
+            "Connection": "keep-alive",
+            "Content-Length": "146",
+            "Content-Type": "text/html",
+            "Date": "Thu, 15 Oct 2026 15:10:10 GMT",
+            "Server": "nginx"
+          },
+          "path": "/.git/config",
+          "retrieved_at": "2026-10-15T15:10:10+00:00",
+          "status": 404,
+          "stderr": "",
+          "url": "http://64zuuctkvlq4g2pd7jf2fk3kdawijpd32ejvgwb7ptpwrmi6qk3nyiid.onion/.git/config"
+        },
+        {
+          "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n",
+          "body_sha256": "55f7d9e99b8e2d4e0e193b2f0275501e6d9c1ebd29cadbea6a0da48a8587e3e0",
+          "headers": {
+            "Connection": "keep-alive",
+            "Content-Length": "146",
+            "Content-Type": "text/html",
+            "Date": "Thu, 15 Oct 2026 15:10:11 GMT",
+            "Server": "nginx"
+          },
+          "path": "/nope-does-not-exist",
+          "retrieved_at": "2026-10-15T15:10:12+00:00",
+          "status": 404,
+          "stderr": "",
+          "url": "http://64zuuctkvlq4g2pd7jf2fk3kdawijpd32ejvgwb7ptpwrmi6qk3nyiid.onion/nope-does-not-exist"
+        }
+      ]
+    },
+    "misconfigured": {
+      "address": "wgbn2pibrxhgddhktgq5jdhw77w6t45gz72ho4inlvabpykexyvwe7id.onion",
+      "careful": {
+        "collapsed": [
+          {
+            "evidence": "Server: nginx/1.30.4",
+            "kind": "nginx_version_banner",
+            "path": "/"
+          },
+          {
+            "evidence": "env-style key/value file",
+            "kind": "dot_env",
+            "path": "/.env"
+          }
+        ],
+        "collapsed_count": 2,
+        "false_positives": [],
+        "fired_kinds": [
+          "dot_env",
+          "nginx_version_banner"
+        ],
+        "hit_count": 5,
+        "hits": [
+          {
+            "evidence": "Server: nginx/1.30.4",
+            "kind": "nginx_version_banner",
+            "path": "/"
+          },
+          {
+            "evidence": "env-style key/value file",
+            "kind": "dot_env",
+            "path": "/.env"
+          },
+          {
+            "evidence": "Server: nginx/1.30.4",
+            "kind": "nginx_version_banner",
+            "path": "/.env"
+          },
+          {
+            "evidence": "Server: nginx/1.30.4",
+            "kind": "nginx_version_banner",
+            "path": "/.git/config"
+          },
+          {
+            "evidence": "Server: nginx/1.30.4",
+            "kind": "nginx_version_banner",
+            "path": "/nope-does-not-exist"
+          }
+        ]
+      },
+      "naive": {
+        "collapsed": [
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/"
+          },
+          {
+            "evidence": "an ETag exists",
+            "kind": "etag_pattern",
+            "path": "/"
+          },
+          {
+            "evidence": "env path answers",
+            "kind": "dot_env",
+            "path": "/.env"
+          },
+          {
+            "evidence": "git path answers",
+            "kind": "dot_git",
+            "path": "/.git/config"
+          }
+        ],
+        "collapsed_count": 5,
+        "false_positives": [
+          {
+            "evidence": "git path answers",
+            "kind": "dot_git",
+            "path": "/.git/config"
+          }
+        ],
+        "fired_kinds": [
+          "dot_env",
+          "dot_git",
+          "etag_pattern",
+          "nginx_version_banner",
+          "timezone_leak"
+        ],
+        "hit_count": 12,
+        "hits": [
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/"
+          },
+          {
+            "evidence": "an ETag exists",
+            "kind": "etag_pattern",
+            "path": "/"
+          },
+          {
+            "evidence": "env path answers",
+            "kind": "dot_env",
+            "path": "/.env"
+          },
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/.env"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/.env"
+          },
+          {
+            "evidence": "an ETag exists",
+            "kind": "etag_pattern",
+            "path": "/.env"
+          },
+          {
+            "evidence": "git path answers",
+            "kind": "dot_git",
+            "path": "/.git/config"
+          },
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/.git/config"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/.git/config"
+          },
+          {
+            "evidence": "nginx in Server header",
+            "kind": "nginx_version_banner",
+            "path": "/nope-does-not-exist"
+          },
+          {
+            "evidence": "a Date header exists",
+            "kind": "timezone_leak",
+            "path": "/nope-does-not-exist"
+          }
+        ]
+      },
+      "responses": [
+        {
+          "body": "<html><head><title>OnionTrace lab</title></head><body><h1>lab</h1></body></html>",
+          "body_sha256": "4fe089d7d8dada981aa31e74d0dbbb69f416709a5afba4b16042b262c5050943",
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Connection": "keep-alive",
+            "Content-Length": "80",
+            "Content-Type": "text/html",
+            "Date": "Thu, 15 Oct 2026 15:10:00 GMT",
+            "ETag": "\"6ad0e9d3-50\"",
+            "Last-Modified": "Thu, 15 Oct 2026 14:57:23 GMT",
+            "Server": "nginx/1.30.4"
+          },
+          "path": "/",
+          "retrieved_at": "2026-10-15T15:10:01+00:00",
+          "status": 200,
+          "stderr": "",
+          "url": "http://wgbn2pibrxhgddhktgq5jdhw77w6t45gz72ho4inlvabpykexyvwe7id.onion/"
+        },
+        {
+          "body": "APP_NAME=example\nSECRET=\n",
+          "body_sha256": "ae27d1193e60791bf430b69acfffe08241779e354cd2a34b6094e226520ae444",
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Connection": "keep-alive",
+            "Content-Length": "25",
+            "Content-Type": "text/plain",
+            "Date": "Thu, 15 Oct 2026 15:10:02 GMT",
+            "ETag": "\"6ad0e9d3-19\"",
+            "Last-Modified": "Thu, 15 Oct 2026 14:57:23 GMT",
+            "Server": "nginx/1.30.4"
+          },
+          "path": "/.env",
+          "retrieved_at": "2026-10-15T15:10:02+00:00",
+          "status": 200,
+          "stderr": "",
+          "url": "http://wgbn2pibrxhgddhktgq5jdhw77w6t45gz72ho4inlvabpykexyvwe7id.onion/.env"
+        },
+        {
+          "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.30.4</center>\r\n</body>\r\n</html>\r\n",
+          "body_sha256": "151e314f66e8c4cbdda04804a57f9bead5cc2f048767aacbf816d8d1f9563e64",
+          "headers": {
+            "Connection": "keep-alive",
+            "Content-Length": "153",
+            "Content-Type": "text/html",
+            "Date": "Thu, 15 Oct 2026 15:10:03 GMT",
+            "Server": "nginx/1.30.4"
+          },
+          "path": "/.git/config",
+          "retrieved_at": "2026-10-15T15:10:03+00:00",
+          "status": 404,
+          "stderr": "",
+          "url": "http://wgbn2pibrxhgddhktgq5jdhw77w6t45gz72ho4inlvabpykexyvwe7id.onion/.git/config"
+        },
+        {
+          "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.30.4</center>\r\n</body>\r\n</html>\r\n",
+          "body_sha256": "151e314f66e8c4cbdda04804a57f9bead5cc2f048767aacbf816d8d1f9563e64",
+          "headers": {
+            "Connection": "keep-alive",
+            "Content-Length": "153",
+            "Content-Type": "text/html",
+            "Date": "Thu, 15 Oct 2026 15:10:05 GMT",
+            "Server": "nginx/1.30.4"
+          },
+          "path": "/nope-does-not-exist",
+          "retrieved_at": "2026-10-15T15:10:05+00:00",
+          "status": 404,
+          "stderr": "",
+          "url": "http://wgbn2pibrxhgddhktgq5jdhw77w6t45gz72ho4inlvabpykexyvwe7id.onion/nope-does-not-exist"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "clean_control": {
+      "address": "64zuuctkvlq4g2pd7jf2fk3kdawijpd32ejvgwb7ptpwrmi6qk3nyiid.onion",
+      "careful_collapsed_count": 0,
+      "careful_false_positives": [],
+      "careful_fired_kinds": [],
+      "naive_collapsed_count": 5,
+      "naive_false_positives": [
+        {
+          "evidence": "git path answers",
+          "kind": "dot_git",
+          "path": "/.git/config"
+        }
+      ],
+      "naive_fired_kinds": [
+        "dot_env",
+        "dot_git",
+        "etag_pattern",
+        "nginx_version_banner",
+        "timezone_leak"
+      ]
+    },
+    "misconfigured": {
+      "address": "wgbn2pibrxhgddhktgq5jdhw77w6t45gz72ho4inlvabpykexyvwe7id.onion",
+      "careful_collapsed_count": 2,
+      "careful_false_positives": [],
+      "careful_fired_kinds": [
+        "dot_env",
+        "nginx_version_banner"
+      ],
+      "naive_collapsed_count": 5,
+      "naive_false_positives": [
+        {
+          "evidence": "git path answers",
+          "kind": "dot_git",
+          "path": "/.git/config"
+        }
+      ],
+      "naive_fired_kinds": [
+        "dot_env",
+        "dot_git",
+        "etag_pattern",
+        "nginx_version_banner",
+        "timezone_leak"
+      ]
+    }
+  },
+  "transport": "socks5h via 127.0.0.1:9151, real Tor network"
+}

@@ -1,0 +1,56 @@
+{
+  "cap_effect": {
+    "1": {
+      "certs_under_kept_issuers": 3,
+      "issuers_kept": 3
+    },
+    "3": {
+      "certs_under_kept_issuers": 8,
+      "issuers_kept": 5
+    },
+    "5": {
+      "certs_under_kept_issuers": 17,
+      "issuers_kept": 7
+    },
+    "10": {
+      "certs_under_kept_issuers": 39,
+      "issuers_kept": 10
+    },
+    "50": {
+      "certs_under_kept_issuers": 75,
+      "issuers_kept": 12
+    }
+  },
+  "certificates_contaminating_the_query": 118,
+  "certificates_returned": 3136,
+  "certificates_with_a_real_onion_san": 3018,
+  "clearnet_names_cooccurring": [
+    "onioncontainers.com",
+    "www.onioncontainers.com"
+  ],
+  "contamination_note": "The query string matches any certificate name containing '.onion', so it returns certificates for clearnet domains such as 'onion--markets.com' and 'kraken-onion--link.info' as well as real onion addresses. Only entries carrying a well-formed v2 or v3 .onion SAN are counted here; the remainder is reported rather than dropped.",
+  "interpretation": "Real certificates show the vendor-default collision as it exists in the wild: the single most common issuer covers a large share of all onion-bearing certificates (59.2%). A correlator that links services sharing an issuer would merge that entire share into one operator. This is the same failure the synthetic farm measures, observed on real data. Separately, only 2 clearnet names co-occur with an onion address across these certificates, which is the minority-signal claim about Certificate Transparency measured rather than asserted.",
+  "issuer_counts": {
+    "C=GB, ST=Cymru, O=AS207960 Cyfyngedig, OU=AS207960 Department of Random Numbers, CN=AS207960 Onion CA": 98,
+    "C=GB, ST=Cymru, O=AS207960 Cyfyngedig, OU=AS207960 Department of Random Numbers, CN=AS207960 Test Intermediate - example.com": 6,
+    "C=GR, L=Athens, O=Hellenic Academic and Research Institutions Cert. Authority, CN=HARICA SSL ECC SubCA R2": 62,
+    "C=GR, L=Athens, O=Hellenic Academic and Research Institutions Cert. Authority, CN=HARICA SSL RSA SubCA R3": 253,
+    "C=GR, O=Hellenic Academic and Research Institutions CA, CN=HARICA DV TLS ECC": 374,
+    "C=GR, O=Hellenic Academic and Research Institutions CA, CN=HARICA DV TLS RSA": 282,
+    "C=NL, ST=Noord-Holland, L=Amsterdam, O=TERENA, CN=TERENA SSL High Assurance CA 3": 5,
+    "C=US, O=DigiCert Inc, CN=DigiCert EV RSA CA G2": 11,
+    "C=US, O=DigiCert Inc, CN=DigiCert SHA2 Secure Server CA": 4,
+    "C=US, O=DigiCert Inc, CN=DigiCert TLS Hybrid ECC SHA384 2020 CA1": 25,
+    "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=DigiCert ECC Extended Validation Server CA": 86,
+    "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=DigiCert High Assurance CA-3": 9,
+    "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=DigiCert High Assurance EV CA-1": 7,
+    "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=DigiCert SHA2 Extended Validation Server CA": 1788,
+    "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=Thawte EV RSA CA 2018": 3
+  },
+  "query_date_utc": "2026-10-15T14:17:04Z",
+  "source": "https://crt.sh/?q=%25.onion&output=json",
+  "top_issuer": "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=DigiCert SHA2 Extended Validation Server CA",
+  "top_issuer_share": 0.592445,
+  "unique_clearnet_names_cooccurring_with_an_onion": 2,
+  "unique_onion_names": 688
+}

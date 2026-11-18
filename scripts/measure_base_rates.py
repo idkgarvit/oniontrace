@@ -13,7 +13,7 @@ population would one value swallow".
 
     python3 scripts/measure_base_rates.py
 
-Writes out/paper-drop/real_world/base_rates.json, and prints a VERDICT line for the harness.
+Writes data/evidence/real_world/base_rates.json, and prints a VERDICT line for the harness.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CACHE = ROOT / "out" / "paper-drop" / "real_world" / "_ct_cache.json"
-DESTINATION = ROOT / "out" / "paper-drop" / "real_world" / "base_rates.json"
+CACHE = ROOT / "data" / "evidence" / "real_world" / "_ct_cache.json"
+DESTINATION = ROOT / "data" / "evidence" / "real_world" / "base_rates.json"
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from real_world_validation import is_onion_address, parse_sans  # noqa: E402

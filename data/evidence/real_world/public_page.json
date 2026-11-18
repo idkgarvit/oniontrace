@@ -1,0 +1,8 @@
+{
+  "bytes": 577,
+  "note": "A real public page, fetched once, as any visitor would. Used to show the detection path runs against real markup. No scoping claim is made from a single page; it is a smoke test for the real-data path, not a measurement.",
+  "sha256": "25ddf2c883e0d1958ea971d279a7e4f0fd446724ee3db7db19dadabd4a62e484",
+  "status": 200,
+  "title": "Example Domain",
+  "url": "https://example.com"
+}

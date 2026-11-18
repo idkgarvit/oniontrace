@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PDF = ROOT / "paper" / "ieee" / "oniontrace.pdf"
-RW = ROOT / "out" / "paper-drop" / "real_world"
+RW = ROOT / "data" / "evidence" / "real_world"
 
 
 def paper_source() -> Path | None:

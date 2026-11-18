@@ -1,0 +1,2337 @@
+{
+  "config": {
+    "seed": 20260925,
+    "n_clusters": 4,
+    "services_per_cluster": 3,
+    "n_singleton_services": 2,
+    "n_clean_control_services": 2,
+    "personas_per_cluster": 4,
+    "n_near_miss_decoys": 4,
+    "n_clean_control_endpoints": 6,
+    "n_abstention_retrieval_cases": 4,
+    "target_flaw_count": 25,
+    "posts_per_persona": 12,
+    "widespread_default_share": 1.0
+  },
+  "clusters": [
+    {
+      "cluster_id": "C0",
+      "service_ids": [
+        "svc-c0-0",
+        "svc-c0-1",
+        "svc-c0-2"
+      ],
+      "shared_artifacts": {
+        "favicon_sha256": "20ec64400487171e59207e3b20f9c9a5",
+        "analytics_id": "cea49f2303be6eb38ae809aa9325a353"
+      },
+      "persona_ids": [
+        "C0-P0",
+        "C0-P1",
+        "C0-P2",
+        "C0-P3"
+      ]
+    },
+    {
+      "cluster_id": "C1",
+      "service_ids": [
+        "svc-c1-0",
+        "svc-c1-1",
+        "svc-c1-2"
+      ],
+      "shared_artifacts": {
+        "tls_spki_sha256": "316f8c9880832d255f1779e06fced5a2",
+        "error404_sha256": "9a9cd4460614212fa4857f4aa79f8753"
+      },
+      "persona_ids": [
+        "C1-P0",
+        "C1-P1",
+        "C1-P2",
+        "C1-P3"
+      ]
+    },
+    {
+      "cluster_id": "C2",
+      "service_ids": [
+        "svc-c2-0",
+        "svc-c2-1",
+        "svc-c2-2"
+      ],
+      "shared_artifacts": {
+        "ssh_hostkey_sha256": "e7608ebd06019a22626f1d9fff4ac3b0"
+      },
+      "persona_ids": [
+        "C2-P0",
+        "C2-P1",
+        "C2-P2",
+        "C2-P3"
+      ]
+    },
+    {
+      "cluster_id": "C3",
+      "service_ids": [
+        "svc-c3-0",
+        "svc-c3-1",
+        "svc-c3-2"
+      ],
+      "shared_artifacts": {
+        "app_js_sha256": "54951bfc79060ffd8345da2c658de56f"
+      },
+      "persona_ids": [
+        "C3-P0",
+        "C3-P1",
+        "C3-P2",
+        "C3-P3"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "service_id": "svc-c0-0",
+      "cluster_id": "C0",
+      "address": "qjfnd3u5wvl2tlvpsppva2xg3b77pynkpxuuceipg6cnbkgstaug7nme.onion",
+      "title": "Parts Bin",
+      "topic": "vintage_electronics",
+      "flaws": [
+        "FL-server_status",
+        "FL-nginx_version_banner",
+        "FL-shared_favicon",
+        "FL-shared_analytics_id"
+      ],
+      "shared_artifacts": {
+        "favicon_sha256": "20ec64400487171e59207e3b20f9c9a5",
+        "analytics_id": "cea49f2303be6eb38ae809aa9325a353",
+        "tls_spki_sha256": "STOCK_DEFAULT",
+        "ssh_hostkey_sha256": "STOCK_DEFAULT",
+        "app_js_sha256": "STOCK_DEFAULT",
+        "error404_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Parts Bin</h1><p>Listings for speaker, serviced, crossover, cassette, cartridge. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html",
+            "Server": "nginx/1.24.0"
+          },
+          "is_clean_control": false,
+          "body_sha256": "de31de3e8535d7d0bed91e9913fe5486ec7cf04d4ab77578f33ce651c6ed17d3"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/server-status",
+          "body": "<html><head><title>Apache Server Status</title></head><body><h1>Apache Server Status</h1><table><tr><th>Srv</th><th>PID</th><th>Client</th><th>Request</th></tr><tr><td>0-0</td><td>1501</td><td>127.0.0.1</td><td>GET / HTTP/1.1</td></tr></table></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "a5ea5f16b94c9b6100fac3536f0cdc78ed1f71af4a4c39867866174330273405"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c0-1",
+      "cluster_id": "C0",
+      "address": "353c2oojyqrykkjv2z5j53ob3w75zltv7gfk3o2wyesinwom4ox55vu2.onion",
+      "title": "Odd Lots",
+      "topic": "used_books",
+      "flaws": [
+        "FL-directory_autoindex",
+        "FL-exif_gps_in_image",
+        "FL-shared_favicon",
+        "FL-shared_analytics_id"
+      ],
+      "shared_artifacts": {
+        "favicon_sha256": "20ec64400487171e59207e3b20f9c9a5",
+        "analytics_id": "cea49f2303be6eb38ae809aa9325a353",
+        "tls_spki_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Odd Lots</h1><p>Listings for reprint, glossary, appendix, anthology, chapter. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html"
+          },
+          "is_clean_control": false,
+          "body_sha256": "a70aa5d92ae9d5d47556646bc8800f877953d5ad15fa10ba5224e11dc034b795"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/uploads/",
+          "body": "<html><head><title>Index of /uploads</title></head><body><h1>Index of /uploads</h1><pre><a href=\"../\">Parent Directory</a>\n<a href=\"pic01.jpg\">pic01.jpg</a>\n<a href=\"notes.txt\">notes.txt</a>\n</pre></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "da83de50064867166ea1b814913b7b5c621318e64da4c718f7b4a615a980fd02"
+        },
+        {
+          "path": "/assets/img/product-1.jpg",
+          "body": "[JPEG fixture] EXIF GPSLatitude=28.6139 GPSLongitude=77.2090 GPSDateStamp=2026:01:04 GPSVersionID=2.3.0 nonce=5434aeb43773",
+          "status": 200,
+          "headers": {
+            "Content-Type": "image/jpeg"
+          },
+          "is_clean_control": false,
+          "body_sha256": "0bbcbe02dcf00d61640270c2c9dfc753d82f5ebc59de6ce5b783b863e0bcbf59"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c0-2",
+      "cluster_id": "C0",
+      "address": "tbh542kscxxtaya2nwvvt77j5fparjb4kcwyufiat6kgnleyzzmpnit6.onion",
+      "title": "Hand-Me-Down",
+      "topic": "music_gear",
+      "flaws": [
+        "FL-phpinfo",
+        "FL-verbose_error_path_disclosure",
+        "FL-shared_favicon",
+        "FL-shared_analytics_id"
+      ],
+      "shared_artifacts": {
+        "favicon_sha256": "20ec64400487171e59207e3b20f9c9a5",
+        "analytics_id": "cea49f2303be6eb38ae809aa9325a353",
+        "tls_spki_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Hand-Me-Down</h1><p>Listings for mixer, pickup, compressor, drum, pedal. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html"
+          },
+          "is_clean_control": false,
+          "body_sha256": "4afe450b9cd294a8f86285a0cbb8b791a51a28b23955ca5913b9f7528cd60555"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/phpinfo.php",
+          "body": "<html><body><table><tr><td>PHP Version</td><td>7.4.33</td></tr><tr><td>Loaded Configuration File</td><td>/etc/php/php.ini</td></tr><tr><td>Server API</td><td>Apache 2.0 Handler</td></tr></table></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "2e7d586a17dce6463f54b36e258b570d9beadc6aaeef3ffcaf0ccd105992371b"
+        },
+        {
+          "path": "/api/v1/missing/",
+          "body": "<h1>500 Internal Server Error</h1><pre>Traceback (most recent call last):\n  File \"/srv/app/handlers/router.py\", line 88, in dispatch\n    handler = self.routes[path]\nKeyError: '/api/v1/missing/'\n</pre>",
+          "status": 500,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "01b276d8d46f8af6b4808712950dada583593d4a0529c9451bd90e3b7a15f3ef"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c1-0",
+      "cluster_id": "C1",
+      "address": "qym44bynvbdthaedkk5rj6gggocxggxvzcmrty3gb2w2r5d7rpj6qcn2.onion",
+      "title": "Corner Store",
+      "topic": "garden_supplies",
+      "flaws": [
+        "FL-dot_git",
+        "FL-cookie_name_unique",
+        "FL-shared_tls_cert_fingerprint",
+        "FL-identical_404_page_hash"
+      ],
+      "shared_artifacts": {
+        "tls_spki_sha256": "316f8c9880832d255f1779e06fced5a2",
+        "error404_sha256": "9a9cd4460614212fa4857f4aa79f8753",
+        "favicon_sha256": "STOCK_DEFAULT",
+        "ssh_hostkey_sha256": "STOCK_DEFAULT",
+        "app_js_sha256": "STOCK_DEFAULT",
+        "analytics_id": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Corner Store</h1><p>Listings for seedling, loam, trellis, hardy, container. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html",
+            "Set-Cookie": "sess_9f2c1ab4=1; Path=/; HttpOnly"
+          },
+          "is_clean_control": false,
+          "body_sha256": "f5771f9dd004c2cf121893010806a9a56246d6a801d3d314b2f562c9c02c2eb7"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/.git/config",
+          "body": "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[remote \"origin\"]\n\turl = https://git.internal.local/app.git\n",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "c0066b1253f989e798391c0f2468b9b029a46d1edf46e179a69bd231bc2bb4bc"
+        },
+        {
+          "path": "/definitely-not-here",
+          "body": "<html><head><title>404 Not Found</title></head><body><h1>Page not found</h1><p>ref: 9a9cd4460614212f</p><p><a href='/'>Back to listings</a></p></body></html>",
+          "status": 404,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "b6f025a13d2397ecbcaca4e9cd4e18593079a296f89fd58533abf87db29065f1"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c1-1",
+      "cluster_id": "C1",
+      "address": "3bgpqy2zlwdvuiuhhykq4zt6puira22zanjyvzlm6ggpef6v6rpc7bgs.onion",
+      "title": "Clear Out",
+      "topic": "board_games",
+      "flaws": [
+        "FL-dot_env",
+        "FL-timezone_leak",
+        "FL-shared_tls_cert_fingerprint",
+        "FL-identical_404_page_hash"
+      ],
+      "shared_artifacts": {
+        "tls_spki_sha256": "316f8c9880832d255f1779e06fced5a2",
+        "error404_sha256": "9a9cd4460614212fa4857f4aa79f8753",
+        "favicon_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Clear Out</h1><p>Listings for shuffle, miniature, kickstarter, meeple, expansion. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html",
+            "Date": "Mon, 12 Jan 2026 14:03:11 +0530"
+          },
+          "is_clean_control": false,
+          "body_sha256": "dcbdb33d3589d8c7150231e79d60a5fff85e6acca2ce99e6bce3b47519a1f311"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/.env",
+          "body": "APP_NAME=example\nAPP_ENV=local\nDB_PASSWORD=\nAPI_KEY=\n",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "04a4798d06f728fdda4ca07d9fcc2aafa06fee4d0e9556497fe5b1f635eb6b83"
+        },
+        {
+          "path": "/definitely-not-here",
+          "body": "<html><head><title>404 Not Found</title></head><body><h1>Page not found</h1><p>ref: 9a9cd4460614212f</p><p><a href='/'>Back to listings</a></p></body></html>",
+          "status": 404,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "b6f025a13d2397ecbcaca4e9cd4e18593079a296f89fd58533abf87db29065f1"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c1-2",
+      "cluster_id": "C1",
+      "address": "cmz75bvwywsyuijtgxtlmwza2bnpjfnmvesuuncv34gulngnhfcbm5wc.onion",
+      "title": "Old Stock",
+      "topic": "bike_parts",
+      "flaws": [
+        "FL-backup_file",
+        "FL-etag_pattern",
+        "FL-shared_tls_cert_fingerprint",
+        "FL-identical_404_page_hash"
+      ],
+      "shared_artifacts": {
+        "tls_spki_sha256": "316f8c9880832d255f1779e06fced5a2",
+        "error404_sha256": "9a9cd4460614212fa4857f4aa79f8753",
+        "favicon_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Old Stock</h1><p>Listings for rim, handlebar, tube, shifter, seatpost. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html",
+            "ETag": "W/\"5f8-1a2b3c4d\""
+          },
+          "is_clean_control": false,
+          "body_sha256": "8c033c300b6bf1ee32a91d432fe0ca3fa03edf734484fabb776d17b644d909d8"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/index.php.bak",
+          "body": "<?php\n// application source backup\nrequire 'config.php';\nfunction render_home() { /* ... */ }\n",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "a57d115a01f0c6a202a70abf457351488d2bcf8ad946c01c4505f70e5db0a841"
+        },
+        {
+          "path": "/definitely-not-here",
+          "body": "<html><head><title>404 Not Found</title></head><body><h1>Page not found</h1><p>ref: 9a9cd4460614212f</p><p><a href='/'>Back to listings</a></p></body></html>",
+          "status": 404,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "b6f025a13d2397ecbcaca4e9cd4e18593079a296f89fd58533abf87db29065f1"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c2-0",
+      "cluster_id": "C2",
+      "address": "4ejd5ayfqfnm53ecnps5lonjvtjvc6tjowe6murphyilts6pasyslynw.onion",
+      "title": "Old Stock",
+      "topic": "vintage_electronics",
+      "flaws": [
+        "FL-default_admin_panel",
+        "FL-http_header_order",
+        "FL-shared_ssh_hostkey"
+      ],
+      "shared_artifacts": {
+        "ssh_hostkey_sha256": "e7608ebd06019a22626f1d9fff4ac3b0",
+        "favicon_sha256": "STOCK_DEFAULT",
+        "tls_spki_sha256": "STOCK_DEFAULT",
+        "analytics_id": "STOCK_DEFAULT",
+        "error404_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Old Stock</h1><p>Listings for valve, vintage, cartridge, serviced, tweeter. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html",
+            "X-Powered-By": "app-server",
+            "Vary": "Accept-Encoding",
+            "Cache-Control": "no-store",
+            "X-Request-Id": "req-0001"
+          },
+          "is_clean_control": false,
+          "body_sha256": "308e9ff0de0882da9a618b542310b20e0fe970675eff33da060cc36dcd8f9751"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/admin/",
+          "body": "<html><head><title>Admin Login</title></head><body><h1>Admin Login</h1><form><input name='user'><input name='pass' type='password'><button>Sign in</button></form><p>Powered by the vendor default installer.</p></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "f408011948523628735165b0cc23a76d699d7bfd679ab2b2e23c1db34a080702"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c2-1",
+      "cluster_id": "C2",
+      "address": "gagqdbcubbt65lpkdayj2xtjskk3nbtofjk4pzlktiwossprifjixebu.onion",
+      "title": "Hand-Me-Down",
+      "topic": "used_books",
+      "flaws": [
+        "FL-robots_path_leak",
+        "FL-shared_ssh_hostkey"
+      ],
+      "shared_artifacts": {
+        "ssh_hostkey_sha256": "e7608ebd06019a22626f1d9fff4ac3b0",
+        "favicon_sha256": "STOCK_DEFAULT",
+        "tls_spki_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Hand-Me-Down</h1><p>Listings for hardback, edition, collection, folio, dustjacket. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html"
+          },
+          "is_clean_control": false,
+          "body_sha256": "61d045de4dc86220a5b0bbba52cdb452e1099d1536fc6dce540ce4ed8c86b6e4"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/robots.txt",
+          "body": "User-agent: *\nDisallow: /internal-inventory/\nDisallow: /staging-db-dump/\nDisallow: /svc-c2-1-private/\n",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/plain"
+          },
+          "is_clean_control": false,
+          "body_sha256": "4a1eb5b741139190e40a5ae745201de3c8554a4d08982be6743631ec46d18fe7"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c2-2",
+      "cluster_id": "C2",
+      "address": "mlt3x3xkzbexfqzfzc547jtjnhe5w2oq2gpa6z3kudopkhzwee7vnzs3.onion",
+      "title": "Corner Store",
+      "topic": "music_gear",
+      "flaws": [
+        "FL-staging_page",
+        "FL-shared_ssh_hostkey"
+      ],
+      "shared_artifacts": {
+        "ssh_hostkey_sha256": "e7608ebd06019a22626f1d9fff4ac3b0",
+        "favicon_sha256": "STOCK_DEFAULT",
+        "tls_spki_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Corner Store</h1><p>Listings for bridge, fret, microphone, interface, hihat. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html"
+          },
+          "is_clean_control": false,
+          "body_sha256": "1d4ce6bc6c4dfc99b213394f0732b0c1fc53efeb7855bdb2d9a6227011f7fadb"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/staging/",
+          "body": "<h1>Staging environment</h1><p>Pre-production build. Not for public use.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "c2b16e0a0971556fa3b6e2a8d490d52325c0c8278a1840b7228081cdcc5960e4"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c3-0",
+      "cluster_id": "C3",
+      "address": "vd2wk3cs4mkcfaawk52nss4kz45mje6ozrrowd7zravnvhqpip4qnnkz.onion",
+      "title": "Second Look",
+      "topic": "garden_supplies",
+      "flaws": [
+        "FL-debug_endpoint",
+        "FL-identical_static_asset_hash"
+      ],
+      "shared_artifacts": {
+        "app_js_sha256": "54951bfc79060ffd8345da2c658de56f",
+        "favicon_sha256": "STOCK_DEFAULT",
+        "tls_spki_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Second Look</h1><p>Listings for bulb, sowing, pollinator, trowel, grafting. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html"
+          },
+          "is_clean_control": false,
+          "body_sha256": "13b29b046f0a93fe0382ace6f1750be1bf0eebe6e27d83ba4df1e02032b6e5a5"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/debug/vars",
+          "body": "{\"cmdline\":[\"/srv/app/server\",\"--env=prod\"],\"memstats\":{\"Alloc\":1209344,\"Sys\":7340032},\"uptime\":\"14h2m\"}",
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "is_clean_control": false,
+          "body_sha256": "ed559f0c5f137494b9843f6e47e064252837912e9e47a3cdfe615520f6b09ba2"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c3-1",
+      "cluster_id": "C3",
+      "address": "fe27a2bdc2kn2gx4hb5pwgxrkdr4l5uvkex4rwj5jb53tvotjv53jknp.onion",
+      "title": "Hand-Me-Down",
+      "topic": "board_games",
+      "flaws": [
+        "FL-readme_internal_hostname",
+        "FL-identical_static_asset_hash"
+      ],
+      "shared_artifacts": {
+        "app_js_sha256": "54951bfc79060ffd8345da2c658de56f",
+        "favicon_sha256": "STOCK_DEFAULT",
+        "tls_spki_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Hand-Me-Down</h1><p>Listings for cardstock, board, counter, solo, expansion. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html"
+          },
+          "is_clean_control": false,
+          "body_sha256": "c8995c64b36b99b6c9fd411c91d89041fdb3f08fa7cf7721f31bcdd8bd8307bf"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        },
+        {
+          "path": "/README.txt",
+          "body": "Deployment notes\n----------------\nService host: db-replica-03.lan\nAddress: 10.14.22.7\nRestart with: systemctl restart app\n",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/plain"
+          },
+          "is_clean_control": false,
+          "body_sha256": "e9a609cec7af2270c0b5081403ea285985c9439d9c86395970b9e75f1629601a"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-c3-2",
+      "cluster_id": "C3",
+      "address": "qkuuelxowuokys35paate7ipmwaubxmcfq7z62pioys3duyy3cgeucia.onion",
+      "title": "Odd Lots",
+      "topic": "bike_parts",
+      "flaws": [
+        "FL-apache_version_banner",
+        "FL-identical_static_asset_hash"
+      ],
+      "shared_artifacts": {
+        "app_js_sha256": "54951bfc79060ffd8345da2c658de56f",
+        "favicon_sha256": "STOCK_DEFAULT",
+        "tls_spki_sha256": "STOCK_DEFAULT"
+      },
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>Odd Lots</h1><p>Listings for bracket, derailleur, chainring, brazing, caliper. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html",
+            "Server": "Apache/2.4.52 (Ubuntu)"
+          },
+          "is_clean_control": false,
+          "body_sha256": "9c4d5fc75b388d72812cf8ec52e35c7d0549b7a4bed3b02233b8aec1f6c06bf5"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-solo-0",
+      "cluster_id": null,
+      "address": "jubotb42oxikhait6z7xuyjwvn7hqlbhu2snbdbxfn7wwkrvihfftish.onion",
+      "title": "Corner Store",
+      "topic": "vintage_electronics",
+      "flaws": [],
+      "shared_artifacts": {},
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<html><body><h1>Listings</h1></body></html>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html",
+            "Set-Cookie": "PHPSESSID=abc123; Path=/; HttpOnly"
+          },
+          "is_clean_control": false,
+          "body_sha256": "907860cb0712ce91d459beb6aa6939ccb903bb0416d618e4a1c48d2c9d6f11e3"
+        },
+        {
+          "path": "/about",
+          "body": "<html><body><h1>About</h1></body></html>",
+          "status": 200,
+          "headers": {
+            "Server": "Apache"
+          },
+          "is_clean_control": true,
+          "body_sha256": "4239421a86a8ec217165b391f984a1dcbc00f19d72f32b8f249f12b729b6c4ac"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<html><body><h1>Contact</h1></body></html>",
+          "status": 200,
+          "headers": {
+            "Date": "Fri, 23 Oct 2026 13:00:00 GMT"
+          },
+          "is_clean_control": true,
+          "body_sha256": "96f9d86844a3acf90ec83e1161d498d4cd5d46d1c7e8397921ad9e7040b68f3e"
+        },
+        {
+          "path": "/index.php.bak",
+          "body": "<html><body><h1>Backup unavailable</h1></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "a83bdf37fd435dae5f720ed2b5d774396e2290bda81883120777c4cb53851b59"
+        },
+        {
+          "path": "/debug/vars",
+          "body": "{\"note\":\"example response only\",\"memstats\":{\"Alloc\":0},\"docs\":\"/api\"}",
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "is_clean_control": false,
+          "body_sha256": "fa7e1fe6aae0c7f774ffb621019e0abf7b424cce941464bc4bc752b27f806588"
+        },
+        {
+          "path": "/admin/",
+          "body": "<html><head><title>Admin Login</title></head><body><h1>Admin Login</h1><form><input name='u'><input name='p' type='password'></form></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "cd24c1e979977c0e9cab68f6ae2b03f7fbfaddd8d05b1f2df145ed7fb63a3533"
+        },
+        {
+          "path": "/uploads/",
+          "body": "<html><body><h1>Uploads Index</h1><a href=\"/uploads/1\">1</a> <a href=\"/uploads/2\">2</a></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "820eca98c709548a844a8dcb753fc3ff42e9e2c2e067dfec9dfe787e82414ecf"
+        },
+        {
+          "path": "/.env",
+          "body": "<html><body><h1>Not Found</h1><p>No such file.</p></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "0bbcfa5493d7837ba3969dceacac572999fe8f27718380dce92e5f29d733c7af"
+        },
+        {
+          "path": "/.git/config",
+          "body": "<html><body><h1>403 Forbidden</h1><p>Access denied.</p></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "d60a6ef97604fbbb03db404f1c0d6f7bce2077d912bc9d163dd5794a3836a5ed"
+        },
+        {
+          "path": "/style.css",
+          "body": "body{color:#111}",
+          "status": 200,
+          "headers": {
+            "ETag": "\"v5-1a2b\""
+          },
+          "is_clean_control": false,
+          "body_sha256": "cc564ca3bf4f4abe12c0ddee7a867bfe198d410fa4bd3f81c03653119091ecb8"
+        },
+        {
+          "path": "/assets/img/stock-photo.jpg",
+          "body": "[JPEG fixture] EXIF GPSLatitude=0.0 GPSLongitude=0.0 GPSVersionID=2.3.0",
+          "status": 200,
+          "headers": {
+            "Content-Type": "image/jpeg"
+          },
+          "is_clean_control": false,
+          "body_sha256": "fdd10ec653430b25b5b697f85b7fe1db2f9c38e27f3b0c90612a9d1f39c36b59"
+        },
+        {
+          "path": "/faq",
+          "body": "<html><body><h1>FAQ</h1></body></html>",
+          "status": 200,
+          "headers": {
+            "X-Powered-By": "PHP/8.1.2",
+            "Vary": "Accept-Encoding",
+            "Cache-Control": "no-store"
+          },
+          "is_clean_control": false,
+          "body_sha256": "fbbda21dd9996ea7448b6daa2699cfd20cd753d9849876c3579b241bba92562a"
+        },
+        {
+          "path": "/colophon",
+          "body": "<html><body><h1>Colophon</h1></body></html>",
+          "status": 200,
+          "headers": {
+            "Server": "nginx"
+          },
+          "is_clean_control": false,
+          "body_sha256": "2a8f6911cea8d5a38fe6b9e00f25a00fb119493bc05ea4c4bac5d8551994d4a9"
+        },
+        {
+          "path": "/docs/phpinfo.html",
+          "body": "<html><body><h1>Debugging with phpinfo()</h1><p>Call <code>phpinfo()</code> to inspect your PHP 8.1 configuration.</p></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "266b25d4054f89b8d2fea14107da8deeab47d5646ef6a2bda3b686195db7eb24"
+        },
+        {
+          "path": "/README.txt",
+          "body": "Deployment notes\n----------------\nExample hostname: db.example.com\nExample address: 192.0.2.7\n",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/plain"
+          },
+          "is_clean_control": false,
+          "body_sha256": "eed839ea22f71e5e1d41174667ae9b166a1c3edbd2d1e67eb62cde7249cd97ee"
+        },
+        {
+          "path": "/robots.txt",
+          "body": "User-agent: *\nDisallow: /admin/\nDisallow: /search\n",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/plain"
+          },
+          "is_clean_control": false,
+          "body_sha256": "4248aedd9065f83a5215fcc086b5fa96771a4728621bdaa5be7c191d288bd7c4"
+        },
+        {
+          "path": "/server-status",
+          "body": "<html><body><h1>Not Found</h1><p>Try <a href='/server-status'>server-status</a> from the admin network.</p></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "5110cad5b72da81b7458f8615621949d8dbe0685b8ac372dfbd740588a76b80c"
+        },
+        {
+          "path": "/staging/",
+          "body": "<html><body><h1>Listings</h1><p><a href='/about'>About</a> <a href='/notes'>Staging notes</a></p></body></html>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "7813256610dacda12452a29ef63171a1390e6ae4c7850e961daa84fb8c1f4ea0"
+        },
+        {
+          "path": "/api/v1/redacted/",
+          "body": "<h1>500 Internal Server Error</h1><pre>Traceback (most recent call last):\n  File \"<redacted>\", line 12, in dispatch\n</pre>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": false,
+          "body_sha256": "fddb5209513315d41715924a388e783751cc3d5cfdf038631011e6413b902492"
+        }
+      ]
+    },
+    {
+      "service_id": "svc-solo-1",
+      "cluster_id": null,
+      "address": "6ylcwpk46afv3uoc6d4gkz3ebs4tk6f3euv5imbob6n2iiqfubrsagfe.onion",
+      "title": "The Backroom",
+      "topic": "used_books",
+      "flaws": [],
+      "shared_artifacts": {},
+      "endpoints": [
+        {
+          "path": "/",
+          "body": "<h1>The Backroom</h1><p>Listings for edition, collection, folio, anthology, manuscript. Updated weekly.</p><p><a href='/about'>About</a> <a href='/search'>Search</a> <a href='/contact'>Contact</a></p>",
+          "status": 200,
+          "headers": {
+            "Content-Type": "text/html"
+          },
+          "is_clean_control": false,
+          "body_sha256": "d4b7201cef3162dae90bc59f4d0f6f9056694dfcd47855b399a7532c28840256"
+        },
+        {
+          "path": "/about",
+          "body": "<h1>About</h1><p>A small hobby marketplace. No accounts needed.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "89d1c452f7d82f3d7a6e98538f119932ddb3952b18a8f09d82b3fa449b4dcebe"
+        },
+        {
+          "path": "/search",
+          "body": "<form action='/search'><input name='q'><button>Go</button></form>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "a53ef176a06df6e2b0d738b439a8cdd2df928637d1d6225600a3c76cfe1c9eef"
+        },
+        {
+          "path": "/contact",
+          "body": "<h1>Contact</h1><p>Reply to any listing to get in touch.</p>",
+          "status": 200,
+          "headers": {},
+          "is_clean_control": true,
+          "body_sha256": "d19af9a1135772c5fe7c1e25c9d78ea12999542b475124cb4580d392eec7c427"
+        }
+      ]
+    }
+  ],
+  "personas": [
+    {
+      "persona_id": "C0-P0",
+      "cluster_id": "C0",
+      "role": "subject",
+      "style": "pure_english",
+      "handle": "user_5d294b4e",
+      "active_hours": [
+        13,
+        17,
+        21
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "b26000e62811a9608f17133199fb118c8b598699",
+        "wallet_address": "4294e2ba7223e6012a5ad658288508fe0dd903a1",
+        "contact_handle": "88d3f4e88af2b9f94dcb01366f2d83a1ec10bfbd"
+      },
+      "drift_at": 4,
+      "drift_topic": "used_books",
+      "post_count": 12,
+      "total_words": 1649,
+      "posts": []
+    },
+    {
+      "persona_id": "C0-P1",
+      "cluster_id": "C0",
+      "role": "subject",
+      "style": "hinglish_light",
+      "handle": "user_735649dd",
+      "active_hours": [
+        5,
+        7,
+        9
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "b26000e62811a9608f17133199fb118c8b598699",
+        "wallet_address": "eec77d99b84ed0a900726a720ce0e7d81f838beb",
+        "contact_handle": "062065a29683409d0cff15e4a7907ae7b7d8a5d9"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 2609,
+      "posts": []
+    },
+    {
+      "persona_id": "C0-P2",
+      "cluster_id": "C0",
+      "role": "subject",
+      "style": "hinglish_heavy",
+      "handle": "user_83f307c4",
+      "active_hours": [
+        0,
+        18,
+        21
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "wallet_address": "79e2a9e922e32a1ba5462b31fffde152657f7842",
+        "pgp_fingerprint": "9e1d27a4d0f85eb4d68a25bb55113287cccaac6f",
+        "contact_handle": "55e8c13a78d9ecc5beda0321449bdcb43ac041ef"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 3059,
+      "posts": []
+    },
+    {
+      "persona_id": "C0-P3",
+      "cluster_id": "C0",
+      "role": "subject",
+      "style": "template_reuser",
+      "handle": "user_14ba9b65",
+      "active_hours": [
+        6,
+        9,
+        12
+      ],
+      "template_id": "TPL-FORUM-D",
+      "shared_artifacts": {
+        "wallet_address": "79e2a9e922e32a1ba5462b31fffde152657f7842",
+        "pgp_fingerprint": "caf89f220a2348978aac992fc7fb2370d7171ffa",
+        "contact_handle": "83284e79a6ff9ca10dbe4bf0192750a8fdf4062e"
+      },
+      "drift_at": null,
+      "drift_topic": null,
+      "post_count": 12,
+      "total_words": 808,
+      "posts": []
+    },
+    {
+      "persona_id": "C1-P0",
+      "cluster_id": "C1",
+      "role": "subject",
+      "style": "pure_english",
+      "handle": "user_6fc26559",
+      "active_hours": [
+        15,
+        18,
+        21
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "2bbe2eeb011899e9756a3e380e6fb7e23bb653b5",
+        "wallet_address": "cca2348f00ff71c5df275fbc64f1eadb2a87d151",
+        "contact_handle": "452a7368669e4582ea27c4fec2b043f3bd8b3a17"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1500,
+      "posts": []
+    },
+    {
+      "persona_id": "C1-P1",
+      "cluster_id": "C1",
+      "role": "subject",
+      "style": "hinglish_light",
+      "handle": "user_0a425b9c",
+      "active_hours": [
+        9,
+        11,
+        13,
+        15
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "2bbe2eeb011899e9756a3e380e6fb7e23bb653b5",
+        "wallet_address": "d9abdf2ea72eb0e9d05d9df8a07f66643290dc67",
+        "contact_handle": "03c09e7f66dbf4caceb97e8446d9cfefda649858"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 2415,
+      "posts": []
+    },
+    {
+      "persona_id": "C1-P2",
+      "cluster_id": "C1",
+      "role": "subject",
+      "style": "hinglish_heavy",
+      "handle": "user_46fb7631",
+      "active_hours": [
+        0,
+        18,
+        21
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "wallet_address": "2f9c57ea41f13687fa0a626a0e1e698f94bc308a",
+        "pgp_fingerprint": "ced4b37292ce5232d392f9f0601d53649f5234c8",
+        "contact_handle": "84d9085369daee0304488dc4305b8f50027c117b"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 2533,
+      "posts": []
+    },
+    {
+      "persona_id": "C1-P3",
+      "cluster_id": "C1",
+      "role": "subject",
+      "style": "template_reuser",
+      "handle": "user_d4f42ac2",
+      "active_hours": [
+        1,
+        4,
+        7
+      ],
+      "template_id": "TPL-FORUM-D",
+      "shared_artifacts": {
+        "wallet_address": "2f9c57ea41f13687fa0a626a0e1e698f94bc308a",
+        "pgp_fingerprint": "cc705728e106ffcc8115b322c92f5085272efa67",
+        "contact_handle": "e855c030f6e33bb13bef9abd7b0855f61e6993fd"
+      },
+      "drift_at": null,
+      "drift_topic": null,
+      "post_count": 12,
+      "total_words": 949,
+      "posts": []
+    },
+    {
+      "persona_id": "C2-P0",
+      "cluster_id": "C2",
+      "role": "subject",
+      "style": "pure_english",
+      "handle": "user_133b2b4f",
+      "active_hours": [
+        15,
+        17,
+        19,
+        21,
+        23
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "39d10c6f8520df967a56511814afe9c2ae7c0aa1",
+        "wallet_address": "e778a9369a537e8fb64dd94cb2c9642b9b4b7db5",
+        "contact_handle": "bd3e518e0a7e421fd2765af8723e46d98d97b463"
+      },
+      "drift_at": 4,
+      "drift_topic": "used_books",
+      "post_count": 12,
+      "total_words": 1677,
+      "posts": []
+    },
+    {
+      "persona_id": "C2-P1",
+      "cluster_id": "C2",
+      "role": "subject",
+      "style": "hinglish_light",
+      "handle": "user_6317ad5a",
+      "active_hours": [
+        11,
+        13,
+        15
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "39d10c6f8520df967a56511814afe9c2ae7c0aa1",
+        "wallet_address": "1865161ce1dfd873e61e06c07f8b1f96cbe86e50",
+        "contact_handle": "e308da1933176b563985390329e8c5b0a22e9704"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1704,
+      "posts": []
+    },
+    {
+      "persona_id": "C2-P2",
+      "cluster_id": "C2",
+      "role": "subject",
+      "style": "hinglish_heavy",
+      "handle": "user_d4038b6c",
+      "active_hours": [
+        3,
+        5,
+        7
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "wallet_address": "59aeb37a1394043af75b8a1072c18f7feadb83f9",
+        "pgp_fingerprint": "78fc93513a4ad62168b160b81b2a1cd7665773b3",
+        "contact_handle": "1e2db202dc23c4d8acb10abb6954eed588186713"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1511,
+      "posts": []
+    },
+    {
+      "persona_id": "C2-P3",
+      "cluster_id": "C2",
+      "role": "subject",
+      "style": "template_reuser",
+      "handle": "user_d67cb172",
+      "active_hours": [
+        0,
+        2,
+        4,
+        6
+      ],
+      "template_id": "TPL-FORUM-D",
+      "shared_artifacts": {
+        "wallet_address": "59aeb37a1394043af75b8a1072c18f7feadb83f9",
+        "pgp_fingerprint": "cb4a27c56ecd300fac6c7d94d4d3d25fa33d00ed",
+        "contact_handle": "112f67fa3463e5e1ad2ebfedb8d8a64669f45941"
+      },
+      "drift_at": null,
+      "drift_topic": null,
+      "post_count": 12,
+      "total_words": 979,
+      "posts": []
+    },
+    {
+      "persona_id": "C3-P0",
+      "cluster_id": "C3",
+      "role": "subject",
+      "style": "pure_english",
+      "handle": "user_181f7c03",
+      "active_hours": [
+        1,
+        5,
+        9,
+        13,
+        17
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "5ee072c93068a13e8c41e660864c0502d4dd4908",
+        "wallet_address": "0d2e07d577fac84a443516fd212826e45ecac7f3",
+        "contact_handle": "26c067d6609c2db282082b75c84d8b966c9dd0fd"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1202,
+      "posts": []
+    },
+    {
+      "persona_id": "C3-P1",
+      "cluster_id": "C3",
+      "role": "subject",
+      "style": "hinglish_light",
+      "handle": "user_22828a7e",
+      "active_hours": [
+        11,
+        14,
+        17
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "pgp_fingerprint": "5ee072c93068a13e8c41e660864c0502d4dd4908",
+        "wallet_address": "296bd92aa5600d12b8ce25dde5ff5144d48a4bfa",
+        "contact_handle": "b613c3c228db5412338dc64aec22b59802f29a6b"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1717,
+      "posts": []
+    },
+    {
+      "persona_id": "C3-P2",
+      "cluster_id": "C3",
+      "role": "subject",
+      "style": "hinglish_heavy",
+      "handle": "user_35cee197",
+      "active_hours": [
+        1,
+        3,
+        5,
+        23
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "wallet_address": "a704776dd7eb823452334b91733aae0cb9efb516",
+        "pgp_fingerprint": "b0217d74a16b8918ff85e064cab82defd20cd8a9",
+        "contact_handle": "87c9e330ef86f9c29eb3620d02363a96fbc8b59c"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1759,
+      "posts": []
+    },
+    {
+      "persona_id": "C3-P3",
+      "cluster_id": "C3",
+      "role": "subject",
+      "style": "template_reuser",
+      "handle": "user_1f496069",
+      "active_hours": [
+        4,
+        8,
+        12,
+        16
+      ],
+      "template_id": "TPL-FORUM-D",
+      "shared_artifacts": {
+        "wallet_address": "a704776dd7eb823452334b91733aae0cb9efb516",
+        "pgp_fingerprint": "00a72ee868a0c69ab3f459d4ef431742e3f771f4",
+        "contact_handle": "29d15e73a43428b481495c53e8d118bb90ba5195"
+      },
+      "drift_at": null,
+      "drift_topic": null,
+      "post_count": 12,
+      "total_words": 572,
+      "posts": []
+    },
+    {
+      "persona_id": "DECOY-00",
+      "cluster_id": null,
+      "role": "near_miss_decoy",
+      "style": "pure_english",
+      "handle": "user_5d294b4ex",
+      "active_hours": [
+        1,
+        5,
+        9
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "contact_handle": "PUBLIC_PLACEHOLDER"
+      },
+      "drift_at": 4,
+      "drift_topic": "used_books",
+      "post_count": 12,
+      "total_words": 2106,
+      "posts": []
+    },
+    {
+      "persona_id": "DECOY-01",
+      "cluster_id": null,
+      "role": "near_miss_decoy",
+      "style": "pure_english",
+      "handle": "user_6fc26559-",
+      "active_hours": [
+        3,
+        6,
+        9
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "contact_handle": "PUBLIC_PLACEHOLDER"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1668,
+      "posts": []
+    },
+    {
+      "persona_id": "DECOY-02",
+      "cluster_id": null,
+      "role": "near_miss_decoy",
+      "style": "pure_english",
+      "handle": "user_133b2b4f1",
+      "active_hours": [
+        3,
+        5,
+        7,
+        9,
+        11
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "contact_handle": "PUBLIC_PLACEHOLDER"
+      },
+      "drift_at": 4,
+      "drift_topic": "used_books",
+      "post_count": 12,
+      "total_words": 2742,
+      "posts": []
+    },
+    {
+      "persona_id": "DECOY-03",
+      "cluster_id": null,
+      "role": "near_miss_decoy",
+      "style": "pure_english",
+      "handle": "user_181f7c03x",
+      "active_hours": [
+        13,
+        17,
+        21,
+        1,
+        5
+      ],
+      "template_id": null,
+      "shared_artifacts": {
+        "contact_handle": "PUBLIC_PLACEHOLDER"
+      },
+      "drift_at": 4,
+      "drift_topic": "vintage_electronics",
+      "post_count": 12,
+      "total_words": 1711,
+      "posts": []
+    }
+  ],
+  "flaws": [
+    {
+      "flaw_id": "FL-server_status",
+      "kind": "server_status",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c0-0"
+      ],
+      "path": "/server-status",
+      "signal": "Apache mod_status page reachable; exposes request table and client IPs"
+    },
+    {
+      "flaw_id": "FL-directory_autoindex",
+      "kind": "directory_autoindex",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c0-1"
+      ],
+      "path": "/uploads/",
+      "signal": "Directory listing enabled; 'Index of /uploads' with file table"
+    },
+    {
+      "flaw_id": "FL-phpinfo",
+      "kind": "phpinfo",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c0-2"
+      ],
+      "path": "/phpinfo.php",
+      "signal": "Live phpinfo() output; PHP version, loaded modules, env vars"
+    },
+    {
+      "flaw_id": "FL-dot_git",
+      "kind": "dot_git",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c1-0"
+      ],
+      "path": "/.git/config",
+      "signal": "Exposed git metadata; repository URL and remote refs readable"
+    },
+    {
+      "flaw_id": "FL-dot_env",
+      "kind": "dot_env",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c1-1"
+      ],
+      "path": "/.env",
+      "signal": "Environment file with credentials, DB DSN, API keys"
+    },
+    {
+      "flaw_id": "FL-backup_file",
+      "kind": "backup_file",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c1-2"
+      ],
+      "path": "/index.php.bak",
+      "signal": "Source backup served as static text; full application source readable"
+    },
+    {
+      "flaw_id": "FL-default_admin_panel",
+      "kind": "default_admin_panel",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c2-0"
+      ],
+      "path": "/admin/",
+      "signal": "Vendor-default admin login reachable with unchanged default branding"
+    },
+    {
+      "flaw_id": "FL-robots_path_leak",
+      "kind": "robots_path_leak",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c2-1"
+      ],
+      "path": "/robots.txt",
+      "signal": "robots.txt disallows non-standard internal paths, naming them outright"
+    },
+    {
+      "flaw_id": "FL-staging_page",
+      "kind": "staging_page",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c2-2"
+      ],
+      "path": "/staging/",
+      "signal": "Live staging environment reachable; pre-production config and data"
+    },
+    {
+      "flaw_id": "FL-debug_endpoint",
+      "kind": "debug_endpoint",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c3-0"
+      ],
+      "path": "/debug/vars",
+      "signal": "Debug endpoint exposing runtime internals (goruntime/expvar style)"
+    },
+    {
+      "flaw_id": "FL-readme_internal_hostname",
+      "kind": "readme_internal_hostname",
+      "scope": "single",
+      "rule_class": "http_path",
+      "service_ids": [
+        "svc-c3-1"
+      ],
+      "path": "/README.txt",
+      "signal": "README naming an internal hostname or RFC1918 address"
+    },
+    {
+      "flaw_id": "FL-apache_version_banner",
+      "kind": "apache_version_banner",
+      "scope": "single",
+      "rule_class": "banner",
+      "service_ids": [
+        "svc-c3-2"
+      ],
+      "path": "/",
+      "signal": "Server: Apache/2.4.x with full version reachable in response headers"
+    },
+    {
+      "flaw_id": "FL-nginx_version_banner",
+      "kind": "nginx_version_banner",
+      "scope": "single",
+      "rule_class": "banner",
+      "service_ids": [
+        "svc-c0-0"
+      ],
+      "path": "/",
+      "signal": "Server: nginx/1.2x.x with full version reachable in response headers"
+    },
+    {
+      "flaw_id": "FL-exif_gps_in_image",
+      "kind": "exif_gps_in_image",
+      "scope": "single",
+      "rule_class": "metadata",
+      "service_ids": [
+        "svc-c0-1"
+      ],
+      "path": "/assets/img/product-1.jpg",
+      "signal": "Hosted image carries EXIF GPS coordinates from the camera"
+    },
+    {
+      "flaw_id": "FL-verbose_error_path_disclosure",
+      "kind": "verbose_error_path_disclosure",
+      "scope": "single",
+      "rule_class": "config",
+      "service_ids": [
+        "svc-c0-2"
+      ],
+      "path": "/api/v1/missing/",
+      "signal": "Debug traceback in the error body naming an absolute filesystem path"
+    },
+    {
+      "flaw_id": "FL-cookie_name_unique",
+      "kind": "cookie_name_unique",
+      "scope": "single",
+      "rule_class": "config",
+      "service_ids": [
+        "svc-c1-0"
+      ],
+      "path": "/",
+      "signal": "Unusual non-default session cookie name, stable across visits"
+    },
+    {
+      "flaw_id": "FL-timezone_leak",
+      "kind": "timezone_leak",
+      "scope": "single",
+      "rule_class": "config",
+      "service_ids": [
+        "svc-c1-1"
+      ],
+      "path": "/",
+      "signal": "Server Date header offset implies a non-UTC operator timezone"
+    },
+    {
+      "flaw_id": "FL-etag_pattern",
+      "kind": "etag_pattern",
+      "scope": "single",
+      "rule_class": "config",
+      "service_ids": [
+        "svc-c1-2"
+      ],
+      "path": "/assets/",
+      "signal": "ETag format matches a specific server's inode-based generator"
+    },
+    {
+      "flaw_id": "FL-http_header_order",
+      "kind": "http_header_order",
+      "scope": "single",
+      "rule_class": "config",
+      "service_ids": [
+        "svc-c2-0"
+      ],
+      "path": "/",
+      "signal": "Uncommon response-header ordering, stable across services"
+    },
+    {
+      "flaw_id": "FL-shared_favicon",
+      "kind": "shared_favicon",
+      "scope": "cluster",
+      "rule_class": "fingerprint",
+      "service_ids": [
+        "svc-c0-0",
+        "svc-c0-1",
+        "svc-c0-2"
+      ],
+      "path": "/favicon.ico",
+      "signal": "Byte-identical favicon across services in one cluster"
+    },
+    {
+      "flaw_id": "FL-shared_tls_cert_fingerprint",
+      "kind": "shared_tls_cert_fingerprint",
+      "scope": "cluster",
+      "rule_class": "fingerprint",
+      "service_ids": [
+        "svc-c1-0",
+        "svc-c1-1",
+        "svc-c1-2"
+      ],
+      "path": "/",
+      "signal": "Self-signed certificate with the same SPKI fingerprint across services"
+    },
+    {
+      "flaw_id": "FL-shared_ssh_hostkey",
+      "kind": "shared_ssh_hostkey",
+      "scope": "cluster",
+      "rule_class": "fingerprint",
+      "service_ids": [
+        "svc-c2-0",
+        "svc-c2-1",
+        "svc-c2-2"
+      ],
+      "path": "/",
+      "signal": "Same SSH host key fingerprint observed across services"
+    },
+    {
+      "flaw_id": "FL-identical_static_asset_hash",
+      "kind": "identical_static_asset_hash",
+      "scope": "cluster",
+      "rule_class": "fingerprint",
+      "service_ids": [
+        "svc-c3-0",
+        "svc-c3-1",
+        "svc-c3-2"
+      ],
+      "path": "/assets/js/app.js",
+      "signal": "Custom application asset with an identical content hash across services"
+    },
+    {
+      "flaw_id": "FL-shared_analytics_id",
+      "kind": "shared_analytics_id",
+      "scope": "cluster",
+      "rule_class": "fingerprint",
+      "service_ids": [
+        "svc-c0-0",
+        "svc-c0-1",
+        "svc-c0-2"
+      ],
+      "path": "/",
+      "signal": "Same analytics/tracker identifier embedded across services"
+    },
+    {
+      "flaw_id": "FL-identical_404_page_hash",
+      "kind": "identical_404_page_hash",
+      "scope": "cluster",
+      "rule_class": "fingerprint",
+      "service_ids": [
+        "svc-c1-0",
+        "svc-c1-1",
+        "svc-c1-2"
+      ],
+      "path": "/definitely-not-here",
+      "signal": "Byte-identical custom 404 page across services in one cluster"
+    }
+  ],
+  "hard_negatives": [
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c1-0",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c1-0",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c1-1",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c1-1",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c1-2",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c1-2",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c2-0",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c2-0",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c2-1",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c2-1",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c2-2",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c2-2",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c3-0",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c3-0",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c3-1",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c3-1",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_favicon-svc-c3-2",
+      "flaw_kind": "shared_favicon",
+      "service_id": "svc-c3-2",
+      "path": "/favicon.ico",
+      "why": "A stock CMS default favicon, byte-identical across *thousands* of unrelated deployments. The hash matches exactly and the inference is worthless. This is the single most important hard negative in the catalogue. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c0-0",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c0-0",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c0-1",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c0-1",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c0-2",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c0-2",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c2-0",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c2-0",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c2-1",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c2-1",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c2-2",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c2-2",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c3-0",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c3-0",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c3-1",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c3-1",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-wide-shared_tls_cert_fingerprint-svc-c3-2",
+      "flaw_kind": "shared_tls_cert_fingerprint",
+      "service_id": "svc-c3-2",
+      "path": "/",
+      "why": "A certificate issued from a shared hosting or CDN provider, where the issuer and key are shared by unrelated tenants. [widespread: detectable by artefact frequency, 100.0% of eligible services]"
+    },
+    {
+      "fixture_id": "HN-coincident-shared_ssh_hostkey-svc-c0-0",
+      "flaw_kind": "shared_ssh_hostkey",
+      "service_id": "svc-c0-0",
+      "path": "/",
+      "why": "A cloud image's baked-in default host key, shared by every instance provisioned from that image until regenerated. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-coincident-shared_ssh_hostkey-svc-c1-0",
+      "flaw_kind": "shared_ssh_hostkey",
+      "service_id": "svc-c1-0",
+      "path": "/",
+      "why": "A cloud image's baked-in default host key, shared by every instance provisioned from that image until regenerated. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-coincident-identical_static_asset_hash-svc-c0-0",
+      "flaw_kind": "identical_static_asset_hash",
+      "service_id": "svc-c0-0",
+      "path": "/assets/js/app.js",
+      "why": "A widely-mirrored third-party library (jQuery, Bootstrap) at a common path. Identical hash, zero operator signal. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-coincident-identical_static_asset_hash-svc-c1-0",
+      "flaw_kind": "identical_static_asset_hash",
+      "service_id": "svc-c1-0",
+      "path": "/assets/js/app.js",
+      "why": "A widely-mirrored third-party library (jQuery, Bootstrap) at a common path. Identical hash, zero operator signal. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-coincident-shared_analytics_id-svc-c1-0",
+      "flaw_kind": "shared_analytics_id",
+      "service_id": "svc-c1-0",
+      "path": "/",
+      "why": "A placeholder or documentation-sample tracking ID ('UA-XXXXX-Y') that appears in the site template's default configuration. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-coincident-shared_analytics_id-svc-c2-0",
+      "flaw_kind": "shared_analytics_id",
+      "service_id": "svc-c2-0",
+      "path": "/",
+      "why": "A placeholder or documentation-sample tracking ID ('UA-XXXXX-Y') that appears in the site template's default configuration. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-coincident-identical_404_page_hash-svc-c0-0",
+      "flaw_kind": "identical_404_page_hash",
+      "service_id": "svc-c0-0",
+      "path": "/definitely-not-here",
+      "why": "A default server 404 page (stock nginx/Apache error document) shared by every instance of that server software before any customisation. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-coincident-identical_404_page_hash-svc-c2-0",
+      "flaw_kind": "identical_404_page_hash",
+      "service_id": "svc-c2-0",
+      "path": "/definitely-not-here",
+      "why": "A default server 404 page (stock nginx/Apache error document) shared by every instance of that server software before any customisation. [coincidental: frequency filtering cannot detect this]"
+    },
+    {
+      "fixture_id": "HN-rule-apache_version_banner-svc-solo-0",
+      "flaw_kind": "apache_version_banner",
+      "service_id": "svc-solo-0",
+      "path": "/about",
+      "why": "A 'Server: Apache' header with the version deliberately truncated. The product token matches a version-disclosure rule; the version itself is not disclosed."
+    },
+    {
+      "fixture_id": "HN-rule-backup_file-svc-solo-0",
+      "flaw_kind": "backup_file",
+      "service_id": "svc-solo-0",
+      "path": "/index.php.bak",
+      "why": "A .bak path that 404s, next to a *legitimate* downloadable template named *.bak in an unrelated directory. A filename-pattern rule fires on the legitimate file and is wrong."
+    },
+    {
+      "fixture_id": "HN-rule-cookie_name_unique-svc-solo-0",
+      "flaw_kind": "cookie_name_unique",
+      "service_id": "svc-solo-0",
+      "path": "/",
+      "why": "A default framework cookie name (PHPSESSID, JSESSIONID) shared by millions of unrelated deployments. A 'rare cookie name' rule that fires here links unrelated services."
+    },
+    {
+      "fixture_id": "HN-rule-debug_endpoint-svc-solo-0",
+      "flaw_kind": "debug_endpoint",
+      "service_id": "svc-solo-0",
+      "path": "/debug/vars",
+      "why": "A /debug/vars returning a fixed sample JSON payload for the API docs. Correct content type and shape; no live runtime state."
+    },
+    {
+      "fixture_id": "HN-rule-default_admin_panel-svc-solo-0",
+      "flaw_kind": "default_admin_panel",
+      "service_id": "svc-solo-0",
+      "path": "/admin/",
+      "why": "The application's own authenticated admin login at /admin/. Same path and same visual shape as a vendor default; distinguished only by the absence of vendor-default branding and unchanged-asset fingerprints."
+    },
+    {
+      "fixture_id": "HN-rule-directory_autoindex-svc-solo-0",
+      "flaw_kind": "directory_autoindex",
+      "service_id": "svc-solo-0",
+      "path": "/uploads/",
+      "why": "An /uploads/ page that is a real paginated gallery. It contains <a href> entries and the word 'Index', so autoindex heuristics fire, but the markup is application-rendered rather than a server listing."
+    },
+    {
+      "fixture_id": "HN-rule-dot_env-svc-solo-0",
+      "flaw_kind": "dot_env",
+      "service_id": "svc-solo-0",
+      "path": "/.env",
+      "why": "A decoy .env served deliberately, containing only placeholder values ('APP_NAME=example', empty secrets). Trips the pattern exactly; discloses nothing. Distinguishes 'file is readable' from 'secrets leaked'."
+    },
+    {
+      "fixture_id": "HN-rule-dot_git-svc-solo-0",
+      "flaw_kind": "dot_git",
+      "service_id": "svc-solo-0",
+      "path": "/.git/config",
+      "why": "A /.git/config that returns 403 with an app error page. The path exists and answers non-404, which trips existence-check probes, but no content is disclosed."
+    },
+    {
+      "fixture_id": "HN-rule-etag_pattern-svc-solo-0",
+      "flaw_kind": "etag_pattern",
+      "service_id": "svc-solo-0",
+      "path": "/style.css",
+      "why": "An nginx-style inode ETag on a service that is not nginx. Independent instances of the same server software produce coincidentally similar ETag shapes with no shared operator."
+    },
+    {
+      "fixture_id": "HN-rule-exif_gps_in_image-svc-solo-0",
+      "flaw_kind": "exif_gps_in_image",
+      "service_id": "svc-solo-0",
+      "path": "/assets/img/stock-photo.jpg",
+      "why": "An image with EXIF GPS present but set to the null-island placeholder (0.0, 0.0). Trips a 'GPS tag present' rule while carrying no location."
+    },
+    {
+      "fixture_id": "HN-rule-http_header_order-svc-solo-0",
+      "flaw_kind": "http_header_order",
+      "service_id": "svc-solo-0",
+      "path": "/faq",
+      "why": "Two services behind the same hosting provider share header ordering because the proxy sets it, not because one operator configured both."
+    },
+    {
+      "fixture_id": "HN-rule-nginx_version_banner-svc-solo-0",
+      "flaw_kind": "nginx_version_banner",
+      "service_id": "svc-solo-0",
+      "path": "/colophon",
+      "why": "A reversed-proxy 'Server: nginx' on a service whose actual origin is a different product. The banner is truthful about the edge, misleading about the origin the analyst cares about."
+    },
+    {
+      "fixture_id": "HN-rule-phpinfo-svc-solo-0",
+      "flaw_kind": "phpinfo",
+      "service_id": "svc-solo-0",
+      "path": "/docs/phpinfo.html",
+      "why": "A documentation page *describing* phpinfo with a code sample. Contains 'phpinfo()' and a PHP version string, but is static HTML, not interpreter output."
+    },
+    {
+      "fixture_id": "HN-rule-readme_internal_hostname-svc-solo-0",
+      "flaw_kind": "readme_internal_hostname",
+      "service_id": "svc-solo-0",
+      "path": "/README.txt",
+      "why": "A README containing an example hostname from the IETF documentation range (example.com / 192.0.2.0). Matches the hostname regex; is documentation, not infrastructure disclosure."
+    },
+    {
+      "fixture_id": "HN-rule-robots_path_leak-svc-solo-0",
+      "flaw_kind": "robots_path_leak",
+      "service_id": "svc-solo-0",
+      "path": "/robots.txt",
+      "why": "A robots.txt containing only standard entries (/admin/, /search). Path count and shape match a leak; the paths are guessed defaults, not the service's real internal structure."
+    },
+    {
+      "fixture_id": "HN-rule-server_status-svc-solo-0",
+      "flaw_kind": "server_status",
+      "service_id": "svc-solo-0",
+      "path": "/server-status",
+      "why": "A /server-status path that returns the application's own 404 page. The string 'server-status' appears in the body (nav link, sitemap entry) so a naive grep fires, but no mod_status output is served."
+    },
+    {
+      "fixture_id": "HN-rule-staging_page-svc-solo-0",
+      "flaw_kind": "staging_page",
+      "service_id": "svc-solo-0",
+      "path": "/staging/",
+      "why": "A /staging/ path announcing 'staging environment' that is in fact a static placeholder page with no application behind it."
+    },
+    {
+      "fixture_id": "HN-rule-timezone_leak-svc-solo-0",
+      "flaw_kind": "timezone_leak",
+      "service_id": "svc-solo-0",
+      "path": "/contact",
+      "why": "A service whose Date header is UTC while its content is localised to a different region. Offset-based timezone inference fails on any host that does not set its clock to local time, which is most of them."
+    },
+    {
+      "fixture_id": "HN-rule-verbose_error_path_disclosure-svc-solo-0",
+      "flaw_kind": "verbose_error_path_disclosure",
+      "service_id": "svc-solo-0",
+      "path": "/api/v1/redacted/",
+      "why": "A 500 page showing a stack trace with paths replaced by placeholders (/srv/app/<redacted>). Shape matches a verbose error; nothing is disclosed."
+    }
+  ],
+  "abstention_cases": [
+    {
+      "case_id": "ABS-CORR-svc-solo-0",
+      "kind": "correlation",
+      "query": "svc-solo-0",
+      "pool": [
+        "svc-c0-0",
+        "svc-c0-1",
+        "svc-c0-2",
+        "svc-c1-0",
+        "svc-c1-1",
+        "svc-c1-2",
+        "svc-c2-0",
+        "svc-c2-1",
+        "svc-c2-2",
+        "svc-c3-0",
+        "svc-c3-1",
+        "svc-c3-2",
+        "svc-solo-1"
+      ],
+      "why_absent": "Singleton service: it has no cluster-mate, so no candidate in the pool is a true link. Any non-abstaining answer is a false merge.",
+      "correct_behaviour": "abstain"
+    },
+    {
+      "case_id": "ABS-CORR-svc-solo-1",
+      "kind": "correlation",
+      "query": "svc-solo-1",
+      "pool": [
+        "svc-c0-0",
+        "svc-c0-1",
+        "svc-c0-2",
+        "svc-c1-0",
+        "svc-c1-1",
+        "svc-c1-2",
+        "svc-c2-0",
+        "svc-c2-1",
+        "svc-c2-2",
+        "svc-c3-0",
+        "svc-c3-1",
+        "svc-c3-2",
+        "svc-solo-0"
+      ],
+      "why_absent": "Singleton service: it has no cluster-mate, so no candidate in the pool is a true link. Any non-abstaining answer is a false merge.",
+      "correct_behaviour": "abstain"
+    },
+    {
+      "case_id": "ABS-RETR-DECOY-00",
+      "kind": "retrieval",
+      "query": "DECOY-00-p000",
+      "pool": [
+        "C0-P0",
+        "C0-P1",
+        "C0-P2",
+        "C0-P3",
+        "C1-P0",
+        "C1-P1",
+        "C1-P2",
+        "C1-P3",
+        "C2-P0",
+        "C2-P1",
+        "C2-P2",
+        "C2-P3",
+        "C3-P0",
+        "C3-P1",
+        "C3-P2",
+        "C3-P3"
+      ],
+      "why_absent": "Query author DECOY-00 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association.",
+      "correct_behaviour": "abstain"
+    },
+    {
+      "case_id": "ABS-RETR-DECOY-01",
+      "kind": "retrieval",
+      "query": "DECOY-01-p000",
+      "pool": [
+        "C0-P0",
+        "C0-P1",
+        "C0-P2",
+        "C0-P3",
+        "C1-P0",
+        "C1-P1",
+        "C1-P2",
+        "C1-P3",
+        "C2-P0",
+        "C2-P1",
+        "C2-P2",
+        "C2-P3",
+        "C3-P0",
+        "C3-P1",
+        "C3-P2",
+        "C3-P3"
+      ],
+      "why_absent": "Query author DECOY-01 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association.",
+      "correct_behaviour": "abstain"
+    },
+    {
+      "case_id": "ABS-RETR-DECOY-02",
+      "kind": "retrieval",
+      "query": "DECOY-02-p000",
+      "pool": [
+        "C0-P0",
+        "C0-P1",
+        "C0-P2",
+        "C0-P3",
+        "C1-P0",
+        "C1-P1",
+        "C1-P2",
+        "C1-P3",
+        "C2-P0",
+        "C2-P1",
+        "C2-P2",
+        "C2-P3",
+        "C3-P0",
+        "C3-P1",
+        "C3-P2",
+        "C3-P3"
+      ],
+      "why_absent": "Query author DECOY-02 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association.",
+      "correct_behaviour": "abstain"
+    },
+    {
+      "case_id": "ABS-RETR-DECOY-03",
+      "kind": "retrieval",
+      "query": "DECOY-03-p000",
+      "pool": [
+        "C0-P0",
+        "C0-P1",
+        "C0-P2",
+        "C0-P3",
+        "C1-P0",
+        "C1-P1",
+        "C1-P2",
+        "C1-P3",
+        "C2-P0",
+        "C2-P1",
+        "C2-P2",
+        "C2-P3",
+        "C3-P0",
+        "C3-P1",
+        "C3-P2",
+        "C3-P3"
+      ],
+      "why_absent": "Query author DECOY-03 is not in the candidate pool by construction. A correct system abstains; returning a top-1 is a false association.",
+      "correct_behaviour": "abstain"
+    }
+  ]
+}

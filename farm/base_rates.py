@@ -7,7 +7,7 @@ assumption: "how many services carry a stock default" is a claim about the world
 picked for convenience makes every metric downstream of it an opinion with a decimal point.
 
 So nothing here is chosen. Each constant is measured from the cached certificate-transparency
-records under ``out/paper-drop/real_world/`` by running::
+records under ``data/evidence/real_world/`` by running::
 
     python3 scripts/measure_base_rates.py
 
@@ -35,7 +35,7 @@ MEASURED_SHARED_ARTEFACT_SHARE = 0.999006  # 3,015 of 3,018 certificates
 MEASURED_POPULATION = 3018
 MEASURED_DISTINCT_VALUES = 19
 MEASURED_ON = "2026-10-23"
-MEASURED_SOURCE = "out/paper-drop/real_world/base_rates.json"
+MEASURED_SOURCE = "data/evidence/real_world/base_rates.json"
 MEASURE_COMMAND = "python3 scripts/measure_base_rates.py"
 
 #: What the farm plants by default: every eligible service, the adversarial upper bound.

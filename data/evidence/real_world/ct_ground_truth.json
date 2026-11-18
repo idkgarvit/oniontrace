@@ -1,0 +1,159 @@
+{
+  "services": 516,
+  "certificates": 3018,
+  "clusters": 466,
+  "largest_cluster": 12,
+  "true_pairs": 205,
+  "issuer_only": {
+    "proposed": 32855,
+    "true_pairs": 205,
+    "tp": 205,
+    "fp": 32650,
+    "fn": 0,
+    "precision": 0.0062,
+    "recall": 1.0,
+    "f1": 0.0124
+  },
+  "issuer_and_date": {
+    "proposed": 1304,
+    "true_pairs": 205,
+    "tp": 175,
+    "fp": 1129,
+    "fn": 30,
+    "precision": 0.1342,
+    "recall": 0.8537,
+    "f1": 0.2319
+  },
+  "sweep": [
+    {
+      "cap": null,
+      "proposed": 1304,
+      "true_pairs": 205,
+      "tp": 175,
+      "fp": 1129,
+      "fn": 30,
+      "precision": 0.1342,
+      "recall": 0.8537,
+      "f1": 0.2319
+    },
+    {
+      "cap": 2,
+      "proposed": 63,
+      "true_pairs": 205,
+      "tp": 11,
+      "fp": 52,
+      "fn": 194,
+      "precision": 0.1746,
+      "recall": 0.0537,
+      "f1": 0.0821
+    },
+    {
+      "cap": 3,
+      "proposed": 106,
+      "true_pairs": 205,
+      "tp": 19,
+      "fp": 87,
+      "fn": 186,
+      "precision": 0.1792,
+      "recall": 0.0927,
+      "f1": 0.1222
+    },
+    {
+      "cap": 5,
+      "proposed": 220,
+      "true_pairs": 205,
+      "tp": 36,
+      "fp": 184,
+      "fn": 169,
+      "precision": 0.1636,
+      "recall": 0.1756,
+      "f1": 0.1694
+    },
+    {
+      "cap": 10,
+      "proposed": 509,
+      "true_pairs": 205,
+      "tp": 139,
+      "fp": 370,
+      "fn": 66,
+      "precision": 0.2731,
+      "recall": 0.678,
+      "f1": 0.3894
+    },
+    {
+      "cap": 15,
+      "proposed": 762,
+      "true_pairs": 205,
+      "tp": 175,
+      "fp": 587,
+      "fn": 30,
+      "precision": 0.2297,
+      "recall": 0.8537,
+      "f1": 0.3619
+    },
+    {
+      "cap": 20,
+      "proposed": 898,
+      "true_pairs": 205,
+      "tp": 175,
+      "fp": 723,
+      "fn": 30,
+      "precision": 0.1949,
+      "recall": 0.8537,
+      "f1": 0.3173
+    },
+    {
+      "cap": 25,
+      "proposed": 898,
+      "true_pairs": 205,
+      "tp": 175,
+      "fp": 723,
+      "fn": 30,
+      "precision": 0.1949,
+      "recall": 0.8537,
+      "f1": 0.3173
+    },
+    {
+      "cap": 40,
+      "proposed": 1304,
+      "true_pairs": 205,
+      "tp": 175,
+      "fp": 1129,
+      "fn": 30,
+      "precision": 0.1342,
+      "recall": 0.8537,
+      "f1": 0.2319
+    },
+    {
+      "cap": 60,
+      "proposed": 1304,
+      "true_pairs": 205,
+      "tp": 175,
+      "fp": 1129,
+      "fn": 30,
+      "precision": 0.1342,
+      "recall": 0.8537,
+      "f1": 0.2319
+    }
+  ],
+  "held_out": {
+    "selection_services": 271,
+    "report_services": 245,
+    "chosen_cap": 15,
+    "selection_f1": 0.6232,
+    "report": {
+      "proposed": 164,
+      "true_pairs": 34,
+      "tp": 22,
+      "fp": 142,
+      "fn": 12,
+      "precision": 0.1341,
+      "recall": 0.6471,
+      "f1": 0.2222
+    }
+  },
+  "service_count_note": "A wildcard SAN is folded into the name it covers: '*.x.onion' and 'x.onion' are one holder, so counting them as two services would split a single operator across two nodes and corrupt the ground truth. The 688 unique onions reported elsewhere count a wildcard as its own name; this evaluation reports 516 over the same cache for that reason.",
+  "source": "data/evidence/real_world/_ct_cache.json",
+  "reproduce": "python3 scripts/ct_ground_truth.py",
+  "ground_truth_note": "A certificate naming several onion services asserts that one holder controls them. That is the target, never a feature: a linker using co-certificate would be reading the answer key. What is measured is whether the public fields recover it."
+}

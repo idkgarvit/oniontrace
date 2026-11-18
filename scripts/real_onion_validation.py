@@ -35,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-OUT = ROOT / "out" / "paper-drop" / "real_world"
+OUT = ROOT / "data" / "evidence" / "real_world"
 
 #: The paths probed on each service. Two are the intentional flaws on the misconfigured
 #: instance, the rest are controls: a real server always answers something for an unknown

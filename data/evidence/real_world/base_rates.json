@@ -1,0 +1,20 @@
+{
+  "artefact_class": "certificate issuer",
+  "source": "data/evidence/real_world/_ct_cache.json",
+  "certificates_measured": 3018,
+  "distinct_issuers": 19,
+  "top_issuer": "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=DigiCert SHA2 Extended Validation Server CA",
+  "top_issuer_certificates": 1788,
+  "top_issuer_share": 0.592445,
+  "cumulative_share": {
+    "top_1": 0.592445,
+    "top_2": 0.716368,
+    "top_5": 0.92611,
+    "top_10": 0.99006
+  },
+  "certificates_under_a_shared_issuer": 3015,
+  "certificates_under_a_unique_issuer": 3,
+  "issuers_appearing_once": 3,
+  "interpretation": "One issuer covers the majority of onion-bearing certificates in this sample, and that share is a floor on what a naive merge does: every certificate under it collapses into a single operator hypothesis. The farm plants its stock default on every eligible service (share 1.0) as an upper bound; this file measures the corresponding real share so the experiment can also be run at an observed rate.",
+  "reproduce": "python3 scripts/measure_base_rates.py"
+}

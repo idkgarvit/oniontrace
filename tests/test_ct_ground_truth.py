@@ -1,7 +1,7 @@
 """The CT ground-truth evaluator has to be wrong in only the ways it admits to.
 
 These tests use tiny hand-built certificate records, because the point is the arithmetic and
-the split, not the corpus. The corpus result lives in out/paper-drop/real_world/ and moves when
+the split, not the corpus. The corpus result lives in data/evidence/real_world/ and moves when
 the cache moves; a test that pinned it would fail the day someone re-ran collection for an
 unrelated reason.
 """

@@ -3,7 +3,7 @@
 
 Run from the repo root:  python3 scripts/build_paper_drop.py
 
-Writes under out/paper-drop/. Nothing here reaches a network, and nothing is summarised
+Writes under data/evidence/. Nothing here reaches a network, and nothing is summarised
 away -- the point is that every number can be traced to a JSON path and a raw fraction.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DROP = ROOT / "out" / "paper-drop"
+DROP = ROOT / "data" / "evidence"
 SEEDS = ("20260925", "20260926", "20260927")
 
 

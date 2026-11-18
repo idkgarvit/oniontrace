@@ -26,7 +26,7 @@ from farm.model import FarmConfig, Service
 
 ROOT = Path(__file__).resolve().parents[1]
 MEASUREMENT = json.loads(
-    (ROOT / "out" / "paper-drop" / "real_world" / "base_rates.json").read_text(encoding="utf-8")
+    (ROOT / "data" / "evidence" / "real_world" / "base_rates.json").read_text(encoding="utf-8")
 )
 
 
