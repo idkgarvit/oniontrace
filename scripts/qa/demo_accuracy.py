@@ -1,6 +1,6 @@
 """Score the demo case against the farm's ground truth, item by item.
 
-The console shows a case. A case with 12 links on it looks the same whether those 12 are the
+The console shows a case. A case with 12 identity links on it looks the same whether those 12 are the
 12 true links or 12 plausible-looking wrong ones, and the walkthrough can only report counts.
 This reads the same case the console reads, joins it to the ground truth the farm was built
 from, and says which individual links and findings are right.
@@ -101,7 +101,10 @@ def score_links(connection: sqlite3.Connection, farm: dict) -> dict:
     useless = hard_negative_kinds(farm)
 
     proposed: list[dict] = []
-    for row in connection.execute("select * from edge"):
+    # A trust edge records a vouch, not an identity claim: two operators who know each
+    # other are still two operators. Counting one as a proposed link double-counted every
+    # pair the farm planted and pushed recall above 1.0, which is how this defect surfaced.
+    for row in connection.execute("select * from edge where method != 'trust'"):
         a = entity_service.get(row["a_entity"])
         b = entity_service.get(row["b_entity"])
         if a is None or b is None:

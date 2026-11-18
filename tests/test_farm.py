@@ -834,3 +834,150 @@ def test_config_is_serialisable():
     payload = FarmConfig().to_dict()
     assert payload["seed"] == FarmConfig().seed
     assert payload["target_flaw_count"] == 25
+
+# --------------------------------------------------------------------------- #
+# Published identifiers and trust claims (PS stretch: PGP, wallets, trust)
+# --------------------------------------------------------------------------- #
+
+
+def _contact_bodies(farm) -> dict[str, str]:
+    return {
+        svc.service_id: "".join(
+            ep.body for ep in svc.endpoints if ep.path == "/contact"
+        )
+        for svc in farm.services
+    }
+
+
+def test_every_published_pgp_fingerprint_is_well_formed(farm):
+    """A farm that emits nonsense would let a prefix-matching parser look correct."""
+
+    from identifiers import normalise_pgp_fingerprint
+
+    values = {
+        p.shared_artifacts["pgp_fingerprint"]
+        for p in farm.personas
+        if "pgp_fingerprint" in p.shared_artifacts
+    }
+    assert values, "no persona carries a PGP fingerprint"
+    for value in values:
+        normalised = normalise_pgp_fingerprint(value)
+        assert len(normalised) == 40
+        assert normalised == normalised.upper()
+
+
+def test_every_published_wallet_passes_its_chain_checksum(farm):
+    from farm.identifiers import wallet_chain
+    from identifiers import (
+        is_checksum_eth_address,
+        validate_btc_address,
+        validate_monero_address,
+    )
+
+    values = {
+        p.shared_artifacts["wallet_address"]
+        for p in farm.personas
+        if "wallet_address" in p.shared_artifacts
+    }
+    assert values
+    for value in values:
+        chain = wallet_chain(value)
+        if chain == "btc":
+            assert validate_btc_address(value), value
+        elif chain == "xmr":
+            assert validate_monero_address(value), value
+        elif chain == "eth":
+            assert is_checksum_eth_address(value), value
+        else:  # pragma: no cover - a new chain must extend this test
+            pytest.fail(f"unvalidated wallet chain {chain!r}: {value}")
+
+
+def test_wallets_are_not_all_on_one_chain(farm):
+    """One chain would exercise one validator and claim to test four."""
+
+    from farm.identifiers import wallet_chain
+
+    chains = {
+        wallet_chain(p.shared_artifacts["wallet_address"])
+        for p in farm.personas
+        if "wallet_address" in p.shared_artifacts
+    }
+    assert {"btc", "xmr"} <= chains
+    assert len(chains) >= 3
+
+
+def test_each_persona_publishes_its_identifiers_on_the_page_a_visitor_reads(farm):
+    from identifiers import find_pgp_fingerprints, find_wallet_addresses
+
+    bodies = _contact_bodies(farm)
+    # A handle can also appear in a vouch line, so membership is decided by the
+    # "Persona: @handle" line, not by a substring search over the whole page.
+    by_service: dict[str, list] = {}
+    for persona in farm.personas:
+        needle = f"Persona: @{persona.handle}"
+        for svc in farm.services:
+            if needle in bodies.get(svc.service_id, ""):
+                by_service.setdefault(svc.service_id, []).append(persona)
+
+    assert by_service, "no persona handle appears on any contact page"
+    for service_id, people in by_service.items():
+        body = bodies[service_id]
+        fingerprints = set(find_pgp_fingerprints(body))
+        wallets = {value for _chain, value in find_wallet_addresses(body)}
+        for persona in people:
+            expected = persona.shared_artifacts.get("pgp_fingerprint")
+            if expected:
+                assert expected in fingerprints, (service_id, persona.persona_id)
+            expected_wallet = persona.shared_artifacts.get("wallet_address")
+            if expected_wallet:
+                assert expected_wallet in wallets, (service_id, persona.persona_id)
+
+
+def test_a_shared_key_or_wallet_stays_inside_its_cluster(farm):
+    """A value that spanned clusters would make the cluster truth unreachable."""
+
+    for key in ("pgp_fingerprint", "wallet_address"):
+        owners: dict[str, set[str]] = {}
+        for persona in farm.personas:
+            value = persona.shared_artifacts.get(key)
+            if value:
+                owners.setdefault(value, set()).add(persona.cluster_id or persona.persona_id)
+        for value, clusters in owners.items():
+            assert len(clusters) == 1, f"{key} {value} spans {clusters}"
+
+
+def test_trust_ground_truth_names_a_real_handle_on_a_real_page(farm):
+    assert len(farm.trust_claims) == 12, "twelve planted vouches, one per clustered service"
+    bodies = _contact_bodies(farm)
+    for claim in farm.trust_claims:
+        assert claim.source_service in bodies
+        assert claim.target_service in bodies
+        source = farm.service(claim.source_service)
+        target = farm.service(claim.target_service)
+        assert source is not None and target is not None
+        assert source.cluster_id == target.cluster_id, "a vouch must stay inside its cluster"
+        assert claim.source_handle in bodies[claim.source_service]
+        assert claim.target_handle in bodies[claim.target_service]
+        assert f"@{claim.target_handle}" in bodies[claim.source_service]
+
+
+def test_a_refusal_is_planted_for_every_cluster(farm):
+    """The negation hard negative must exist in the generated text, not only in a test."""
+
+    bodies = _contact_bodies(farm)
+    refusals = [
+        body for body in bodies.values()
+        if "do not vouch for @" in body.lower()
+    ]
+    assert len(refusals) >= len(farm.clusters)
+
+
+def test_contact_pages_do_not_publish_a_key_or_wallet_as_a_bare_hash(farm):
+    """Identifiers on the page must be labelled, or extraction cannot use context."""
+
+    for service_id, body in _contact_bodies(farm).items():
+        for line in body.splitlines():
+            if "PGP fingerprint:" in line or "Wallet:" in line:
+                continue
+            if len(line.strip()) == 40 and all(c in "0123456789abcdefABCDEF" for c in line.strip()):
+                pytest.fail(f"{service_id} publishes an unlabelled 40-hex value: {line!r}")

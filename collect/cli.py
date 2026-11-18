@@ -58,6 +58,7 @@ from collect.errors import LiveCollectionRefused
 from collect.preflight import check_environment
 from collect.fixtures import build_fixtures
 from collect.live import LiveSettings, LiveTransport, describe_gates
+from collect.probes import PROBE_PATHS
 from collect.schedule import ClockSleeper, Politeness, RecordingSleeper
 
 DEMO_WARNING = (
@@ -311,6 +312,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         # Inside the case, so the purge reaches the raw exchanges too. Nothing in collect/
         # writes outside a case directory, and the CLI is not the exception.
         warc_dir=gate.cases.derived_dir(args.case) / "warc",
+        probe_paths=PROBE_PATHS if args.probe_known_paths else (),
     )
     report = collector.collect(
         case_id=args.case,
@@ -434,9 +436,9 @@ def cmd_gates(args: argparse.Namespace) -> int:
     print()
     print("Every acquisition test in this repository runs against the fixture transport,")
     print("because a suite that can reach the network by default cannot be run safely. The")
-    print("byte-fetching code in `collect/live.py` has therefore never been executed against")
-    print("a network here: the guards are tested, the fetcher is not, and a report must not")
-    print("upgrade one into the other.")
+    print("byte-fetching code in `collect/live.py` is exercised by the controlled eight-service")
+    print("lab (`python3 scripts/run_live_lab.py --publish`), not by this suite: the guards are")
+    print("tested here, and a report must not upgrade the lab into a field result.")
     return 0
 
 
@@ -610,6 +612,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--max-run-bytes", type=int, default=DEFAULT_MAX_BYTES, help="byte ceiling for the run"
+    )
+    run.add_argument(
+        "--probe-known-paths",
+        action="store_true",
+        help=(
+            "after each onion seed's front page, read the fixed list of well-known "
+            "misconfiguration paths in collect/probes.py (13 paths, one GET each). Off by "
+            "default: it is a checklist for authorised targets, not a crawler"
+        ),
     )
     run.set_defaults(func=cmd_run)
 

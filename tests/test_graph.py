@@ -15,11 +15,17 @@ from itertools import combinations
 
 import pytest
 
-from graph.extract import extract_artefacts, summarise
+from graph.extract import (
+    TrustClaim,
+    extract_artefacts,
+    extract_trust_claims,
+    summarise,
+)
 from graph.model import (
     PUBLIC_PLACEHOLDER,
     STOCK_DEFAULT,
     Artefact,
+    EdgeMethod,
     EdgeStatus,
     GraphError,
     MergeNotReversible,
@@ -33,14 +39,22 @@ from graph.resolve import (
     to_edges,
 )
 from graph.store import GraphStore
+from graph.trust import build_trust_edges
 
 
 # -- fixtures ----------------------------------------------------------- #
 class _Svc:
-    def __init__(self, sid, cluster_id=None, arts=None):
+    def __init__(self, sid, cluster_id=None, arts=None, endpoints=None):
         self.service_id = sid
         self.cluster_id = cluster_id
         self.shared_artifacts = arts or {}
+        self.endpoints = endpoints or []
+
+
+class _Ep:
+    def __init__(self, path="/contact", body=""):
+        self.path = path
+        self.body = body
 
 
 class _Farm:
@@ -511,3 +525,241 @@ def test_merge_reverse_merge_again_is_not_a_primary_key_collision(arts):
             "every decision must survive in the log, including the reversed ones"
         )
         assert all(record.reversed_at for record in store.merge_log())
+
+
+# -- page identifiers and trust edges ----------------------------------- #
+def _published_page(fingerprint: str, wallet: str) -> str:
+    grouped = " ".join(fingerprint[i : i + 4] for i in range(0, len(fingerprint), 4))
+    return (
+        "<h1>Contact</h1>\n"
+        f"<p>Persona: @user_alpha</p>\n"
+        f"<p>PGP fingerprint: {grouped}</p>\n"
+        f"<p>Wallet: {wallet}</p>\n"
+    )
+
+
+def test_pgp_and_wallet_are_parsed_from_pages_not_ground_truth():
+    from identifiers import encode_p2wpkh
+
+    fingerprint = "AB" * 20
+    wallet = encode_p2wpkh("bc", bytes(range(20)))
+    svc = _Svc(
+        "svc-1",
+        endpoints=[_Ep("/contact", _published_page(fingerprint, wallet))],
+    )
+    arts = extract_artefacts(_Farm([svc]), observed_at="t")
+    values = {(a.kind, a.value) for a in arts}
+
+    assert ("pgp_fingerprint", fingerprint) in values
+    assert ("wallet_address", wallet) in values
+    assert all(a.path == "/contact" for a in arts)
+
+
+def test_a_bare_hash_is_not_a_pgp_fingerprint():
+    """A favicon digest and a v4 fingerprint have the same shape; context decides."""
+
+    svc = _Svc(
+        "svc-1",
+        endpoints=[_Ep("/", f"<p>favicon_sha256: {'AB' * 20}</p>")],
+    )
+    kinds = {a.kind for a in extract_artefacts(_Farm([svc]), observed_at="t")}
+    assert "pgp_fingerprint" not in kinds
+
+
+def test_a_wallet_with_a_broken_checksum_is_not_recorded():
+    from identifiers import encode_p2wpkh
+
+    good = encode_p2wpkh("bc", bytes(range(20)))
+    bad = good[:-1] + ("q" if good[-1] != "q" else "p")
+    svc = _Svc("svc-1", endpoints=[_Ep("/contact", f"<p>Wallet: {bad}</p>")])
+    assert not [
+        a for a in extract_artefacts(_Farm([svc]), observed_at="t")
+        if a.kind == "wallet_address"
+    ]
+
+
+def test_multiple_values_of_one_kind_are_kept_and_matched():
+    """A service can publish more than one key; the first must not hide the link."""
+
+    prop = propose_for_pair(
+        "A", ["s1"], {"wallet_address": {"w1", "w2"}},
+        "B", ["s2"], {"wallet_address": {"w3", "w2"}},
+        {("wallet_address", "w2"): 2},
+    )
+    assert prop is not None
+    assert [e.value for e in prop.supporting] == ["w2"]
+
+
+def test_a_page_that_publishes_two_keys_yields_two_reconciled_observations():
+    from identifiers import encode_p2wpkh
+
+    first = encode_p2wpkh("bc", bytes(range(20)))
+    second = encode_p2wpkh("bc", bytes(range(1, 21)))
+    svc = _Svc(
+        "svc-1",
+        endpoints=[_Ep("/contact", f"<p>Wallet: {first}</p>\n<p>Wallet: {second}</p>")],
+    )
+    wallets = {
+        a.value for a in extract_artefacts(_Farm([svc]), observed_at="t")
+        if a.kind == "wallet_address"
+    }
+    assert wallets == {first, second}
+
+
+def test_trust_claim_parser_ignores_a_negated_vouch():
+    source = _Svc(
+        "svc-1",
+        endpoints=[
+            _Ep("/contact", "<p>Persona: @user_a</p>\n<p>Vouches for @user_b</p>")
+        ],
+    )
+    target = _Svc(
+        "svc-2",
+        endpoints=[_Ep("/contact", "<p>Persona: @user_b</p>")],
+    )
+    refuser = _Svc(
+        "svc-3",
+        endpoints=[
+            _Ep(
+                "/contact",
+                "<p>Persona: @user_c</p>\n"
+                "<p>We do not vouch for @user_b.</p>\n"
+                "<p>No one has vouched for @user_a yet.</p>",
+            )
+        ],
+    )
+    claims = extract_trust_claims(_Farm([source, target, refuser]))
+
+    assert [(c.source_service, c.target_service, c.target_handle) for c in claims] == [
+        ("svc-1", "svc-2", "user_b")
+    ]
+
+
+def test_a_trust_edge_cannot_justify_a_merge():
+    claim = TrustClaim(
+        source_service="s1",
+        target_handle="user_b",
+        target_service="s2",
+        path="/contact",
+        evidence_sha256="x" * 64,
+    )
+    with GraphStore(":memory:", case_id="C") as store:
+        store.add_entity("ent-A", "A")
+        store.add_entity("ent-B", "B")
+        store.attach_service("ent-A", "s1")
+        store.attach_service("ent-B", "s2")
+        trust = build_trust_edges(store.entities(), [claim])
+        assert len(trust) == 1
+        store.add_edge(trust[0])
+
+        with pytest.raises(GraphError, match="trust statement"):
+            store.merge("ent-A", "ent-B", actor="a", rationale="they talk")
+
+
+def test_identity_and_trust_edges_can_share_a_pair():
+    """A vouch is a relationship, not a competing identity claim, so both survive."""
+
+    with GraphStore(":memory:", case_id="C") as store:
+        store.add_entity("ent-A", "A")
+        store.add_entity("ent-B", "B")
+        store.attach_service("ent-A", "s1")
+        store.attach_service("ent-B", "s2")
+        store.add_edge(
+            _edge("ent-A", ["s1"], {"favicon_sha256": "f"},
+                  "ent-B", ["s2"], {"favicon_sha256": "f"},
+                  {("favicon_sha256", "f"): 2})
+        )
+        claim = TrustClaim(
+            source_service="s1",
+            target_handle="user_b",
+            target_service="s2",
+            path="/contact",
+            evidence_sha256="x" * 64,
+        )
+        store.add_edge(build_trust_edges(store.entities(), [claim])[0])
+
+        assert len(store.edges()) == 2
+        assert {e.method for e in store.edges()} == {
+            EdgeMethod.DETERMINISTIC.value,
+            EdgeMethod.TRUST.value,
+        }
+        record = store.merge("ent-A", "ent-B", actor="a", rationale="same favicon")
+        assert record.survivor == "ent-A"
+
+
+def test_entity_metadata_round_trips(tmp_path):
+    path = tmp_path / "graph.db"
+    with GraphStore(path, case_id="C") as store:
+        store.add_entity(
+            "ent-A",
+            "operator of svc-1",
+            category="used books",
+            last_scan="2026-11-17T10:00:00+00:00",
+            source="farm:20260925",
+        )
+    with GraphStore(path, case_id="C") as store:
+        entity = store.entity("ent-A")
+        assert entity.category == "used books"
+        assert entity.last_scan == "2026-11-17T10:00:00+00:00"
+        assert entity.source == "farm:20260925"
+        assert store.export()["entities"][0]["category"] == "used books"
+
+
+def test_an_older_database_is_migrated_in_place(tmp_path):
+    """A case opened after the upgrade must not fail on the new columns."""
+
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE entity (
+            entity_id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            case_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'candidate',
+            created_at TEXT NOT NULL,
+            merged_into TEXT
+        );
+        INSERT INTO entity VALUES ('ent-A','old','C','candidate','2026-01-01',NULL);
+        CREATE TABLE edge (
+            edge_id TEXT PRIMARY KEY,
+            a_entity TEXT NOT NULL,
+            b_entity TEXT NOT NULL,
+            method TEXT NOT NULL,
+            score REAL NOT NULL,
+            status TEXT NOT NULL,
+            supporting TEXT NOT NULL,
+            counter TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE (a_entity, b_entity)
+        );
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with GraphStore(path, case_id="C") as store:
+        entity = store.entity("ent-A")
+        assert entity.category == ""
+        assert entity.last_scan == ""
+        assert entity.source == ""
+
+        store.add_entity("ent-B", "B")
+        store.attach_service("ent-A", "s1")
+        store.attach_service("ent-B", "s2")
+        store.add_edge(
+            _edge("ent-A", ["s1"], {"favicon_sha256": "f"},
+                  "ent-B", ["s2"], {"favicon_sha256": "f"},
+                  {("favicon_sha256", "f"): 2})
+        )
+        claim = TrustClaim(
+            source_service="s1",
+            target_handle="user_b",
+            target_service="s2",
+            path="/contact",
+            evidence_sha256="x" * 64,
+        )
+        store.add_edge(build_trust_edges(store.entities(), [claim])[0])
+        assert len(store.edges()) == 2

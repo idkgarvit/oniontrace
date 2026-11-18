@@ -21,10 +21,11 @@ import json
 import sys
 from pathlib import Path
 
-from graph.extract import extract_artefacts, summarise
+from graph.extract import extract_artefacts, extract_trust_claims, summarise
 from graph.model import EdgeStatus, GraphError
 from graph.resolve import DEFAULT_FREQUENCY_CAP, default_cohorts, resolve, to_edges
 from graph.store import GraphStore, utc_now
+from graph.trust import build_trust_edges
 
 
 def _load_farm(path: Path):
@@ -32,9 +33,9 @@ def _load_farm(path: Path):
 
     Reading the written ``farm.json`` rather than re-running the generator is
     deliberate: the graph is then reproducible from the artefact a reviewer holds,
-    not from whatever the generator would emit today. Only the fields the extractor
-    consumes are rebuilt, because a fuller loader would be a second implementation
-    of the farm model and two sources of truth is how they start to disagree.
+    not from whatever the generator would emit today. Page bodies are included so
+    PGP fingerprints, wallets and vouches are parsed from text a visitor could read
+    rather than copied from the persona ground truth.
     """
 
     from types import SimpleNamespace
@@ -44,11 +45,19 @@ def _load_farm(path: Path):
         SimpleNamespace(
             service_id=s["service_id"],
             cluster_id=s.get("cluster_id"),
+            title=s.get("title", ""),
+            topic=s.get("topic", ""),
             shared_artifacts=s.get("shared_artifacts", {}),
+            endpoints=[
+                SimpleNamespace(path=e.get("path", "/"), body=e.get("body", ""))
+                for e in s.get("endpoints", [])
+            ],
         )
         for s in data["services"]
     ]
-    return SimpleNamespace(services=services, config=data.get("config", {}))
+    config = data.get("config", {})
+    source = f"farm:{config['seed']}" if "seed" in config else "farm.json"
+    return SimpleNamespace(services=services, config=config, source=source)
 
 
 def cmd_build(args) -> int:
@@ -65,13 +74,23 @@ def cmd_build(args) -> int:
         # from a guess and confirming it.
         for svc in farm.services:
             eid = f"ent-{svc.service_id}"
-            store.add_entity(eid, f"operator of {svc.service_id}", created_at=now)
+            store.add_entity(
+                eid,
+                f"operator of {svc.service_id}",
+                created_at=now,
+                category=svc.topic.replace("_", " ") if svc.topic else "operator",
+                last_scan=now,
+                source=farm.source,
+            )
             store.attach_service(eid, svc.service_id)
 
         ents = store.entities()
         proposals = resolve(ents, arts, cap=args.cap)
         edges = to_edges(proposals)
-        for edge in edges:
+
+        trust_claims = extract_trust_claims(farm)
+        trust_edges = build_trust_edges(ents, trust_claims)
+        for edge in edges + trust_edges:
             store.add_edge(edge)
 
         counts: dict[str, int] = {}
@@ -86,6 +105,8 @@ def cmd_build(args) -> int:
             "edges": len(edges),
             "edges_by_status": dict(sorted(counts.items())),
             "conflicts": counts.get(EdgeStatus.CONFLICT.value, 0),
+            "trust_edges": len(trust_edges),
+            "trust_claims_read": len(trust_claims),
             "frequency_cap": args.cap,
             "default_cohorts": default_cohorts(arts),
         }

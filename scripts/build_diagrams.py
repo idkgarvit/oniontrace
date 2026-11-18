@@ -173,7 +173,7 @@ def d2_pipeline() -> None:
     s.append(_text(64, 112, "python -m oniontrace run", 22, TEAL, anchor="start", font=MONO))
 
     stages = [
-        ("Farm", "14 services\nin 4 clusters"),
+        ("Farm", "14 services\n12 clustered\n+ 2 singletons"),
         ("Gates", "authorisation\n+ retention"),
         ("Detect", "19 rules over\nevery service"),
         ("Correlate", "which services\nshare an operator"),
@@ -284,22 +284,32 @@ def d5_farm() -> None:
     s = [_head(w, h), DEFS]
     s.append(_text(64, 74, "A test network where the answer is known", 36, FG,
                    anchor="start", weight="600"))
-    s.append(_text(64, 112, "14 services in 4 real clusters, plus decoys that look linked.", 20,
+    s.append(_text(64, 112, "14 services: four linked clusters of three, plus two clean singletons.", 20,
                    MUTED, anchor="start"))
 
-    clusters = [("cluster A", 4, TEAL), ("cluster B", 4, AMBER), ("cluster C", 3, "#7f8ed6"),
-                ("cluster D", 3, "#b07fd6")]
+    clusters = [("cluster A", TEAL), ("cluster B", AMBER), ("cluster C", "#7f8ed6"),
+                ("cluster D", "#b07fd6")]
     x = 64
-    for name, n, color in clusters:
-        for _ in range(n):
+    for name, color in clusters:
+        for _ in range(3):
             s.append(f"<rect x='{x}' y='190' width='62' height='62' rx='8' fill='{PANEL}' "
                      f"stroke='{color}' stroke-width='2'/>")
             x += 72
-        s.append(_text(x - (72 * n) + 4, 288, name, 16, color, anchor="start"))
+        s.append(_text(x - (72 * 3) + 4, 288, name, 16, color, anchor="start"))
         x += 40
 
+    # The two clean singletons are not cluster members: they have no sibling to link to and
+    # exist to measure whether the correlator abstains instead of inventing an edge.
+    s.append(f"<line x1='1068' y1='182' x2='1068' y2='302' stroke='{LINE}' stroke-width='1.5'/>")
+    for i in range(2):
+        sx = 1096 + i * 74
+        s.append(f"<rect x='{sx}' y='190' width='62' height='62' rx='8' fill='{PANEL}' "
+                 f"stroke='{MUTED}' stroke-width='2' stroke-dasharray='5 4'/>")
+    s.append(_text(1096, 288, "2 clean", 16, MUTED, anchor="start"))
+    s.append(_text(1096, 308, "singletons", 16, MUTED, anchor="start"))
+
     for i, line in enumerate([
-        "20 personas with known writing styles     ·     38 hard negatives",
+        "20 personas, four near-miss decoys     ·     45 hard negatives",
         "25 planted flaws across 19 detection rules",
     ]):
         s.append(_text(64, 400 + i * 44, line, 20, MUTED, anchor="start"))

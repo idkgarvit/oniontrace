@@ -48,7 +48,7 @@ def _no_external_resources():
     from weasyprint.urls import URLFetcher
 
     class _NoExternalResources(URLFetcher):
-        def fetch(self, url: str, headers=None):  # noqa: ANN001 - matches upstream
+        def fetch(self, url: str, headers=None):
             raise ValueError(f"evidence pack refused to load {url!r}")
 
     return _NoExternalResources()

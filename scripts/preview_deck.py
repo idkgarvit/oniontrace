@@ -46,8 +46,10 @@ def slide_html(prs, slide, index: int, imgdir: Path) -> str:
             imgdir.mkdir(parents=True, exist_ok=True)
             ext = sh.image.ext or "png"
             f = imgdir / f"s{index}_{sh.shape_id}.{ext}"
-            if not f.exists():
-                f.write_bytes(sh.image.blob)
+            # Always rewrite. Keying the cache only by slide and shape id meant a rebuilt
+            # deck with a changed picture at the same position was previewed from the old
+            # bytes, so the render looked fine and showed the previous diagram.
+            f.write_bytes(sh.image.blob)
             parts.append(
                 f"<img src='{f.resolve().as_uri()}' "
                 f"style='position:absolute;left:{x}in;top:{y}in;width:{w}in;height:{h}in' "
@@ -138,7 +140,7 @@ async def measure(html_path: Path, shots_dir: Path | None = None,
 
         targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json"))
         page = [t for t in targets if t.get("type") == "page"][0]
-        async with websockets.connect(page["webSocketDebuggerUrl"]) as ws:
+        async with websockets.connect(page["webSocketDebuggerUrl"], max_size=64 * 1024 * 1024) as ws:
             _last_frame = [b""]
 
             async def cdp(ws, method: str, **params):

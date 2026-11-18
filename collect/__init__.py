@@ -12,7 +12,8 @@ Structure:
   * `ctlog`       -- certificate transparency: onion/clearnet associations, and their caveat
   * `telegram`    -- public channel previews: backward history walks with a message ledger
   * `transport`   -- the fetch protocol plus the fixture transport every test runs against
-  * `live`        -- the live transport: off by default, gated five ways, and **unverified**
+  * `live`        -- the live transport: off by default, gated five ways, and exercised
+                   against real Tor by the controlled live lab
   * `schedule`    -- host delays, run budgets, revisit backoff, the sleeper
   * `checkpoints` -- resume cursors and the seed-proposal queue, both case-scoped
   * `warc`        -- WARC 1.0 records for the raw exchanges, referenced from snapshots
@@ -25,9 +26,10 @@ inside the fetch that its guards have already allowed.
 
 **What is not verified.** Every test in this repository runs against `FixtureTransport`
 with in-memory pages. The parsing is exercised against markup written to resemble the real
-sites, which is not the same as captured traffic, and the byte-fetching code in `live.py`
-has never been executed against a network. "The guards are tested" is not "the fetcher
-works", and the report must not upgrade one into the other.
+sites, which is not the same as captured traffic. The byte-fetching code in `live.py` is
+exercised by the controlled live lab (`scripts/run_live_lab.py --publish`), not by the unit
+suite: the suite tests the guards, and the lab tests the path. Neither is a measurement of
+third-party onion services, and the report must not upgrade either into one.
 """
 
 from __future__ import annotations

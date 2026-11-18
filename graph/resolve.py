@@ -50,6 +50,8 @@ from graph.store import utc_now
 #: software. Every weight is stated here so the aggregate in `score` can be
 #: recomputed by hand from the evidence list.
 WEIGHTS: dict[str, float] = {
+    ArtefactKind.PGP_FINGERPRINT.value: 0.97,
+    ArtefactKind.WALLET_ADDRESS.value: 0.92,
     ArtefactKind.CONTACT_HANDLE.value: 0.90,
     ArtefactKind.ANALYTICS_ID.value: 0.85,
     ArtefactKind.FAVICON.value: 0.80,
@@ -82,9 +84,23 @@ class Proposal:
     counter: list[Evidence]
 
 
-def _edge_id(a: str, b: str) -> str:
+def edge_id(a: str, b: str) -> str:
     left, right = (a, b) if a <= b else (b, a)
     return f"edg-{hashlib.sha256(f'{left}|{right}'.encode()).hexdigest()[:16]}"
+
+
+def _values(value) -> set[str]:
+    """Normalise one entity's value(s) for a kind.
+
+    A service can publish more than one PGP key or wallet. The single-value case is
+    kept working because every existing caller and test passes a plain string.
+    """
+
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        return {value}
+    return set(value)
 
 
 def artefact_frequencies(artefacts: Iterable) -> Counter:
@@ -99,7 +115,7 @@ def artefact_frequencies(artefacts: Iterable) -> Counter:
 def _counter_reasons(
     a_arts: dict[str, str],
     b_arts: dict[str, str],
-    shared: dict[str, str],
+    shared: dict[str, set[str]],
     *,
     has_discriminative_support: bool,
 ) -> list[Evidence]:
@@ -119,36 +135,37 @@ def _counter_reasons(
     out: list[Evidence] = []
 
     if not has_discriminative_support:
-        for kind, value in shared.items():
-            if value == STOCK_DEFAULT:
-                out.append(
-                    Evidence(
-                        kind=kind,
-                        value=value,
-                        a_service="",
-                        b_service="",
-                        weight=0.0,
-                        note=(
-                            "vendor default, so this match says the two services "
-                            "installed the same software and nothing about who "
-                            "operates them"
-                        ),
+        for kind, values in shared.items():
+            for value in sorted(values):
+                if value == STOCK_DEFAULT:
+                    out.append(
+                        Evidence(
+                            kind=kind,
+                            value=value,
+                            a_service="",
+                            b_service="",
+                            weight=0.0,
+                            note=(
+                                "vendor default, so this match says the two services "
+                                "installed the same software and nothing about who "
+                                "operates them"
+                            ),
+                        )
                     )
-                )
-            elif value == PUBLIC_PLACEHOLDER:
-                out.append(
-                    Evidence(
-                        kind=kind,
-                        value=value,
-                        a_service="",
-                        b_service="",
-                        weight=0.0,
-                        note=(
-                            "published placeholder, so anyone could carry it; linking "
-                            "a person to it would be a false accusation"
-                        ),
+                elif value == PUBLIC_PLACEHOLDER:
+                    out.append(
+                        Evidence(
+                            kind=kind,
+                            value=value,
+                            a_service="",
+                            b_service="",
+                            weight=0.0,
+                            note=(
+                                "published placeholder, so anyone could carry it; linking "
+                                "a person to it would be a false accusation"
+                            ),
+                        )
                     )
-                )
 
     # Only kinds where a difference is meaningful. Two installs of the same software
     # routinely share a 404 page, so a difference there says nothing.
@@ -157,16 +174,15 @@ def _counter_reasons(
         ArtefactKind.FAVICON.value,
         ArtefactKind.ANALYTICS_ID.value,
     ):
-        av, bv = a_arts.get(kind), b_arts.get(kind)
-        if not av or not bv:
+        avs = _values(a_arts.get(kind)) - NON_IDENTIFYING_VALUES
+        bvs = _values(b_arts.get(kind)) - NON_IDENTIFYING_VALUES
+        if not avs or not bvs:
             continue
-        if av in NON_IDENTIFYING_VALUES or bv in NON_IDENTIFYING_VALUES:
-            continue
-        if av != bv:
+        if not (avs & bvs):
             out.append(
                 Evidence(
                     kind=kind,
-                    value=f"{av} != {bv}",
+                    value=f"{sorted(avs)[0]} != {sorted(bvs)[0]}",
                     a_service="",
                     b_service="",
                     weight=0.0,
@@ -180,10 +196,10 @@ def _counter_reasons(
 def propose_for_pair(
     a_entity: str,
     a_services: Sequence[str],
-    a_arts: dict[str, str],
+    a_arts: dict[str, str | set[str]],
     b_entity: str,
     b_services: Sequence[str],
-    b_arts: dict[str, str],
+    b_arts: dict[str, str | set[str]],
     freq: Mapping[tuple[str, str], int],
     *,
     cap: int = DEFAULT_FREQUENCY_CAP,
@@ -196,28 +212,30 @@ def propose_for_pair(
     evidence is reported by the missing edge.
     """
 
-    shared: dict[str, str] = {}
+    shared: dict[str, set[str]] = {}
     supporting: list[Evidence] = []
 
     for kind in sorted(set(a_arts) & set(b_arts)):
-        av, bv = a_arts[kind], b_arts[kind]
-        if av != bv:
+        avs, bvs = _values(a_arts[kind]), _values(b_arts[kind])
+        common = avs & bvs
+        if not common:
             continue
-        shared[kind] = av
-        if av in NON_IDENTIFYING_VALUES:
-            continue
-        if freq[(kind, av)] > cap:
-            continue
-        supporting.append(
-            Evidence(
-                kind=kind,
-                value=av,
-                a_service=a_services[0] if a_services else "",
-                b_service=b_services[0] if b_services else "",
-                weight=WEIGHTS.get(kind, 0.3),
-                note=f"seen on {freq[(kind, av)]} service(s), cap {cap}",
+        shared[kind] = common
+        for value in sorted(common):
+            if value in NON_IDENTIFYING_VALUES:
+                continue
+            if freq[(kind, value)] > cap:
+                continue
+            supporting.append(
+                Evidence(
+                    kind=kind,
+                    value=value,
+                    a_service=a_services[0] if a_services else "",
+                    b_service=b_services[0] if b_services else "",
+                    weight=WEIGHTS.get(kind, 0.3),
+                    note=f"seen on {freq[(kind, value)]} service(s), cap {cap}",
+                )
             )
-        )
 
     if not shared:
         return None
@@ -287,18 +305,20 @@ def resolve(
 
     freq = artefact_frequencies(artefacts)
 
-    by_service: dict[str, dict[str, str]] = defaultdict(dict)
+    by_service: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for art in artefacts:
-        by_service[art.service_id][art.kind] = art.value
+        by_service[art.service_id][art.kind].add(art.value)
 
-    ent_arts: dict[str, dict[str, str]] = {}
+    ent_arts: dict[str, dict[str, set[str]]] = {}
     ent_services: dict[str, list[str]] = {}
     for ent in entities:
-        merged: dict[str, str] = {}
+        merged: dict[str, set[str]] = defaultdict(set)
         for sid in ent.service_ids:
-            for kind, value in by_service.get(sid, {}).items():
-                merged.setdefault(kind, value)
-        ent_arts[ent.entity_id] = merged
+            for kind, values in by_service.get(sid, {}).items():
+                merged[kind].update(values)
+        ent_arts[ent.entity_id] = dict(merged)
         ent_services[ent.entity_id] = list(ent.service_ids)
 
     out: list[Proposal] = []
@@ -366,7 +386,7 @@ def to_edges(proposals: Iterable[Proposal]) -> list[Edge]:
     now = utc_now()
     return [
         Edge(
-            edge_id=_edge_id(p.a_entity, p.b_entity),
+            edge_id=edge_id(p.a_entity, p.b_entity),
             a_entity=p.a_entity,
             b_entity=p.b_entity,
             method=p.method,

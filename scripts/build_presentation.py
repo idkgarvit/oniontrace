@@ -138,7 +138,7 @@ def s_title(prs):
     para(tf, "ONIONTRACE", size=74, color=FG, bold=True, first=True)
 
     tf2 = tb(s, 0.85, 3.45, 9.6, 1.3)
-    para(tf2, "Linking onion services to one operator,", size=27, color=AMBER, first=True,
+    para(tf2, "Linking onion services to candidate operators,", size=27, color=AMBER, first=True,
          line_spacing=1.15)
     para(tf2, "and saying how sure we are.", size=27, color=AMBER, line_spacing=1.15)
 
@@ -209,7 +209,7 @@ def s_detect(prs):
     stats = [
         ("19 / 19", "checks caught their planted flaw", TEAL),
         ("0", "false alarms on the clean services", TEAL),
-        ("7 of 19", "have no clean negative test at all", AMBER),
+        ("17 / 38", "naive detections at precision 0.447 on the same ground truth", AMBER),
     ]
     x = 0.85
     for big, small, color in stats:
@@ -225,11 +225,13 @@ def s_detect(prs):
         para(tf, small, size=15, color=MUTED, line_spacing=1.2)
         x += 3.95
 
-    foot(s, "The third number is the one to be careful about: seven checks have never been seen to fail.")
+    foot(s, "Every rule now has a negative fixture. The naive variant is the one those negatives catch.")
 
-    notes(s, "Say the caveat before anyone asks. Seven of the nineteen rules have no negative "
-             "fixture, so a false alarm on those could exist and we could not have seen it. "
-             "That is why the claim is zero observed and not zero possible.")
+    notes(s, "The first version of this table was partly unmeasured: seven of the nineteen "
+             "rules had no negative fixture, so a false alarm on those could not have been "
+             "seen. We found that while preparing the paper, added a hard negative for every "
+             "rule, and now report the corrected pair: 19/19 careful against 17/38 naive. "
+             "The zero is measured, not assumed.")
 
 
 def s_results(prs):
@@ -249,24 +251,63 @@ def s_console(prs):
     # No heading here on purpose. The screenshot is the argument, and every inch given to a
     # title is an inch taken off a console the back row has to read.
     picture(s, SCREEN, x=0.85, y=0.40, max_w=11.6, max_h=6.15, center_x=W_IN / 2)
-    tf = tb(s, 0.85, 6.78, 11.6, 0.6)
-    para(tf, "The analyst's console. Evidence and counter-evidence sit side by side, and "
-             "nothing merges until a named person says so.", size=14, color=MUTED, first=True)
+    tf = tb(s, 0.85, 6.72, 11.6, 0.7)
+    para(tf, "The analyst's console. A browser form creates a case through the same authorised "
+             "pipeline as the CLI, and the timeline, run report and exports sit beside the graph.",
+         size=14, color=MUTED, first=True)
 
-    notes(s, "Switch to the live console here if it is running. Click a link, point at the "
-             "plus and minus lines, then click confirm. The point: counter-evidence sits next "
-             "to evidence, not behind a score.")
+    notes(s, "Switch to the live console here if it is running. Create a case from the form, "
+             "then open a link, point at the plus and minus lines, and confirm it. The point: "
+             "counter-evidence sits next to evidence, not behind a score. The exports are JSON, "
+             "CSV and a watermarked evidence PDF.")
+
+
+def s_stretch(prs):
+    s = blank(prs)
+    kicker(s, "Module 3")
+    title(s, "What it reads, and what it refuses to merge",
+          sub="Identifiers are validated, vouches stay relationships, and one rule works without labels.")
+    stats = [
+        ("16 + 16", "PGP fingerprints and wallets parsed; all formats and chain checksums valid", TEAL),
+        ("12 / 12", "planted vouches recovered; a trust edge can never justify a merge", TEAL),
+        ("12 vs 6", "farm links kept by class strength, against a blunt two-class rule", AMBER),
+    ]
+    x = 0.85
+    for big, small, color in stats:
+        card = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(3.0),
+                                  Inches(3.75), Inches(2.2))
+        card.fill.solid()
+        card.fill.fore_color.rgb = CARD
+        card.line.color.rgb = LINE
+        card.line.width = Pt(1.5)
+        card.shadow.inherit = False
+        tf = tb(s, x + 0.35, 3.25, 3.05, 1.7)
+        para(tf, big, size=44, color=color, bold=True, first=True, space_after=10)
+        para(tf, small, size=15, color=MUTED, line_spacing=1.2)
+        x += 3.95
+
+    foot(s, "A valid identifier is evidence with a weight, not proof that the operator controls it.")
+
+    notes(s, "Three things a correlation tool can read beyond a favicon. A PGP fingerprint or a "
+             "wallet address is accepted only if its format validates: grouped hex for PGP, and "
+             "the chain checksum for Bitcoin, Monero or Ethereum. A vouch becomes its own trust "
+             "edge with score zero, and the store refuses to merge on one, because knowing two "
+             "operators vouch for each other is not knowing they are the same operator. The "
+             "third card is the honest one: real crawls have no cluster id, so we score the "
+             "class of evidence instead. One hard class is enough, two independent soft classes "
+             "are enough, one copied favicon is not. On the farm that keeps all twelve true "
+             "links where a blunt two-class rule keeps six.")
 
 
 def s_real(prs):
     s = blank(prs)
     kicker(s, "Validation")
     title(s, "What we tested on, and what we did not touch",
-          sub="Three lawful ways to get real data without scanning anybody.")
+          sub="Public logs, our own servers, and nothing else.")
     rows = [
-        ("3,018", "real .onion addresses taken from public certificate transparency logs", TEAL),
-        ("2", "of our own servers, one nginx and one onion service, over real Tor", TEAL),
-        ("0", "bytes fetched from a third party we do not own", AMBER),
+        ("3,018", "onion-bearing certificates from public certificate transparency logs, covering 688 unique addresses", TEAL),
+        ("8", "onion services we published and fetched over real Tor, behind two nginx hosts we also built", TEAL),
+        ("0", "third-party onion services fetched", AMBER),
     ]
     y = 3.0
     for big, small, color in rows:
@@ -279,9 +320,10 @@ def s_real(prs):
     foot(s, "Correlation stays synthetic, because no public ground truth for operator identity exists.")
 
     notes(s, "This is the slide the examiner will push on. Be direct: we did not scan "
-             "anybody. Certificate transparency logs are public and free to read. The two "
-             "servers are ours. Under section 43 of the IT Act, unauthorised access is an "
-             "offence, so it was never on the table.")
+             "anybody. Certificate transparency logs are public and free to read. The eight "
+             "onion services are ours, fronting two nginx hosts we built, and we fetched them "
+             "over real Tor. No third party's onion service was touched. Under section 43 of "
+             "the IT Act, unauthorised access creates civil liability, so it was never on the table.")
 
 
 def s_limits(prs):
@@ -290,7 +332,7 @@ def s_limits(prs):
     title(s, "What this does not do")
     items = [
         "It does not prove two services share an owner. It proposes a link and records who agreed.",
-        "No live collection. Every byte here came from our own machines or a public log.",
+        "No third-party onion collection. Our live lab is eight services we published ourselves.",
         "Attribution is measured on generated writers, not on people. A direction, not a number.",
         "The console is one analyst's tool on one machine. It has no login and does not pretend to.",
     ]
@@ -303,7 +345,9 @@ def s_limits(prs):
 
     notes(s, "Do not rush this slide. A project that states its limits is trusted on "
              "everything else it says. If someone finds a gap you did not list, the other "
-             "numbers get doubted too.")
+             "numbers get doubted too. If asked what comes next, the honest answer is one "
+             "pilot with a partner who has labelled data: that is the only thing that turns "
+             "this direction into a number.")
 
 
 def s_close(prs):
@@ -379,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
     prs.slide_height = Emu(int(H_IN * 914400))
 
     builders = [s_title, s_problem, s_defaults, s_pipeline, s_farm, s_detect,
-                s_results, s_real, s_limits, s_close, s_end]
+                s_results, s_stretch, s_real, s_limits, s_close, s_end]
     if not args.skip_screenshot:
         if not SCREEN.exists():
             raise SystemExit(

@@ -7,6 +7,9 @@
 <h1 class="entityhead">{{ entity.entity_id }}
   <span class="badge b-{{ entity.status }}">{{ entity.status }}</span></h1>
 <p class="muted">Case {{ case_id }} · created {{ entity.created_at }}</p>
+<p class="muted">Category <code>{{ entity.category or 'unclassified' }}</code>
+  · last scan <code>{{ entity.last_scan or 'unknown' }}</code>
+  · source <code>{{ entity.source or 'unknown' }}</code></p>
 
 <section class="panel">
   <header><h2>Services in this candidate</h2></header>

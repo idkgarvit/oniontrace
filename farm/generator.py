@@ -21,14 +21,21 @@ import random
 
 from farm.catalogue import CLUSTER_FLAWS, SINGLE_FLAWS, get_spec
 from farm.language import LISTING_TEMPLATES, TOPIC_VOCABULARY
+from farm.identifiers import (
+    format_pgp_fingerprint,
+    make_pgp_fingerprint,
+    make_wallet_address,
+)
 from farm.model import (
     AbstentionCase,
     Cluster,
+    Endpoint,
     FarmConfig,
     FarmTruth,
     PersonaRole,
     Service,
     StyleRegime,
+    TrustClaim,
     deterministic_hex,
 )
 from farm.personas import build_persona, generate_posts, make_handle
@@ -538,9 +545,11 @@ def _assign_persona_artifacts(
         for first, second, key in pair_plan:
             if first >= len(members) or second >= len(members):
                 continue
-            value = deterministic_hex(
-                cfg.seed, f"persona-artifact:{key}:{cluster.cluster_id}", length=40
-            )
+            label = f"persona-artifact:{key}:{cluster.cluster_id}"
+            if key == "pgp_fingerprint":
+                value = make_pgp_fingerprint(cfg.seed, label)
+            else:
+                value = make_wallet_address(cfg.seed, label)
             members[first].shared_artifacts[key] = value
             members[second].shared_artifacts[key] = value
 
@@ -552,10 +561,119 @@ def _assign_persona_artifacts(
     # absence of a key never accidentally reads as a match.
     for persona in subjects:
         for key in PERSONA_ARTIFACT_KEYS:
-            if key not in persona.shared_artifacts:
+            if key in persona.shared_artifacts:
+                continue
+            label = f"persona-artifact:{key}:{persona.persona_id}"
+            if key == "pgp_fingerprint":
+                persona.shared_artifacts[key] = make_pgp_fingerprint(cfg.seed, label)
+            elif key == "wallet_address":
+                persona.shared_artifacts[key] = make_wallet_address(cfg.seed, label)
+            else:
                 persona.shared_artifacts[key] = deterministic_hex(
-                    cfg.seed, f"persona-artifact:{key}:{persona.persona_id}", length=40
+                    cfg.seed, label, length=40
                 )
+
+
+def _publish_persona_identifiers(
+    clusters: list[Cluster],
+    services: list[Service],
+    personas: list,
+    service_ids: list[str],
+) -> list[TrustClaim]:
+    """Serve each persona's identifiers on the contact page of its service.
+
+    The extraction path is deliberately the same one a passive visitor would use:
+    the graph reads the page, not this function's return value. The return value is
+    ground truth for the tests and the report, so a discrepancy is visible.
+
+    One vouch per service is planted, targeting a service in the same cluster. The
+    parser has to resolve the handle to the service that publishes it; the truth
+    records that resolution so a mistake is measurable.
+    """
+
+    by_id = {s.service_id: s for s in services}
+    by_service: dict[str, list] = {}
+    for persona, service_id in zip(personas, service_ids, strict=True):
+        if service_id and service_id in by_id:
+            by_service.setdefault(service_id, []).append(persona)
+
+    # service -> (target handle, target service, source persona id)
+    vouches: dict[str, tuple[str, str, str]] = {}
+    for cluster in clusters:
+        members = [sid for sid in cluster.service_ids if sid in by_service]
+        if len(members) < 2:
+            continue
+        for index, source in enumerate(members):
+            target = members[(index + 1) % len(members)]
+            if target == source:
+                continue
+            source_persona = by_service[source][0]
+            target_persona = by_service[target][0]
+            vouches[source] = (
+                target_persona.handle,
+                target,
+                source_persona.persona_id,
+            )
+
+    # A refusal that names a real handle. A parser that ignores negation turns this
+    # into a false trust edge, so it is a hard negative rather than decoration.
+    refusals: dict[str, str] = {}
+    for cluster in clusters:
+        members = [sid for sid in cluster.service_ids if sid in by_service]
+        if len(members) < 2:
+            continue
+        source = members[-1]
+        vouch_target = vouches.get(source, (None, None, None))[1]
+        target = next(
+            (sid for sid in members if sid not in (source, vouch_target)),
+            next(sid for sid in members if sid != source),
+        )
+        refusals[source] = by_service[target][0].handle
+
+    claims: list[TrustClaim] = []
+    for service_id, people in sorted(by_service.items()):
+        service = by_id[service_id]
+        contact = service.endpoint("/contact")
+        if contact is None:  # pragma: no cover - every base site builds one
+            contact = Endpoint(path="/contact", body="<h1>Contact</h1>")
+            service.endpoints.append(contact)
+
+        blocks: list[str] = []
+        for persona in people:
+            fingerprint = persona.shared_artifacts.get("pgp_fingerprint", "")
+            wallet = persona.shared_artifacts.get("wallet_address", "")
+            lines = [
+                '<div class="operator">',
+                f"<p>Persona: @{persona.handle}</p>",
+            ]
+            if fingerprint:
+                lines.append(
+                    f"<p>PGP fingerprint: {format_pgp_fingerprint(fingerprint)}</p>"
+                )
+            if wallet:
+                lines.append(f"<p>Wallet: {wallet}</p>")
+            if service_id in vouches:
+                target_handle, target_service, source_persona = vouches[service_id]
+                if persona.persona_id == source_persona:
+                    lines.append(f"<p>Vouches for @{target_handle}</p>")
+                    claims.append(
+                        TrustClaim(
+                            source_service=service_id,
+                            target_service=target_service,
+                            source_handle=persona.handle,
+                            target_handle=target_handle,
+                            path="/contact",
+                        )
+                    )
+            if service_id in refusals and persona is people[0]:
+                lines.append(f"<p>We do not vouch for @{refusals[service_id]}.</p>")
+            lines.append("</div>")
+            blocks.append("\n".join(lines))
+
+        if blocks:
+            contact.body = contact.body + "\n" + "\n".join(blocks)
+
+    return claims
 
 
 def _build_abstention_cases(
@@ -697,6 +815,9 @@ def generate_farm(cfg: FarmConfig | None = None) -> FarmTruth:
         )
 
     abstention_cases = _build_abstention_cases(cfg, services, subjects, decoys)
+    trust_claims = _publish_persona_identifiers(
+        clusters, services, all_personas, all_service_ids
+    )
 
     # Checked over every persona the farm contains, subjects and decoys, because a regime that only
     # exists on a decoy is still a regime the report will claim it measured.
@@ -710,4 +831,5 @@ def generate_farm(cfg: FarmConfig | None = None) -> FarmTruth:
         flaws=flaws,
         hard_negatives=hard_negatives,
         abstention_cases=abstention_cases,
+        trust_claims=trust_claims,
     )

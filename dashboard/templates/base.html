@@ -17,8 +17,14 @@
   <span class="tag">M6-lite analyst console</span>
   {% if case_id %}<span class="crumb">case <b>{{ case_id }}</b></span>{% endif %}
   <nav class="topnav">
-    {% if case_id %}<a href="/case/{{ case_id }}">Graph</a>
-    <a href="/case/{{ case_id }}/evidence.pdf">Evidence PDF</a>{% endif %}
+    {% if case_id %}
+    <a href="/case/{{ case_id }}">Graph</a>
+    <a href="/case/{{ case_id }}/timeline">Timeline</a>
+    <a href="/case/{{ case_id }}/report">Run report</a>
+    <a href="/case/{{ case_id }}/export.csv">CSV</a>
+    <a href="/case/{{ case_id }}/evidence.pdf">Evidence PDF</a>
+    {% endif %}
+    <a href="/new">New case</a>
   </nav>
 </header>
 

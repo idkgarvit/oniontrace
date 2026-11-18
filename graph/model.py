@@ -37,6 +37,14 @@ class ArtefactKind(str, Enum):
     APP_JS = "app_js_sha256"
     ERROR_404 = "error404_sha256"
     CONTACT_HANDLE = "contact_handle"
+    PGP_FINGERPRINT = "pgp_fingerprint"
+    WALLET_ADDRESS = "wallet_address"
+
+
+#: Not an artefact: a social claim read off a page. It is kept separate from the
+#: artefact kinds because a vouch is evidence of a relationship between operators,
+#: not evidence that two observations are the same operator.
+TRUST_STATEMENT = "trust_statement"
 
 
 #: A value that many services share because a vendor ships it, not because an
@@ -63,6 +71,10 @@ class EdgeMethod(str, Enum):
 
     DETERMINISTIC = "deterministic"
     PROBABILISTIC = "probabilistic"
+    #: An explicit social claim ("X vouches for Y"). It is not identity evidence and
+    #: cannot justify a merge; it is stored so the relationship is visible next to the
+    #: identity candidates without being mistaken for one.
+    TRUST = "trust"
 
 
 class EdgeStatus(str, Enum):
@@ -154,6 +166,12 @@ class Entity:
     status: str = "candidate"
     service_ids: list[str] = field(default_factory=list)
     created_at: str = ""
+    # Provenance and freshness, required by the PS's entity-extraction item. The
+    # defaults keep older databases readable: rows written before these columns
+    # existed come back empty rather than failing to load.
+    category: str = ""
+    last_scan: str = ""
+    source: str = ""
     # Whether this entity has been folded into another. It lives on the model because
     # every caller that asks "can I act on this entity" needs it, and a store method that
     # silently dropped a database column left merge state invisible outside SQL.
@@ -167,6 +185,9 @@ class Entity:
             "status": self.status,
             "service_ids": list(self.service_ids),
             "created_at": self.created_at,
+            "category": self.category,
+            "last_scan": self.last_scan,
+            "source": self.source,
             "merged_into": self.merged_into,
         }
 

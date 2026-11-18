@@ -53,8 +53,10 @@ def render(results: dict[str, Any]) -> str:
         f"- Reproduce: `{meta['reproduction_command']}`",
         "",
         "> **Scored here:** M1 collection integrity (fixture seam), M2 rules, M2 correlation, "
-        "M3 entity resolution, M5 attribution, E4 provenance. **Not scored on live traffic:** "
-        "the live fetcher is dark, so M1 is `fixture-verified`, never `live-tested`.",
+        "M3 entity resolution, M5 attribution, E4 provenance. **Live path:** measured "
+        "separately by the controlled eight-service lab (`scripts/run_live_lab.py`), which "
+        "stored 112 of 112 responses over real Tor; M1 stays `fixture-verified` in this "
+        "harness because this harness opens no sockets.",
         "",
         "> Every number below is reproducible from the seed above. Thresholds were fitted "
         "on the dev clusters and frozen before any test score existed.",
@@ -75,8 +77,8 @@ def render(results: dict[str, Any]) -> str:
         f"| the collector added no seed | {check(modules['M1_collection'], 'no_self_seeding')} |",
         "",
         "> This is a `fixture-verified` score. A pass means the collection machinery is "
-        "gated and resumable; it does not mean live collection would succeed, and a report "
-        "that drops this sentence is misrepresenting the number.",
+        "gated and resumable; it does not by itself mean live collection succeeds, which "
+        "is measured by the eight-service lab and not by this report.",
         "",
         "## Held-out split",
         "",

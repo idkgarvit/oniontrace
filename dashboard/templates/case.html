@@ -71,7 +71,7 @@
           <button name="status" value="confirmed" class="ok">Confirm</button>
           <button name="status" value="rejected" class="no">Reject</button>
         </form>
-        {% if e.status == 'confirmed' and not e.has_conflict and e.mergeable %}
+        {% if e.status == 'confirmed' and not e.has_conflict and e.mergeable and e.method != 'trust' %}
         <form method="post" action="/case/{{ case_id }}/merge" class="inline mergeform">
           <input type="hidden" name="onerror" value="case">
           <input type="hidden" name="survivor" value="{{ e.a_entity }}">

@@ -18,10 +18,14 @@ implying a multi-user deployment.
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import os
+import re
+from datetime import date
 from pathlib import Path
 from typing import Any
-
 from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -120,7 +124,7 @@ def _cases() -> list[dict[str, Any]]:
         try:
             with GraphStore(db, case_id=d.name) as store:
                 counts = store.export()["counts"]
-        except Exception:  # a corrupt case must not take the index down
+        except Exception:  # noqa: BLE001 -- a corrupt case must not take the index down
             counts = {"entities": 0, "edges": 0, "conflicts": 0, "merged": 0}
         out.append({"case_id": d.name, "counts": counts})
     return out
@@ -338,6 +342,451 @@ def reverse(
         except GraphError as exc:
             return _refuse(case_id, exc, from_form=onerror == "case")
     return RedirectResponse(f"/case/{case_id}", status_code=303)
+
+
+# -- case creation ------------------------------------------------------ #
+_CASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _get(record: Any, name: str, default: Any = "") -> Any:
+    """Read a field from a dataclass or a row dict without caring which it is."""
+    if isinstance(record, dict):
+        return record.get(name, default)
+    return getattr(record, name, default)
+
+
+def _date_or_400(value: str) -> str:
+    """Accept an empty string or a calendar date; refuse anything else.
+
+    The timestamps in the store are ISO-8601 text. Comparing their date prefix is exact
+    and needs no timezone arithmetic, which is why the filter is expressed in days.
+    """
+    if not value:
+        return ""
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"not a date: {value}") from exc
+    return value
+
+
+def _in_range(stamp: str, since: str, until: str) -> bool:
+    day = (stamp or "")[:10]
+    if not day:
+        return False
+    if since and day < since:
+        return False
+    return not (until and day > until)
+
+
+@app.get("/new", response_class=HTMLResponse)
+def new_case_form(request: Request, error: str = "") -> HTMLResponse:
+    return templates.TemplateResponse(request, "new.html", {"error": error})
+
+
+@app.post("/new")
+def new_case(
+    case_id: str = Form(default=""),
+    seed: str = Form(default=""),
+    owner: str = Form(default=""),
+    authorisation: str = Form(default=""),
+    retention_days: str = Form(default="30"),
+) -> Response:
+    """Build a case from the browser, so the demo never needs a terminal.
+
+    The pipeline is the same entry point the CLI uses. Running it here is not a shortcut
+    around the gate: the gate is a stage inside it, and a run whose authorisation is
+    missing is refused by the same code that refuses it from the shell.
+
+    Every field arrives as text, including the two numbers, on purpose. Typed form fields
+    would make FastAPI answer a mistyped value with a 422 and a JSON body rendered as the
+    page; a browser form has to come back with a sentence and the case list still visible.
+    """
+    case_id = case_id.strip()
+    owner = owner.strip()
+    authorisation = authorisation.strip()
+
+    def refuse(message: str) -> RedirectResponse:
+        return RedirectResponse(f"/new?error={quote(message)}", status_code=303)
+
+    try:
+        seed_value = int(seed)
+    except ValueError:
+        return refuse(f"farm seed must be a whole number, not {seed!r}")
+    if not 0 <= seed_value <= 2**63 - 1:
+        return refuse("farm seed must be between 0 and 2^63-1")
+    try:
+        retention = int(retention_days)
+    except ValueError:
+        return refuse(f"retention must be a whole number of days, not {retention_days!r}")
+
+    if not _CASE_ID.match(case_id):
+        return refuse("case id must start with a letter or digit and use A-Z a-z 0-9 . _ -")
+    if (CASE_ROOT / case_id).exists():
+        return refuse(f"case {case_id} already exists")
+    if not owner:
+        return refuse("an owner is required; an unattributed case is not auditable")
+    if not authorisation:
+        return refuse("an authorisation reference is required before a case exists")
+    if not 1 <= retention <= 3650:
+        return refuse("retention must be between 1 and 3650 days")
+
+    from oniontrace.pipeline import run_pipeline
+
+    try:
+        run_pipeline(
+            seed=seed_value,
+            case_id=case_id,
+            output_dir=CASE_ROOT / case_id / "run",
+            case_root=CASE_ROOT,
+            owner=owner,
+            authorisation=authorisation,
+            retention_days=retention,
+        )
+    except Exception as exc:  # noqa: BLE001 -- any stage may fail, and the browser gets the reason
+        return refuse(f"the pipeline refused or failed: {exc}")
+
+    return RedirectResponse(f"/case/{case_id}", status_code=303)
+
+
+# -- timeline ----------------------------------------------------------- #
+@app.get("/case/{case_id}/timeline", response_class=HTMLResponse)
+def timeline(
+    request: Request, case_id: str, since: str = "", until: str = ""
+) -> HTMLResponse:
+    """Every dated record in one list, filterable by day.
+
+    Artefacts, findings, edges and notes carry different timestamps because they are
+    produced by different stages. Putting them on one axis is what makes "what did this
+    case know on this date" answerable.
+    """
+    since, until = _date_or_400(since), _date_or_400(until)
+
+    with _open(case_id) as store:
+        artefacts = store.artefacts()
+        findings = store.findings()
+        edges = store.edges()
+        notes = store.notes()
+
+    rows: list[dict[str, Any]] = []
+    for artefact in artefacts:
+        rows.append(
+            {
+                "record": "artefact",
+                "subject": _get(artefact, "service_id"),
+                "kind": _get(artefact, "kind"),
+                "value": _get(artefact, "value"),
+                "at": _get(artefact, "observed_at"),
+                "detail": _get(artefact, "evidence_sha256"),
+            }
+        )
+    for finding in findings:
+        rows.append(
+            {
+                "record": "finding",
+                "subject": _get(finding, "service_id"),
+                "kind": _get(finding, "kind"),
+                "value": _get(finding, "path"),
+                "at": _get(finding, "created_at"),
+                "detail": _get(finding, "evidence"),
+            }
+        )
+    for edge in edges:
+        rows.append(
+            {
+                "record": "edge",
+                "subject": f"{_get(edge, 'a_entity')} → {_get(edge, 'b_entity')}",
+                "kind": _get(edge, "method"),
+                "value": _get(edge, "score"),
+                "at": _get(edge, "created_at"),
+                "detail": _get(edge, "status"),
+            }
+        )
+    for note in notes:
+        rows.append(
+            {
+                "record": "note",
+                "subject": _get(note, "entity_id") or _get(note, "case_id"),
+                "kind": _get(note, "actor"),
+                "value": _get(note, "body"),
+                "at": _get(note, "created_at"),
+                "detail": "",
+            }
+        )
+
+    rows = [row for row in rows if _in_range(row["at"], since, until)]
+    rows.sort(key=lambda row: (row["at"], row["record"], str(row["subject"])))
+
+    return templates.TemplateResponse(
+        request,
+        "timeline.html",
+        {
+            "case_id": case_id,
+            "rows": rows,
+            "since": since,
+            "until": until,
+            "counts": {
+                name: sum(1 for row in rows if row["record"] == name)
+                for name in ("artefact", "finding", "edge", "note")
+            },
+        },
+    )
+
+
+# -- run report ---------------------------------------------------------- #
+def _run_dir(case_id: str) -> Path:
+    """Where the pipeline put this case's run, after checking the case exists."""
+
+    _db_path(case_id)
+    return CASE_ROOT / case_id / "run"
+
+
+def _brief(value: Any) -> str:
+    """Shorten one stage-summary value so the table stays a table.
+
+    Stage summaries are not uniform: ``farm`` records eight counts, ``detect`` records the
+    full findings list. Printing the list turned one row into a wall of text and pushed
+    every later stage off the screen. Collections become their size. Strings are kept up
+    to a paragraph's length, because some of them are claim boundaries -- ``scope_limit``
+    is a disclaimer, and clipping it would be the one thing this report must not do. The
+    manifest itself is downloadable for a reader who needs the whole record.
+    """
+
+    if isinstance(value, (list, tuple, dict)):
+        return f"{len(value)} entries"
+    text = str(value)
+    return text if len(text) <= 240 else text[:237] + "..."
+
+
+def _read_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+@app.get("/case/{case_id}/report", response_class=HTMLResponse)
+def run_report(request: Request, case_id: str) -> HTMLResponse:
+    """What the pipeline did, stage by stage, in the browser.
+
+    The console could show the result of a run but not the run: the stage table lived in
+    ``manifest.json`` and the generated narrative in ``REPORT.md``, both on disk. A demo
+    that has to open a file manager to show the work is not GUI-operated, so both are
+    rendered here. A case built before the pipeline wrote manifests (``graph build`` on
+    its own) gets an explanation rather than a 404, because the case is real.
+    """
+
+    run_dir = _run_dir(case_id)
+    manifest = _read_json(run_dir / "manifest.json")
+    report_path = run_dir / "REPORT.md"
+    report = report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
+
+    stages = []
+    if isinstance(manifest, dict):
+        for stage in manifest.get("stages", []):
+            stages.append(
+                {
+                    "stage": stage.get("stage", ""),
+                    "ok": bool(stage.get("ok")),
+                    "duration_ms": stage.get("duration_ms", 0),
+                    "note": stage.get("error") or stage.get("skipped_because") or "",
+                    "summary": {
+                        key: _brief(value)
+                        for key, value in (stage.get("summary") or {}).items()
+                    },
+                }
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "report.html",
+        {
+            "case_id": case_id,
+            "manifest": manifest if isinstance(manifest, dict) else None,
+            "stages": stages,
+            "report": report,
+            "has_report": bool(report),
+        },
+    )
+
+
+@app.get("/case/{case_id}/manifest.json")
+def run_manifest(case_id: str) -> Response:
+    """The stage manifest as a file: the machine-readable record behind the page."""
+
+    path = _run_dir(case_id) / "manifest.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"case {case_id} has no run manifest")
+    return Response(
+        path.read_bytes(),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{case_id}-manifest.json"'},
+    )
+
+
+@app.get("/case/{case_id}/report.md")
+def run_report_markdown(case_id: str) -> Response:
+    """The generated report as a file, for the record and for grep."""
+
+    path = _run_dir(case_id) / "REPORT.md"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"case {case_id} has no pipeline report")
+    return PlainTextResponse(
+        path.read_text(encoding="utf-8"),
+        headers={"Content-Disposition": f'attachment; filename="{case_id}-REPORT.md"'},
+    )
+
+
+# -- export ------------------------------------------------------------- #
+_CSV_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value: Any) -> Any:
+    """Stop a hostile page from writing a formula into the analyst's spreadsheet.
+
+    Every string in a case was read off an onion service or typed by an analyst who was
+    looking at one. To Excel and to most importers a cell beginning with ``=``, ``+``,
+    ``-`` or ``@`` is an instruction, not text -- the CSV-injection class that turns an
+    exported report into a payload when it is opened. The cell is prefixed with an
+    apostrophe, which spreadsheets render as "treat the rest as text"; every other reader
+    sees one extra visible character. Numbers are left alone so a score stays a number.
+    """
+
+    if isinstance(value, str) and value.startswith(_CSV_FORMULA_LEAD):
+        return "'" + value
+    return value
+
+
+@app.get("/case/{case_id}/export.csv")
+def export_csv(case_id: str) -> Response:
+    """The whole case as CSV, one row per record.
+
+    A single table rather than one file per record type: an analyst who wants to pivot
+    in a spreadsheet needs the records side by side, and the `record` column is what
+    lets them filter. JSON and the evidence PDF already exist; this is the third format
+    the requirement names.
+    """
+    with _open(case_id) as store:
+        graph = store.export()
+        artefacts = store.artefacts()
+        findings = store.findings()
+        edges = store.edges()
+        notes = store.notes()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+
+    def row(cells: list[Any]) -> None:
+        writer.writerow([_csv_cell(cell) for cell in cells])
+
+    row(
+        [
+            "record",
+            "id",
+            "subject",
+            "kind",
+            "value",
+            "status",
+            "score",
+            "at",
+            "category",
+            "last_scan",
+            "source",
+            "detail",
+        ]
+    )
+
+    for entity in graph["entities"]:
+        row(
+            [
+                "entity",
+                entity["entity_id"],
+                entity.get("label", ""),
+                "",
+                ";".join(entity.get("service_ids", [])),
+                entity.get("status", ""),
+                "",
+                entity.get("created_at", ""),
+                entity.get("category", ""),
+                entity.get("last_scan", ""),
+                entity.get("source", ""),
+                "",
+            ]
+        )
+    for artefact in artefacts:
+        row(
+            [
+                "artefact",
+                _get(artefact, "artefact_id"),
+                _get(artefact, "service_id"),
+                _get(artefact, "kind"),
+                _get(artefact, "value"),
+                "",
+                "",
+                _get(artefact, "observed_at"),
+                "",
+                "",
+                "",
+                _get(artefact, "evidence_sha256"),
+            ]
+        )
+    for edge in edges:
+        row(
+            [
+                "edge",
+                _get(edge, "edge_id"),
+                f"{_get(edge, 'a_entity')} -> {_get(edge, 'b_entity')}",
+                _get(edge, "method"),
+                "",
+                _get(edge, "status"),
+                _get(edge, "score"),
+                _get(edge, "created_at"),
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+    for finding in findings:
+        row(
+            [
+                "finding",
+                _get(finding, "finding_id"),
+                _get(finding, "service_id"),
+                _get(finding, "kind"),
+                _get(finding, "path"),
+                "",
+                "",
+                _get(finding, "created_at"),
+                "",
+                "",
+                "",
+                _get(finding, "evidence"),
+            ]
+        )
+    for note in notes:
+        row(
+            [
+                "note",
+                _get(note, "note_id"),
+                _get(note, "entity_id") or _get(note, "case_id"),
+                _get(note, "actor"),
+                _get(note, "body"),
+                "",
+                "",
+                _get(note, "created_at"),
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{case_id}.csv"'},
+    )
 
 
 # -- evidence pack ------------------------------------------------------ #

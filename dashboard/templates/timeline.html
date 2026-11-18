@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}ONIONTRACE · {{ case_id }} · timeline{% endblock %}
+{% block subtitle %}Every dated record in this case on one axis. Artefacts carry when they were observed; findings, links and notes carry when they were written.{% endblock %}
+
+{% block content %}
+<h1 class="pagehead">Timeline · {{ case_id }}</h1>
+
+<form class="panel mergeform" method="get" action="/case/{{ case_id }}/timeline">
+  <label>From
+    <input name="since" type="date" value="{{ since }}">
+  </label>
+  <label>To
+    <input name="until" type="date" value="{{ until }}">
+  </label>
+  <button type="submit">Filter</button>
+  <a class="small" href="/case/{{ case_id }}/timeline">clear</a>
+</form>
+
+<div class="stats">
+  <div class="stat"><span class="n">{{ counts.artefact }}</span><span class="l">artefacts</span></div>
+  <div class="stat"><span class="n">{{ counts.finding }}</span><span class="l">findings</span></div>
+  <div class="stat"><span class="n">{{ counts.edge }}</span><span class="l">links</span></div>
+  <div class="stat"><span class="n">{{ counts.note }}</span><span class="l">notes</span></div>
+</div>
+
+{% if rows %}
+<table class="timeline mono">
+  <colgroup>
+    <col style="width:180px">
+    <col style="width:88px">
+    <col style="width:150px">
+    <col style="width:150px">
+    <col style="width:24%">
+    <col>
+  </colgroup>
+  <thead>
+    <tr><th>when</th><th>record</th><th>subject</th><th>kind</th><th>value</th><th>detail</th></tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td title="{{ row.at }}">{{ row.at[:19]|replace("T", " ") }}</td>
+      <td><span class="badge">{{ row.record }}</span></td>
+      <td>{{ row.subject }}</td>
+      <td>{{ row.kind }}</td>
+      <td class="wrap">{{ row.value }}</td>
+      <td class="wrap muted">{{ row.detail }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>Nothing in this range</h2>
+  <p>Widen the dates, or clear the filter to see every record.</p>
+</div>
+{% endif %}
+{% endblock %}

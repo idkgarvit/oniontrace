@@ -25,7 +25,8 @@ from eval.splits import ThresholdDecision, choose_threshold, cluster_split
 HARNESS_VERSION = "0.1.0"
 
 #: How each scored module is described in the report. M1 is measured against the
-#: fixture seam, not the network: the collectors exist, but live acquisition is dark.
+#: fixture seam in this harness; the live path is proven separately by the controlled
+#: eight-service lab, which is why the status stays `fixture-verified` here.
 M1_COLLECTION_STATUS = "fixture-verified"
 
 
@@ -162,8 +163,10 @@ def collection_integrity(farm) -> dict[str, Any]:
       the collector itself.
 
     Scored as ``fixture-verified`` rather than live-tested, and the report says so:
-    the fixture transport is in-memory pages and the live fetcher is dark. A pass here
-    means the machinery is gated and resumable; it does not mean live collection works.
+    the fixture transport is in-memory pages, and this harness never opens a socket. The
+    live path is measured separately by the controlled eight-service lab. A pass here
+    means the machinery is gated and resumable; it does not mean third-party collection
+    works.
     """
     from pathlib import Path
     from tempfile import TemporaryDirectory

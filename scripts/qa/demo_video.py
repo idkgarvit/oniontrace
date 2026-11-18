@@ -202,9 +202,26 @@ def verified_numbers() -> list[str]:
     passed = counts.get("PASS")
     if not isinstance(passed, int):
         passed = sum(1 for s in stages if str(s.get("status", "")).upper() == "PASS")
-    lines = [f"Pipeline:  {verdict}"]
+    lines: list[str] = []
     if stages:
-        lines.insert(0, f"{passed} of {len(stages)} full-check stages passed")
+        lines.append(f"{passed} of {len(stages)} full-check stages passed")
+
+    # Read the headline counts from the stage summaries too, so the end card cannot
+    # go stale when the suite or the deck changes. A missing summary drops the line
+    # rather than printing a placeholder.
+    tests = checks = slides = None
+    for stage in stages:
+        summary = str(stage.get("summary", ""))
+        if (m := re.search(r"(\d+) tests passed", summary)):
+            tests = m.group(1)
+        if (m := re.search(r"(\d+) checks passed", summary)):
+            checks = m.group(1)
+        if (m := re.search(r"(\d+) slides", summary)):
+            slides = m.group(1)
+    if tests and checks and slides:
+        lines.append(f"{tests} tests, {checks} paper checks, {slides} slides")
+    if not lines:
+        lines = [verdict]
     return lines
 
 

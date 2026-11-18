@@ -1601,6 +1601,122 @@ def test_a_live_fetch_stops_reading_at_the_byte_cap(monkeypatch):
     assert response.closed, "the stream was left open, holding a socket and a circuit"
 
 
+class _SmallResponse:
+    """The minimum a live fetch reads: a status, headers, capped body and close."""
+
+    status_code = 200
+    headers = {"Content-Type": "text/html"}
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+        self.closed = False
+
+    def iter_content(self, chunk_size: int = 0):
+        yield self._body
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _onion_transport(monkeypatch, get, *, attempts: int = 3, delay: float = 2.0):
+    """A live transport whose dependency and DNS guard are replaced, never the network."""
+    import sys
+    import types
+
+    from collect.clock import FrozenClock
+    from collect.live import LiveSettings, LiveTransport
+
+    fake = types.ModuleType("requests")
+    fake.get = get
+    monkeypatch.setitem(sys.modules, "requests", fake)
+    monkeypatch.setattr("collect.live.is_non_public_address", lambda host: (False, "public"))
+    return LiveTransport(
+        authorised_mode=True,
+        settings=LiveSettings(
+            socks_host="127.0.0.1",
+            socks_port=19050,
+            onion_attempts=attempts,
+            onion_retry_delay=delay,
+        ),
+        clock=FrozenClock(),
+    )
+
+
+def test_a_failed_onion_rendezvous_is_retried_until_it_answers(monkeypatch):
+    """The first request after a warm-up can reuse a circuit the service has closed.
+
+    Observed live: Tor attached the stream to a cached rendezvous circuit, the service
+    answered END (closed normally), and Tor closed the circuit. The collector recorded
+    six of eight services as unreachable because it never sent the second request that
+    would have built a fresh circuit. A rendezvous failure is not an HTTP answer.
+    """
+    from collect.errors import TransportUnavailable
+
+    response = _SmallResponse(b"<html>ok</html>")
+    calls: list[str] = []
+    sleeps: list[float] = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        if len(calls) < 3:
+            raise RuntimeError("0x01: General SOCKS server failure")
+        return response
+
+    monkeypatch.setattr("collect.live.time.sleep", lambda seconds: sleeps.append(seconds))
+    transport = _onion_transport(monkeypatch, fake_get)
+    result = transport.fetch("http://" + "a" * 56 + ".onion/")
+
+    assert len(calls) == 3, "the fetch gave up before trying a fresh rendezvous circuit"
+    assert sleeps == [2.0, 2.0], "retries were not spaced, so Tor would reuse the dead circuit"
+    assert result.status == 200 and result.body == b"<html>ok</html>"
+    assert response.closed, "the successful retry left its stream open"
+
+
+def test_a_failed_onion_fetch_reports_how_many_attempts_it_made(monkeypatch):
+    """A service that fails every attempt is still reported as unreachable, with the count."""
+    from collect.errors import TransportUnavailable
+
+    calls: list[str] = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        raise RuntimeError("0x01: General SOCKS server failure")
+
+    monkeypatch.setattr("collect.live.time.sleep", lambda seconds: None)
+    transport = _onion_transport(monkeypatch, fake_get)
+
+    with pytest.raises(TransportUnavailable, match="after 3 attempts"):
+        transport.fetch("http://" + "b" * 56 + ".onion/")
+    assert len(calls) == 3
+
+
+def test_a_clearnet_fetch_is_not_retried(monkeypatch):
+    """Retrying is an onion-rendezvous concession, not a general retry of clearnet failures."""
+    from collect.errors import TransportUnavailable
+
+    calls: list[int] = []
+
+    def fake_get(url, **kwargs):
+        calls.append(1)
+        raise RuntimeError("connection refused")
+
+    transport = _onion_transport(monkeypatch, fake_get)
+    with pytest.raises(TransportUnavailable, match="connection refused"):
+        transport.fetch("https://t.me/s/example")
+    assert len(calls) == 1, "a clearnet failure was retried without being asked to"
+
+
+def test_the_permit_reserve_covers_every_onion_attempt():
+    """The reserve is what stops a retry from starting too close to permit expiry."""
+    from collect.live import LiveSettings
+
+    settings = LiveSettings(timeout_seconds=30, onion_attempts=3, onion_retry_delay=2)
+    assert settings.fetch_budget_seconds == 94.0, (
+        "the permit reserve counted one timeout, but an onion fetch can spend three "
+        "timeouts and two delays before it writes anything"
+    )
+
+
 # --------------------------------------------------------------------------------------- #
 # Resumability. A checkpoint that cannot be read is worse than one that is missing.
 # --------------------------------------------------------------------------------------- #

@@ -592,14 +592,15 @@ def test_m1_collection_is_scored_on_the_fixture_seam(results):
 
 
 def test_m1_report_states_the_fixture_limit_in_words(results):
-    """A scored M1 without the dark-fetcher caveat would upgrade the number."""
+    """A scored M1 without the fixture caveat would upgrade the number."""
     from eval import report
 
     rendered = report.render(results)
 
     assert "M1 collection integrity" in rendered
     assert "fixture-verified" in rendered
-    assert "does not mean live collection would succeed" in rendered
+    assert "does not by itself mean live collection succeeds" in rendered
+    assert "eight-service lab" in rendered
 
 
 def test_every_threshold_records_the_split_it_was_fitted_on(results):

@@ -151,3 +151,39 @@ button.no:hover{background:#2e1613}
 .mergeform button.merge:hover{background:#4a3572}
 
 .banner.err{border-color:#7a2f36; background:#2a1416; color:#ffd9dc}
+
+/* The timeline is the one screen that is a table rather than a grid of cards. A fixed
+   layout with explicit column widths is what keeps a 64-character digest in the value
+   column from taking the width of every other column and wrapping them to one letter
+   per line -- which is exactly what happened when this borrowed the card-grid class. */
+table.timeline{width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px}
+table.timeline th{text-align:left; font-weight:600; color:var(--muted); font-size:10.5px;
+  text-transform:uppercase; letter-spacing:.05em; padding:7px 9px;
+  border-bottom:1px solid var(--line); white-space:nowrap}
+table.timeline td{padding:5px 9px; border-bottom:1px solid #1b232d; vertical-align:top;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+table.timeline tbody tr:hover{background:#151b24}
+table.timeline td.wrap{white-space:normal; overflow-wrap:anywhere}
+
+/* The new-case form is the one a person fills in from scratch, so it is a stacked set of
+   labelled fields. The inline row that the merge control uses put every hint next to the
+   next field's label, which read as one run-on sentence. */
+.caseform{max-width:520px; padding:20px 22px; display:grid; gap:16px}
+.caseform label{display:block; font-size:13px; font-weight:600}
+.caseform input{display:block; width:100%; margin-top:6px; font-size:13px; padding:8px 10px;
+  background:var(--panel2); border:1px solid var(--line); border-radius:6px; color:var(--fg)}
+.caseform input:focus{outline:none; border-color:var(--accent)}
+.caseform .hint{display:block; margin-top:5px; font-weight:400; color:var(--muted); font-size:11.5px;
+  line-height:1.45}
+.caseform button{justify-self:start; padding:8px 16px; font-size:12.5px; background:var(--panel2);
+  border:1px solid var(--accent); color:var(--accent)}
+.caseform button:hover{background:#17304d}
+
+/* The generated report is Markdown shown verbatim. It is a record, so it is not
+   re-rendered into styled HTML: what a reader copies here has to be what the file
+   contains. The block scrolls instead of pushing the page to ten thousand pixels. */
+.sectionhead{margin:22px 0 10px; font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted)}
+pre.report{background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  padding:16px 18px; max-height:70vh; overflow:auto; font-size:11.5px; line-height:1.6;
+  white-space:pre-wrap; overflow-wrap:anywhere; margin:0}

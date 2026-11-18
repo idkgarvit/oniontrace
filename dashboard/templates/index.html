@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}ONIONTRACE · cases{% endblock %}
-{% block subtitle %}Cases on this machine. A graph is built from a farm manifest with <code>python -m graph build</code>.{% endblock %}
+{% block subtitle %}Cases on this machine. Every case is built from the browser — nothing here needs a terminal.{% endblock %}
 
 {% block content %}
 <h1 class="pagehead">Cases on this machine</h1>
@@ -22,10 +22,9 @@
 {% else %}
 <div class="empty">
   <h2>No cases yet</h2>
-  <p>Build one from the shipped farm:</p>
-  <pre><code>python -m graph --db ./casework/CASE-1/graph.db --case CASE-1 \
-    build --farm ./out/farm.json</code></pre>
-  <p class="muted">Then reload this page.</p>
+  <p>A case is one run: ground truth, collection, extraction, correlation, graph, findings, report.</p>
+  <p><a class="badge" href="/new">Build the first case</a></p>
+  <p class="muted">The same entry point is on the command line as <code>python -m oniontrace</code>, but you never need it.</p>
 </div>
 {% endif %}
 {% endblock %}

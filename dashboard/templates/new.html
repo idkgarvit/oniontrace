@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}ONIONTRACE · new case{% endblock %}
+{% block subtitle %}Build a case from the shipped farm. The gate runs inside the pipeline, so a run without an owner and an authorisation reference is refused by the same code that refuses it on the command line.{% endblock %}
+
+{% block content %}
+<h1 class="pagehead">New case</h1>
+
+{% if error %}<p class="banner">{{ error }}</p>{% endif %}
+
+<form class="panel caseform" method="post" action="/new">
+  <label>Case id
+    <input name="case_id" value="CASE-1" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]*">
+    <span class="hint">Letters, digits, dot, underscore, dash. One directory per case.</span>
+  </label>
+
+  <label>Farm seed
+    <input name="seed" type="number" value="20260925" required>
+    <span class="hint">Same seed produces the same farm, so a case can be rebuilt exactly.</span>
+  </label>
+
+  <label>Case owner
+    <input name="owner" required placeholder="analyst id">
+    <span class="hint">Every record in the case carries this name, so a decision can be traced to a person.</span>
+  </label>
+
+  <label>Authorisation reference
+    <input name="authorisation" required placeholder="AUTH-...">
+    <span class="hint">Recorded before anything is collected, not after.</span>
+  </label>
+
+  <label>Retention (days)
+    <input name="retention_days" type="number" value="30" min="1" max="3650" required>
+    <span class="hint">The case is purged on expiry, and the purge is recorded.</span>
+  </label>
+
+  <button type="submit">Build the case</button>
+</form>
+
+<p class="muted small">Building writes <code>casework/&lt;case&gt;/graph.db</code> and a run manifest beside it. No network is contacted: this path reads the generated farm.</p>
+{% endblock %}

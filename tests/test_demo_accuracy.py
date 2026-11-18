@@ -61,9 +61,9 @@ def scored() -> dict:
 def test_every_proposed_link_is_a_real_operator_cluster(scored):
     """Precision is the claim the whole correlation module rests on, and it is per-link.
 
-    The console shows twelve links either way. What makes them evidence is that all twelve are
-    pairs of services the farm actually put in one cluster, and this test is what turns that
-    from a screenshot into a measurement.
+    The scorer counts identity edges; a trust edge is a vouch, not a link. What makes the twelve
+    identity links evidence is that all twelve are pairs of services the farm actually put in one
+    cluster, and this test is what turns that from a screenshot into a measurement.
     """
 
     links = scored["links"]

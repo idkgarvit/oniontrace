@@ -24,6 +24,7 @@ from typing import Any
 from graph.model import (
     Artefact,
     Edge,
+    EdgeMethod,
     EdgeStatus,
     Entity,
     Evidence,
@@ -43,6 +44,9 @@ CREATE TABLE IF NOT EXISTS entity (
     case_id    TEXT NOT NULL,
     status     TEXT NOT NULL DEFAULT 'candidate',
     created_at TEXT NOT NULL,
+    category   TEXT NOT NULL DEFAULT '',
+    last_scan  TEXT NOT NULL DEFAULT '',
+    source     TEXT NOT NULL DEFAULT '',
     merged_into TEXT
 );
 
@@ -73,7 +77,7 @@ CREATE TABLE IF NOT EXISTS edge (
     supporting  TEXT NOT NULL,
     counter     TEXT NOT NULL,
     created_at  TEXT NOT NULL,
-    UNIQUE (a_entity, b_entity)
+    UNIQUE (a_entity, b_entity, method)
 );
 
 CREATE TABLE IF NOT EXISTS merge_log (
@@ -135,7 +139,71 @@ class GraphStore:
         self._conn = sqlite3.connect(str(self.path))
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(SCHEMA)
+        self._migrate()
         self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Bring a database written by an older build up to the current schema.
+
+        ``CREATE TABLE IF NOT EXISTS`` does nothing to an existing table, so a case
+        opened after an upgrade would otherwise fail on the new columns. Adding them
+        with defaults keeps the old rows readable without rewriting them.
+        """
+
+        columns = {
+            row["name"] for row in self._conn.execute("PRAGMA table_info(entity)")
+        }
+        for name in ("category", "last_scan", "source"):
+            if name not in columns:
+                self._conn.execute(
+                    f"ALTER TABLE entity ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
+                )
+
+        self._migrate_edge_pair_key()
+
+    def _migrate_edge_pair_key(self) -> None:
+        """Allow an identity edge and a trust edge to describe the same pair.
+
+        Older databases have ``UNIQUE(a_entity, b_entity)``, which made a vouch and a
+        shared-key finding overwrite each other. They are different claims and both
+        belong on the graph, so the key becomes ``(a, b, method)``. SQLite cannot
+        alter a table constraint in place; the table is rebuilt and the rows copied.
+        """
+
+        for index in self._conn.execute("PRAGMA index_list(edge)").fetchall():
+            if not index["unique"]:
+                continue
+            columns = [
+                row["name"]
+                for row in self._conn.execute(
+                    f"PRAGMA index_info('{index['name']}')"
+                ).fetchall()
+            ]
+            if columns == ["a_entity", "b_entity", "method"]:
+                return
+
+        self._conn.executescript(
+            """
+            ALTER TABLE edge RENAME TO edge_old;
+            CREATE TABLE edge (
+                edge_id     TEXT PRIMARY KEY,
+                a_entity    TEXT NOT NULL,
+                b_entity    TEXT NOT NULL,
+                method      TEXT NOT NULL,
+                score       REAL NOT NULL,
+                status      TEXT NOT NULL,
+                supporting  TEXT NOT NULL,
+                counter     TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                UNIQUE (a_entity, b_entity, method)
+            );
+            INSERT INTO edge
+                SELECT edge_id, a_entity, b_entity, method, score, status,
+                       supporting, counter, created_at
+                FROM edge_old;
+            DROP TABLE edge_old;
+            """
+        )
 
     # -- lifecycle ------------------------------------------------------- #
     def close(self) -> None:
@@ -148,18 +216,40 @@ class GraphStore:
         self.close()
 
     # -- entities -------------------------------------------------------- #
-    def add_entity(self, entity_id: str, label: str, *, created_at: str | None = None) -> Entity:
+    def add_entity(
+        self,
+        entity_id: str,
+        label: str,
+        *,
+        created_at: str | None = None,
+        category: str = "",
+        last_scan: str = "",
+        source: str = "",
+    ) -> Entity:
         row = Entity(
             entity_id=entity_id,
             label=label,
             case_id=self.case_id,
             status="candidate",
             created_at=created_at or utc_now(),
+            category=category,
+            last_scan=last_scan,
+            source=source,
         )
         self._conn.execute(
-            "INSERT INTO entity (entity_id, label, case_id, status, created_at)"
-            " VALUES (?,?,?,?,?)",
-            (row.entity_id, row.label, row.case_id, row.status, row.created_at),
+            "INSERT INTO entity"
+            " (entity_id, label, case_id, status, created_at, category, last_scan, source)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (
+                row.entity_id,
+                row.label,
+                row.case_id,
+                row.status,
+                row.created_at,
+                row.category,
+                row.last_scan,
+                row.source,
+            ),
         )
         self._conn.commit()
         return row
@@ -185,6 +275,9 @@ class GraphStore:
             status=r["status"],
             service_ids=services,
             created_at=r["created_at"],
+            category=r["category"],
+            last_scan=r["last_scan"],
+            source=r["source"],
             merged_into=r["merged_into"],
         )
 
@@ -335,9 +428,22 @@ class GraphStore:
 
         a, b = _canonical(survivor, absorbed)
         edge = self._conn.execute(
-            "SELECT edge_id FROM edge WHERE a_entity = ? AND b_entity = ?", (a, b)
+            "SELECT edge_id, method FROM edge"
+            " WHERE a_entity = ? AND b_entity = ? AND method != ?",
+            (a, b, EdgeMethod.TRUST.value),
         ).fetchone()
         if edge is None:
+            trust = self._conn.execute(
+                "SELECT edge_id FROM edge"
+                " WHERE a_entity = ? AND b_entity = ? AND method = ?",
+                (a, b, EdgeMethod.TRUST.value),
+            ).fetchone()
+            if trust is not None:
+                raise GraphError(
+                    "this pair is linked by a trust statement, not identity evidence; "
+                    "a vouch is a relationship between operators, not a claim that they "
+                    "are the same operator"
+                )
             raise GraphError(
                 "no evidence links these entities; propose an edge before merging"
             )
@@ -567,6 +673,9 @@ class GraphStore:
                     "entity_id": r["entity_id"],
                     "label": r["label"],
                     "status": r["status"],
+                    "category": r["category"],
+                    "last_scan": r["last_scan"],
+                    "source": r["source"],
                     "merged_into": r["merged_into"],
                     "services": services,
                     "artefacts": arts,

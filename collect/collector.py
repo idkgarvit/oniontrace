@@ -470,6 +470,7 @@ class Collector:
         warc_dir=None,
         revisit: RevisitPlanner | None = None,
         accept_source_policy: bool = False,
+        probe_paths: tuple[str, ...] = (),
     ) -> None:
         self.gate = gate
         self.policy = (policy or CollectionPolicy()).validated()
@@ -477,6 +478,24 @@ class Collector:
         self._transport = transport
         self._clock = clock
         self._sleeper = sleeper or RecordingSleeper()
+        #: Off unless the operator asks for it. See ``collect/probes.py`` for why the list
+        #: is fixed and why this is not directory enumeration: a front-page read cannot see
+        #: a misconfiguration that nobody links to, and a scan that cannot see one has no
+        #: live recall to report.
+        self._probe_paths = tuple(probe_paths)
+        for path in self._probe_paths:
+            if (
+                not path.startswith("/")
+                or path == "/"
+                or "?" in path
+                or "#" in path
+                or ".." in path
+                or "://" in path
+            ):
+                raise ValueError(
+                    f"probe path {path!r} is not a plain absolute path; the probe list is "
+                    "fixed in collect/probes.py and is not a way to pass arbitrary targets"
+                )
         self._throttle = HostThrottle(
             self.policy.politeness, clock=clock, sleeper=self._sleeper
         )
@@ -500,15 +519,23 @@ class Collector:
     def sleeper(self) -> Sleeper:
         return self._sleeper
 
-    def _fetch_reserve_seconds(self) -> float:
+    def _fetch_reserve_seconds(self, *, onion: bool = False) -> float:
         """How long one request may still take, which is what has to be kept in hand.
 
         The permit gates *ingest*, but a page that starts one second before it expires can
         finish after it and take the whole path down with it, so the deadline is measured
         against the moment a request would end, not the moment it starts. The live
         transport knows its own timeout; a fixture has none and the default stands in.
+
+        An onion fetch may make more than one attempt, so it reserves the whole retry
+        sequence rather than a single timeout: otherwise the retry that saves a failed
+        rendezvous could be the request that pushes a page past the permit.
         """
         settings = getattr(self._transport, "settings", None)
+        if onion:
+            budget = getattr(settings, "fetch_budget_seconds", None)
+            if budget is not None:
+                return float(budget)
         return float(getattr(settings, "timeout_seconds", 30.0))
 
     def _permit_closing(self, *, reserve: float | None = None) -> bool:
@@ -606,7 +633,9 @@ class Collector:
                     f"{host}; {url} was not requested"
                 )
                 return None
-        if self._permit_closing():
+        if self._permit_closing(
+            reserve=self._fetch_reserve_seconds(onion=host.endswith(".onion"))
+        ):
             # A permit gates the ingest, not the request, so a page started a second before
             # it expires is fetched and then refused -- and the refusal takes every page the
             # path had already read with it. The deadline is what converts that into "stop
@@ -773,6 +802,52 @@ class Collector:
                 )
             else:
                 summary.skipped_duplicate += 1
+            # The lossless form of "did they leave a door open" is a page nobody links to.
+            # Each fixed probe is one plain GET on an already-authorised host, stored through
+            # the same permit and WARC as the front page, and it pays the same budget. A
+            # refusal from robots is recorded by ``_fetch`` rather than worked around.
+            for path in self._probe_paths:
+                if budget.exhausted:
+                    summary.notes.append(
+                        f"the page budget was reached while probing known paths; the rest of "
+                        f"{address}'s probes were not requested (a probe is a request and "
+                        "is counted as one)"
+                    )
+                    break
+                probe = self._fetch(
+                    f"http://{address}{path}",
+                    scope=scope,
+                    case_id=case_id,
+                    seed_label=f"{address}{path}",
+                    summary=summary,
+                    budget=budget,
+                )
+                if probe is None:
+                    continue
+                probe_key = f"{ORIGIN_ONION}:{address}:{path}:{content_id(probe.body)}"
+                if probe_key in seen:
+                    summary.skipped_duplicate += 1
+                    continue
+                seen.add(probe_key)
+                outcome.payloads.append(
+                    self._payload(
+                        case_id=case_id,
+                        origin=ORIGIN_ONION,
+                        target=address,
+                        dedupe_key=probe_key,
+                        captured_at=probe.retrieved_at,
+                        source_url=probe.url,
+                        content={
+                            "path": path,
+                            "status": probe.status,
+                            "title": page_title(probe.text),
+                            "media_type": probe.header("Content-Type") or "",
+                            "byte_length": probe.byte_length,
+                            "excerpt": probe.text[:EXCERPT_CHARS],
+                            "excerpt_truncated": len(probe.text) > EXCERPT_CHARS,
+                        },
+                    )
+                )
             plan = self._revisit.plan(
                 target=address,
                 changed=changed,

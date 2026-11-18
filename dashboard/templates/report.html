@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}ONIONTRACE · {{ case_id }} · run report{% endblock %}
+{% block subtitle %}What the pipeline did, stage by stage, and the report it generated. Both are read from the case's run directory rather than recomputed for display.{% endblock %}
+
+{% block content %}
+<h1 class="pagehead">Run report · {{ case_id }}</h1>
+
+{% if manifest %}
+<div class="stats">
+  <div class="stat"><span class="n">{{ "ok" if manifest.ok else "failed" }}</span><span class="l">outcome</span></div>
+  <div class="stat"><span class="n">{{ manifest.stages|length }}</span><span class="l">stages</span></div>
+  <div class="stat"><span class="n">{{ manifest.seed }}</span><span class="l">seed</span></div>
+</div>
+
+<p class="muted small">
+  run <code>{{ manifest.run_id }}</code> · started {{ manifest.started_at }} · finished {{ manifest.finished_at }}
+  · <a href="/case/{{ case_id }}/manifest.json">download manifest.json</a>
+  {% if has_report %}· <a href="/case/{{ case_id }}/report.md">download REPORT.md</a>{% endif %}
+</p>
+
+<table class="timeline mono">
+  <colgroup>
+    <col style="width:120px">
+    <col style="width:90px">
+    <col style="width:110px">
+    <col>
+  </colgroup>
+  <thead>
+    <tr><th>stage</th><th>result</th><th>duration</th><th>what it recorded</th></tr>
+  </thead>
+  <tbody>
+    {% for stage in stages %}
+    <tr>
+      <td>{{ stage.stage }}</td>
+      <td><span class="badge {{ 'b-confirmed' if stage.ok else 'b-conflict' }}">{{ "ok" if stage.ok else "failed" }}</span></td>
+      <td>{{ stage.duration_ms }} ms</td>
+      <td class="wrap">
+        {% if stage.note %}{{ stage.note }}{% endif %}
+        {% for key, value in stage.summary.items() %}<span class="muted">{{ key }}</span>=<b>{{ value }}</b>{% if not loop.last %} · {% endif %}{% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No run manifest</h2>
+  <p>This case was built with <code>python -m graph build</code>, which writes a graph but no
+     stage manifest. Cases built from <a href="/new">New case</a> record every stage.</p>
+</div>
+{% endif %}
+
+{% if has_report %}
+<h2 class="sectionhead">Generated report</h2>
+<pre class="report">{{ report }}</pre>
+{% endif %}
+{% endblock %}

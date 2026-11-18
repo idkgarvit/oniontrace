@@ -18,9 +18,9 @@ from pathlib import Path
 import pytest
 
 fastapi = pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient  # noqa: E402
+import importlib
 
-import importlib  # noqa: E402
+from fastapi.testclient import TestClient
 
 # `dashboard/__init__.py` re-exports the FastAPI instance as `app`, which shadows the
 # submodule of the same name inside the package namespace. Resolving through
@@ -45,7 +45,7 @@ def _pdf_text(blob: bytes) -> str:
         path = fh.name
     try:
         return subprocess.run(
-            ["pdftotext", "-layout", path, "-"], capture_output=True, text=True
+            ["pdftotext", "-layout", path, "-"], capture_output=True, text=True, check=False
         ).stdout
     finally:
         Path(path).unlink(missing_ok=True)
@@ -406,7 +406,7 @@ def test_an_artefact_cannot_break_out_of_the_graph_script(case):
 
 
 def test_a_note_cannot_break_out_of_the_graph_script(case):
-    client, cid, tmp_path = case
+    client, cid, _ = case
     payload = '</SCRIPT ><svg onload=alert(1)>'
 
     client.post(f"/case/{cid}/note", data={"actor": "analyst", "body": payload})
@@ -529,3 +529,518 @@ def test_every_page_declares_its_own_icon(case):
         svg = base64.b64decode(uri.split("base64,", 1)[1]).decode()
         assert svg.startswith("<svg") and svg.endswith("</svg>"), "the icon is not a complete SVG"
         assert 'viewBox="0 0 32 32"' in svg, "the icon has no viewBox, so it does not scale"
+
+
+# --------------------------------------------------------------------------------------- #
+# Case creation from the browser, because the console is meant to be operated, not driven
+# from a shell. The route is thin; what is pinned here is that every refusal is a sentence
+# and a way back, and that the pipeline is called with exactly what the form said.
+# --------------------------------------------------------------------------------------- #
+
+
+def test_new_case_form_renders(case):
+    import json
+    import re
+    import shutil
+    import subprocess
+
+    client, _, _ = case
+    r = client.get("/new")
+    assert r.status_code == 200
+    assert 'name="case_id"' in r.text
+    assert 'name="authorisation"' in r.text
+    assert "Build the case" in r.text
+
+    # Chromium compiles a pattern attribute with the ECMAScript `v` flag, where a bare
+    # hyphen in a character class is a syntax error. The form still submitted, so the
+    # bug was only visible as a console error and a lost client-side check.
+    match = re.search(r'pattern="([^"]+)"', r.text)
+    assert match, "the case-id field no longer constrains its input in the browser"
+    pattern = match.group(1)
+    assert r"\-" in pattern, "escape the hyphen or Chromium rejects the pattern"
+    node = shutil.which("node")
+    if node:
+        compiled = subprocess.run(
+            [node, "-e", f"new RegExp({json.dumps(pattern)}, 'v')"],
+            capture_output=True, text=True,
+        )
+        assert compiled.returncode == 0, compiled.stderr
+
+
+def test_new_case_refuses_without_owner_or_authorisation(case):
+    client, _, _ = case
+    base = {
+        "case_id": "CASE-NEW",
+        "seed": "20260925",
+        "owner": "g.kanojia",
+        "authorisation": "AUTH-1",
+        "retention_days": "30",
+    }
+    for field in ("owner", "authorisation"):
+        data = dict(base, **{field: "  "})
+        r = client.post("/new", data=data, follow_redirects=False)
+        assert r.status_code == 303
+        assert "error=" in r.headers["location"]
+        assert field in r.headers["location"]
+
+
+def test_new_case_refuses_an_id_that_is_not_a_case(case):
+    client, _, _ = case
+    for bad in ("../escape", ".hidden", "has space", ""):
+        r = client.post(
+            "/new",
+            data={
+                "case_id": bad,
+                "seed": "1",
+                "owner": "g.kanojia",
+                "authorisation": "AUTH-1",
+                "retention_days": "30",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 303, bad
+        assert "case%20id" in r.headers["location"], bad
+
+
+def test_new_case_refuses_a_case_that_already_exists(case):
+    client, cid, _ = case
+    r = client.post(
+        "/new",
+        data={
+            "case_id": cid,
+            "seed": "1",
+            "owner": "g.kanojia",
+            "authorisation": "AUTH-1",
+            "retention_days": "30",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "already" in r.headers["location"]
+
+
+def test_new_case_refuses_a_mistyped_number_as_a_sentence(case):
+    """A typed form field would answer this with a 422 JSON body rendered as the page."""
+
+    client, _, _ = case
+    for field, value in (("seed", "twenty"), ("retention_days", "thirty")):
+        data = {
+            "case_id": "CASE-NEW",
+            "seed": "20260925",
+            "owner": "g.kanojia",
+            "authorisation": "AUTH-1",
+            "retention_days": "30",
+        }
+        data[field] = value
+        r = client.post("/new", data=data, follow_redirects=False)
+        assert r.status_code == 303
+        assert "error=" in r.headers["location"]
+        assert "whole%20number" in r.headers["location"]
+
+
+def test_new_case_runs_the_pipeline_with_what_the_form_said(case, monkeypatch):
+    from oniontrace import pipeline
+
+    seen = {}
+
+    def fake(**kwargs):
+        seen.update(kwargs)
+
+    monkeypatch.setattr(pipeline, "run_pipeline", fake)
+
+    client, _, tmp_path = case
+    r = client.post(
+        "/new",
+        data={
+            "case_id": "CASE-NEW",
+            "seed": "20260925",
+            "owner": " g.kanojia ",
+            "authorisation": "AUTH-1",
+            "retention_days": "45",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/case/CASE-NEW"
+    assert seen["case_id"] == "CASE-NEW"
+    assert seen["seed"] == 20260925
+    assert seen["owner"] == "g.kanojia"
+    assert seen["authorisation"] == "AUTH-1"
+    assert seen["retention_days"] == 45
+    assert seen["case_root"] == tmp_path
+    assert seen["output_dir"] == tmp_path / "CASE-NEW" / "run"
+
+
+def test_new_case_reports_a_pipeline_refusal_in_the_form(case, monkeypatch):
+    from urllib.parse import unquote
+
+    from oniontrace import pipeline
+
+    def fake(**kwargs):
+        raise RuntimeError("authorisation AUTH-BAD is not on file")
+
+    monkeypatch.setattr(pipeline, "run_pipeline", fake)
+
+    client, _, _ = case
+    r = client.post(
+        "/new",
+        data={
+            "case_id": "CASE-NEW",
+            "seed": "1",
+            "owner": "g.kanojia",
+            "authorisation": "AUTH-BAD",
+            "retention_days": "30",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "not on file" in unquote(r.headers["location"])
+
+
+# --------------------------------------------------------------------------------------- #
+# Timeline: one axis for everything the case knows.
+# --------------------------------------------------------------------------------------- #
+
+
+def test_timeline_shows_every_record_type(case):
+    client, cid, _ = case
+    client.post(
+        f"/case/{cid}/note",
+        data={"actor": "g.kanojia", "body": "check the cert issuer", "entity_id": ""},
+        follow_redirects=False,
+    )
+    r = client.get(f"/case/{cid}/timeline")
+    assert r.status_code == 200
+    for word in ('badge">artefact', 'badge">finding', 'badge">edge', 'badge">note'):
+        assert word in r.text, word
+    assert "check the cert issuer" in r.text
+
+
+def test_timeline_filters_by_day(case):
+    client, cid, _ = case
+    empty = client.get(f"/case/{cid}/timeline", params={"since": "2999-01-01"})
+    assert empty.status_code == 200
+    assert "Nothing in this range" in empty.text
+
+    wide = client.get(f"/case/{cid}/timeline", params={"until": "2999-01-01"})
+    assert "Nothing in this range" not in wide.text
+
+
+def test_timeline_refuses_a_non_date(case):
+    client, cid, _ = case
+    for bad in ("yesterday", "2026-13-01", "17-11-2026"):
+        r = client.get(f"/case/{cid}/timeline", params={"since": bad})
+        assert r.status_code == 400, bad
+
+
+def test_timeline_of_an_unknown_case_is_404(case):
+    client, _, _ = case
+    assert client.get("/case/NOPE/timeline").status_code == 404
+
+
+def test_case_pages_link_to_the_new_views(case):
+    client, cid, _ = case
+    for path in (f"/case/{cid}", f"/case/{cid}/timeline"):
+        page = client.get(path).text
+        for href in (f"/case/{cid}/timeline", f"/case/{cid}/export.csv", "/new"):
+            assert href in page, (path, href)
+
+
+# --------------------------------------------------------------------------------------- #
+# CSV: the third export format, and the one a spreadsheet opens by itself.
+# --------------------------------------------------------------------------------------- #
+
+
+def test_export_csv_has_one_row_per_record(case):
+    import csv
+    import io
+
+    client, cid, _ = case
+    r = client.get(f"/case/{cid}/export.csv")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert f'filename="{cid}.csv"' in r.headers["content-disposition"]
+
+    reader = csv.DictReader(io.StringIO(r.text))
+    assert reader.fieldnames == [
+        "record",
+        "id",
+        "subject",
+        "kind",
+        "value",
+        "status",
+        "score",
+        "at",
+        "category",
+        "last_scan",
+        "source",
+        "detail",
+    ]
+    rows = list(reader)
+    records = {row["record"] for row in rows}
+    assert records == {"entity", "artefact", "edge", "finding"}
+
+    graph = client.get(f"/api/case/{cid}/graph").json()
+    assert sum(1 for row in rows if row["record"] == "entity") == graph["counts"]["entities"]
+    assert sum(1 for row in rows if row["record"] == "edge") == graph["counts"]["edges"]
+
+
+def test_export_csv_includes_notes(case):
+    import csv
+    import io
+
+    client, cid, _ = case
+    client.post(
+        f"/case/{cid}/note",
+        data={"actor": "g.kanojia", "body": 'comma, and "quotes"', "entity_id": ""},
+        follow_redirects=False,
+    )
+    rows = list(csv.DictReader(io.StringIO(client.get(f"/case/{cid}/export.csv").text)))
+    note = next(row for row in rows if row["record"] == "note")
+    assert note["value"] == 'comma, and "quotes"'
+
+
+def test_export_csv_neutralises_a_spreadsheet_formula(case):
+    """A note or artefact can begin with '='; opening the export must not run it."""
+
+    import csv
+    import io
+
+    client, cid, _ = case
+    client.post(
+        f"/case/{cid}/note",
+        data={"actor": "g.kanojia", "body": "=HYPERLINK(\"http://x\",\"click\")", "entity_id": ""},
+        follow_redirects=False,
+    )
+    rows = list(csv.DictReader(io.StringIO(client.get(f"/case/{cid}/export.csv").text)))
+    note = next(row for row in rows if row["record"] == "note")
+    assert note["value"].startswith("'=")
+    assert note["value"][1:] == '=HYPERLINK("http://x","click")'
+
+
+def test_export_csv_of_an_unknown_case_is_404(case):
+    client, _, _ = case
+    assert client.get("/case/NOPE/export.csv").status_code == 404
+
+
+def test_new_case_button_builds_a_browsable_case(case):
+    """The route's whole purpose: one click, and the console can show the case.
+
+    The other creation tests stub the pipeline so they can pin argument passing. This one
+    does not, because a demo whose button only works against a mock is the defect worth
+    catching: it runs the real six-stage pipeline, then loads the graph, the timeline and
+    the CSV from the case the browser just created.
+    """
+
+    client, _, tmp_path = case
+    r = client.post(
+        "/new",
+        data={
+            "case_id": "CASE-GUI",
+            "seed": "20260925",
+            "owner": "g.kanojia",
+            "authorisation": "AUTH-GUI",
+            "retention_days": "30",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/case/CASE-GUI"
+
+    assert (tmp_path / "CASE-GUI" / "graph.db").is_file()
+
+    page = client.get("/case/CASE-GUI")
+    assert page.status_code == 200
+    assert "Entity graph" in page.text
+
+    assert client.get("/case/CASE-GUI/timeline").status_code == 200
+    assert client.get("/case/CASE-GUI/export.csv").status_code == 200
+
+
+# --------------------------------------------------------------------------------------- #
+# The run report: the console showed the result of a run but never the run itself. Stage
+# timings, counts and the generated narrative lived in the run directory, which meant a
+# demo had to leave the browser to show the work.
+# --------------------------------------------------------------------------------------- #
+
+_CASE_FORM = {
+    "seed": "20260925",
+    "owner": "g.kanojia",
+    "authorisation": "AUTH-GUI",
+    "retention_days": "30",
+}
+
+
+def _create(client, case_id: str) -> None:
+    r = client.post(
+        "/new", data={**_CASE_FORM, "case_id": case_id}, follow_redirects=False
+    )
+    assert r.status_code == 303 and r.headers["location"] == f"/case/{case_id}"
+
+
+def test_run_report_shows_every_stage_and_the_generated_report(case):
+    client, _, _ = case
+    _create(client, "CASE-RUN")
+
+    r = client.get("/case/CASE-RUN/report")
+    assert r.status_code == 200
+    for stage in ("farm", "gates", "detect", "correlate", "attribute", "graph"):
+        assert f"<td>{stage}</td>" in r.text, stage
+    assert "Generated report" in r.text
+    assert "ONIONTRACE pipeline run" in r.text
+    assert "Ground truth (farm)" in r.text
+    # the download link has to be there or the page is a dead end for the record
+    assert "/case/CASE-RUN/report.md" in r.text
+
+
+def test_run_report_explains_a_case_built_without_the_pipeline(case):
+    """The fixture case is a graph built directly; the case is real, the manifest is not."""
+
+    client, cid, _ = case
+    r = client.get(f"/case/{cid}/report")
+    assert r.status_code == 200
+    assert "No run manifest" in r.text
+    assert "New case" in r.text
+
+
+def test_run_report_markdown_is_a_downloadable_file(case):
+    client, _, _ = case
+    _create(client, "CASE-RUN-MD")
+
+    r = client.get("/case/CASE-RUN-MD/report.md")
+    assert r.status_code == 200
+    assert 'filename="CASE-RUN-MD-REPORT.md"' in r.headers["content-disposition"]
+    assert r.text.startswith("# ONIONTRACE pipeline run")
+
+
+def test_run_report_of_an_unknown_case_is_404(case):
+    client, _, _ = case
+    assert client.get("/case/NOPE/report").status_code == 404
+    assert client.get("/case/NOPE/report.md").status_code == 404
+
+
+def test_run_report_survives_a_corrupt_manifest(case):
+    """A half-written manifest must render as a case with no manifest, not a 500."""
+
+    client, _, tmp_path = case
+    _create(client, "CASE-CORRUPT")
+    (tmp_path / "CASE-CORRUPT" / "run" / "manifest.json").write_text("{not json", encoding="utf-8")
+
+    r = client.get("/case/CASE-CORRUPT/report")
+    assert r.status_code == 200
+    assert "No run manifest" in r.text
+
+
+def test_run_report_summarises_a_long_stage_record(case):
+    """The detect stage records every finding. Pasting them into one cell made the table
+    unreadable and pushed every later stage off the screen; the page says how many and the
+    manifest carries the record."""
+
+    client, _, _ = case
+    _create(client, "CASE-BRIEF")
+    r = client.get("/case/CASE-BRIEF/report")
+    assert "19 entries" in r.text
+    assert "service_id" not in r.text
+
+
+def test_run_manifest_is_a_downloadable_file(case):
+    import json
+
+    client, _, _ = case
+    _create(client, "CASE-MANIFEST")
+    r = client.get("/case/CASE-MANIFEST/manifest.json")
+    assert r.status_code == 200
+    assert 'filename="CASE-MANIFEST-manifest.json"' in r.headers["content-disposition"]
+    data = json.loads(r.text)
+    assert data["case_id"] == "CASE-MANIFEST"
+    assert data["stages"][0]["stage"] == "farm"
+
+
+# --------------------------------------------------------------------------------------- #
+# Entity provenance and trust edges (PS stretch items)
+# --------------------------------------------------------------------------------------- #
+def _edge_block(html: str, edge_id: str) -> str:
+    """The HTML for one link card, so an assertion about a form is about that edge."""
+
+    start = html.index(f'data-edge-id="{edge_id}"')
+    end = html.find('data-edge-id="', start + 1)
+    if end == -1:
+        end = html.index("</ol>", start)
+    return html[start:end]
+
+
+def test_the_entity_card_shows_category_last_scan_and_source(case):
+    from graph.store import GraphStore
+
+    client, cid, tmp_path = case
+    with GraphStore(tmp_path / cid / "graph.db", case_id=cid) as store:
+        entity = store.entities()[0]
+
+    page = client.get(f"/case/{cid}/entity/{entity.entity_id}").text
+    assert entity.category in page
+    assert entity.last_scan in page
+    assert entity.source in page
+    assert "Category" in page and "last scan" in page and "source" in page
+
+
+def test_csv_entity_rows_carry_the_same_provenance(case):
+    import csv
+    import io
+
+    from graph.store import GraphStore
+
+    client, cid, tmp_path = case
+    with GraphStore(tmp_path / cid / "graph.db", case_id=cid) as store:
+        entity = store.entities()[0]
+
+    rows = list(
+        csv.DictReader(io.StringIO(client.get(f"/case/{cid}/export.csv").text))
+    )
+    row = next(r for r in rows if r["record"] == "entity" and r["id"] == entity.entity_id)
+    assert row["category"] == entity.category
+    assert row["last_scan"] == entity.last_scan
+    assert row["source"] == entity.source
+    assert row["category"] and row["last_scan"] and row["source"]
+
+
+def test_a_trust_edge_is_shown_and_offers_no_merge(case):
+    """A vouch is a relationship; the console must not turn it into a merge button."""
+
+    from graph.model import EdgeMethod
+    from graph.store import GraphStore
+
+    client, cid, tmp_path = case
+    with GraphStore(tmp_path / cid / "graph.db", case_id=cid) as store:
+        trust = next(e for e in store.edges() if e.method == EdgeMethod.TRUST.value)
+        identity = next(e for e in store.edges() if e.method != EdgeMethod.TRUST.value)
+
+    # Confirm both so the only thing that can hide the merge form is the method.
+    for edge in (trust, identity):
+        r = client.post(
+            f"/case/{cid}/edge/{edge.edge_id}/status",
+            data={"status": "confirmed", "actor": "analyst"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303, (edge.edge_id, r.status_code)
+
+    page = client.get(f"/case/{cid}").text
+    trust_block = _edge_block(page, trust.edge_id)
+    identity_block = _edge_block(page, identity.edge_id)
+
+    assert "trust" in trust_block
+    assert "mergeform" not in trust_block
+    assert "mergeform" in identity_block, (
+        "the identity edge must keep its merge control, or the absence above proves nothing"
+    )
+
+
+def test_the_trust_edge_score_is_not_a_confidence_number(case):
+    from graph.model import EdgeMethod
+    from graph.store import GraphStore
+
+    client, cid, tmp_path = case
+    with GraphStore(tmp_path / cid / "graph.db", case_id=cid) as store:
+        trust = next(e for e in store.edges() if e.method == EdgeMethod.TRUST.value)
+    assert trust.score == 0.0
+    block = _edge_block(client.get(f"/case/{cid}").text, trust.edge_id)
+    assert "0.000" in block

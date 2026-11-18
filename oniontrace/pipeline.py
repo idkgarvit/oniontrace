@@ -263,20 +263,29 @@ def stage_graph(
     separate findings store would drift the first time only one of them was rebuilt.
     """
 
-    from graph.extract import extract_artefacts
+    from graph.extract import extract_artefacts, extract_trust_claims
     from graph.resolve import resolve, to_edges
     from graph.store import GraphStore, utc_now as graph_now
+    from graph.trust import build_trust_edges
 
     if db_path.exists():
         db_path.unlink()
 
-    arts = extract_artefacts(farm, observed_at=graph_now())
+    now = graph_now()
+    arts = extract_artefacts(farm, observed_at=now)
+    source = f"farm:{farm.config.seed}"
     with GraphStore(db_path, case_id=case_id) as store:
         for art in arts:
             store.add_artefact(art)
         for svc in farm.services:
             eid = f"ent-{svc.service_id}"
-            store.add_entity(eid, f"operator of {svc.service_id}")
+            store.add_entity(
+                eid,
+                f"operator of {svc.service_id}",
+                category=svc.topic.replace("_", " ") if svc.topic else "operator",
+                last_scan=now,
+                source=source,
+            )
             store.attach_service(eid, svc.service_id)
 
         for f in findings or []:
@@ -288,7 +297,8 @@ def stage_graph(
             )
 
         edges = to_edges(resolve(store.entities(), arts))
-        for edge in edges:
+        trust_edges = build_trust_edges(store.entities(), extract_trust_claims(farm))
+        for edge in edges + trust_edges:
             store.add_edge(edge)
 
         counts: dict[str, int] = {}
@@ -301,6 +311,7 @@ def stage_graph(
         "artefacts": len(arts),
         "entities": data["counts"]["entities"],
         "edges": len(edges),
+        "trust_edges": len(trust_edges),
         "by_status": dict(sorted(counts.items())),
         "conflicts": data["counts"]["conflicts"],
         "findings_stored": data["counts"]["findings"],

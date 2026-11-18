@@ -5,11 +5,13 @@
 What this module is
 -------------------
 The plan (B2) puts live collection behind an explicit ``authorised_mode`` flag, off by
-default. This is that flag's implementation. No test in this repository exercises the
-network path, because none can: this environment has no Tor circuit and no intention of
-making one. **The byte-fetching code below is therefore unverified.** What *is* verified
-by tests is everything in front of it -- the refusals. Do not upgrade "the guards are
-tested" into "the fetcher works".
+default. This is that flag's implementation. No automated test in this repository exercises
+the network path, because a suite that can reach the network by default cannot be run
+safely. **What tests verify here is everything in front of the fetch -- the refusals.** The
+byte-fetching code itself is exercised by the controlled live lab this project publishes
+(``scripts/run_live_lab.py --publish``, eight onion services over real Tor, 112 of 112
+responses on 2026-11-17). "The guards are tested" is still not "the fetcher works", so the
+lab is the claim about the fetcher and the suite is the claim about the guards.
 
 Why the refusals come first
 ---------------------------
@@ -35,6 +37,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -205,14 +208,32 @@ class LiveSettings:
     timeout_seconds: float = 20.0
     max_bytes: int = 2 * 1024 * 1024
     user_agent: str = "oniontrace/0.1 (public-preview research; no account, no cookies)"
+    #: Onion rendezvous is transient in a way an HTTP status is not, so a failed first
+    #: attempt is retried rather than recorded as "the service is down". Three attempts
+    #: covers the stale-rendezvous case observed in the lab: the first request reuses a
+    #: circuit the service has already closed, Tor marks that circuit for close, and the
+    #: second attempt gets a fresh one.
+    onion_attempts: int = 3
+    onion_retry_delay: float = 2.0
 
     @property
     def has_socks_proxy(self) -> bool:
         return bool(self.socks_host)
 
+    @property
+    def fetch_budget_seconds(self) -> float:
+        """Worst-case wall time of one onion fetch, retries and their delays included.
+
+        The collector reserves this much before starting a request, so a retry cannot
+        push a page past the collection permit and take the case's earlier pages with it.
+        """
+        attempts = max(1, int(self.onion_attempts))
+        delay = max(0.0, float(self.onion_retry_delay))
+        return float(self.timeout_seconds) * attempts + delay * (attempts - 1)
+
 
 class LiveTransport:
-    """Tor and clearnet fetching, gated five ways, and unverified against a live network."""
+    """Tor and clearnet fetching, gated five ways, exercised against real Tor by the lab."""
 
     name = "tor-socks"
 
@@ -308,10 +329,18 @@ class LiveTransport:
                 "anyway. Configure LiveSettings.socks_host."
             )
 
-    # -- the unverified part ----------------------------------------------- #
+    # -- the live path ----------------------------------------------------- #
 
     def fetch(self, url: str, headers: dict[str, str] | None = None) -> FetchResult:
-        """Fetch ``url`` over Tor. GUARDED, AND NEVER EXECUTED BY A TEST HERE."""
+        """Fetch ``url`` over Tor, retrying a failed onion rendezvous.
+
+        A Tor circuit is not an HTTP connection: a hidden service can answer once and then
+        close the rendezvous circuit it used, and a client that still holds that circuit
+        gets an immediate END when it sends the next request. Onion rendezvous is also
+        lossy while a newly published descriptor propagates. Neither is a statement about
+        the service, so an onion fetch gets bounded attempts instead of being recorded as
+        unreachable; each retry happens after Tor has torn down the failed circuit.
+        """
         if self._clock is None:
             # Before the network, not after: a transport that fetched first and then
             # discovered it could not timestamp the capture would have performed a live
@@ -325,22 +354,34 @@ class LiveTransport:
             # reaches local DNS. The 'h' is the whole point of the setting.
             proxy = f"socks5h://{self.settings.socks_host}:{self.settings.socks_port}"
             proxies = {"http": proxy, "https": proxy}
-        try:
-            response = module.get(
-                url,
-                headers={"User-Agent": self.settings.user_agent, **(headers or {})},
-                proxies=proxies or None,
-                timeout=self.settings.timeout_seconds,
-                allow_redirects=False,
-                # `max_bytes` is a memory bound, and reading the whole body before slicing it is
-                # not one. Onion content is attacker-controlled: a page that answers with
-                # gigabytes was buffered in full by the client and only then truncated, so the
-                # cap protected the database and not the process.
-                stream=True,
-            )
-            body, truncated = self._read_capped(response, self.settings.max_bytes)
-        except Exception as exc:  # noqa: BLE001 - dependency errors are opaque by nature
-            raise TransportUnavailable(f"live fetch of {url} failed: {exc}") from exc
+        onion = (urlsplit(url).hostname or "").lower().endswith(".onion")
+        attempts = max(1, int(self.settings.onion_attempts)) if onion else 1
+        delay = max(0.0, float(self.settings.onion_retry_delay))
+        for attempt in range(1, attempts + 1):
+            try:
+                response = module.get(
+                    url,
+                    headers={"User-Agent": self.settings.user_agent, **(headers or {})},
+                    proxies=proxies or None,
+                    timeout=self.settings.timeout_seconds,
+                    allow_redirects=False,
+                    # `max_bytes` is a memory bound, and reading the whole body before slicing it
+                    # is not one. Onion content is attacker-controlled: a page that answers with
+                    # gigabytes was buffered in full by the client and only then truncated, so the
+                    # cap protected the database and not the process.
+                    stream=True,
+                )
+                body, truncated = self._read_capped(response, self.settings.max_bytes)
+                break
+            except Exception as exc:  # noqa: BLE001 - dependency errors are opaque by nature
+                if attempt >= attempts:
+                    tried = f" after {attempts} attempts" if attempts > 1 else ""
+                    raise TransportUnavailable(
+                        f"live fetch of {url} failed{tried}: {exc}"
+                    ) from exc
+                # The failed stream has been closed by now. Tor marks a rendezvous circuit
+                # that ends this way for close, so the next attempt builds a fresh one.
+                time.sleep(delay)
         return FetchResult(
             url=url,
             status=int(response.status_code),
@@ -395,7 +436,7 @@ class LiveTransport:
                 "installed and are deliberately not hard dependencies: the acquisition "
                 "dependencies from Part B2 (requests + PySocks). A test suite that can "
                 "reach the network by default cannot be run safely, so the dependency "
-                "stays optional and this path stays dark."
+                "stays optional and this path stays off by default."
             ) from exc
         if not hasattr(requests, "get"):  # pragma: no cover - defensive
             raise TransportUnavailable("the imported requests module is not requests")

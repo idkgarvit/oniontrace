@@ -362,6 +362,24 @@ class FarmConfig:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class TrustClaim:
+    """Ground truth for one published vouch.
+
+    The graph does not read this field; it parses the page. The field exists so a
+    reviewer can diff what was planted against what the extractor found.
+    """
+
+    source_service: str
+    target_service: str
+    source_handle: str
+    target_handle: str
+    path: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 @dataclass
 class FarmTruth:
     """The complete ground-truth manifest the evaluation harness consumes."""
@@ -373,6 +391,7 @@ class FarmTruth:
     flaws: list[Flaw] = field(default_factory=list)
     hard_negatives: list[HardNegative] = field(default_factory=list)
     abstention_cases: list[AbstentionCase] = field(default_factory=list)
+    trust_claims: list[TrustClaim] = field(default_factory=list)
 
     # ---------------- derived views used by the harness ---------------- #
 
@@ -533,6 +552,7 @@ class FarmTruth:
             "flaws": [f.to_dict() for f in self.flaws],
             "hard_negatives": [h.to_dict() for h in self.hard_negatives],
             "abstention_cases": [a.to_dict() for a in self.abstention_cases],
+            "trust_claims": [t.to_dict() for t in self.trust_claims],
         }
 
     def to_json(self, include_text: bool = True, indent: int = 2) -> str:

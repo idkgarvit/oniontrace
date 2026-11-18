@@ -149,7 +149,7 @@ def test_gates_prints_the_guards_and_what_they_do_not_prove(capsys):
     out = capsys.readouterr().out
 
     assert "authorised_mode must be True" in out
-    assert "never been executed against" in out
+    assert "controlled eight-service" in out
 
 
 # --------------------------------------------------------------------------- #
