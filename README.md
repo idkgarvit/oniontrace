@@ -31,11 +31,13 @@ personas is reported as **synthetic persona retrieval** and must be labelled tha
 in the report. Claims about authorship over real human text require a licensed,
 author-labelled human corpus and are listed as future work in the plan.
 
-Nothing in this package touches a live target. The farm is self-contained: it generates
-service descriptions, served fixtures, corpora, and ground truth on disk. There is no
-crawler in `farm/`, and no part of this repository reaches a network by default — the
-acquisition package below runs against those same generated fixtures unless a human passes
-`--live` **and** `--authorised-mode`, and no test does.
+Nothing in this package touches a third party's live target. The farm is self-contained: it
+generates service descriptions, served fixtures, corpora, and ground truth on disk. There is no
+crawler in `farm/`, and no part of this repository reaches a network by default — the acquisition
+package below runs against those same generated fixtures unless a human passes `--live` **and**
+`--authorised-mode`, and no test does. The one deliberate exception is the controlled live lab,
+which publishes eight onion services of this project's own and fetches them over real Tor to prove
+the transport path; its publisher and keys are disposable, and it measures no third party.
 
 ## Quick start
 
@@ -248,6 +250,9 @@ fixtures would be decoration.
 | M2 correlation link precision — naive → filtered | **0.207 → 1.000** (false-merge 0.793 → 0.000) |
 | M2 correlation at the frozen threshold | link precision **0.571** — thresholding alone does *not* fix it |
 | M3 entity precision — exact → placeholder-blocklisted | **0.571 → 1.000** (decoy false merges 6/6 → 0/6) |
+| M3 identifiers — PGP + wallets | 16 + 16 observations, every one checksum-valid |
+| M3 trust edges | **12/12** planted vouches recovered; 12 are separate `trust` edges and none justifies a merge |
+| Label-free corroboration | class strength keeps **12/12** farm links; blunt two-class rule keeps **6/12**; one soft class refused |
 | M5 style drift — paired within-persona | content **16/16 → 0/16**; function words **11/16 → 13/16** (McNemar p=3.1e-05 vs 0.50); four stable personas are the placebo |
 | E4 provenance | 88 entries verified; a planted mutation detected, then restored clean |
 | Retrieval abstention | **0/4 → 4/4** correct abstentions once the frozen threshold is applied |
@@ -340,10 +345,12 @@ that claim.
 **What is verified, and what is not.** Every acquisition test runs against
 `FixtureTransport`: in-memory pages generated from the farm's seed, no sockets, and a clock
 the tests move by hand. So the parsers pass against markup *written to resemble* the real
-sites — not captured traffic — and the byte-fetching code in `collect/live.py` has never been
-executed against a network, because this environment has no Tor circuit. The guards are
-tested; the fetcher is not. `python -m collect gates` prints the same sentence, so a demo
-cannot quietly upgrade one into the other.
+sites — not captured traffic. The byte-fetching code in `collect/live.py` is exercised two
+ways: the guards by unit tests, and the fetch path by a controlled live lab this project
+publishes itself. The eight-service lab described below collected **112 of 112 responses**
+through real Tor on 2026-11-17. What remains unmeasured is accuracy on other people's onion
+services, not whether the transport works. `python -m collect gates` states the same
+distinction, so a demo cannot quietly upgrade one into the other.
 
 Two more refusals worth naming. `--live` alone changes nothing: the transport wants
 `--authorised-mode`, then a SOCKS host before it will touch an `.onion` name, then its
@@ -574,6 +581,42 @@ an address this project published and then took down. The stored snapshot contai
 run served and nothing else was claimed from it. Case data is never committed, by rule, so that
 directory exists on the machine that ran the check and the way to see it elsewhere is to run
 the check again.
+
+#### The eight-service lab, and what it adds
+
+One page proves a round trip. It does not exercise fourteen routes per service, nineteen
+detectors, or the correlator. `eval/live_lab.py` builds a fixed bed of eight services: two
+clusters of three sharing a favicon, an analytics ID and a contact handle, plus two
+singletons, with all nineteen rules planted exactly once, five clean controls, and a stock
+vendor analytics value shared by four services as a correlation trap.
+
+```bash
+python3 scripts/run_live_lab.py            # explains the run; publishes nothing
+python3 scripts/run_live_lab.py --publish  # publishes eight, collects, scores, tears down
+```
+
+The publisher is one disposable Tor with eight `HiddenServiceDir` blocks. The collector is a
+**second, keyless** Tor, so the analyst process never holds the service keys. Every address is
+warmed to two consecutive `200`s before the case opens, then collected inside the no-network
+jail with the fixed thirteen-path probe list, and the WARC is scored against truth written
+before publication.
+
+The clean run is `CASE-LAB-LIVE-5` (2026-11-17, fingerprint `aa73822ae80a7f1f`): **112 of 112
+responses** stored, `errors=0`, `out-of-scope=0`, 304 seconds.
+
+| Check | Live result |
+| --- | --- |
+| careful rules | 19 TP, 0 FP, 0 FN |
+| naive rules | 17 TP, 59 FP, 2 FN (precision 22.4%) |
+| planted-path accuracy | 19/19 |
+| filtered correlation | 6 links, 6 TP, 0 FP (100.0%) |
+| naive correlation | 11 links, 6 TP, 5 FP (54.5%) |
+| singleton abstention | 2/2 filtered, 0/2 naive |
+
+The naive false-positive count is larger than the farm's because this bed serves fourteen paths
+per service and the naive rules fire on clean paths; compare within the bed, not across it.
+The scope limit is the same as everywhere else in this README: the services and the flaws are
+ours, so this measures the live path, not accuracy on third-party onion services.
 
 ### Certificate transparency at the source
 
@@ -914,7 +957,8 @@ collect/
   ctlog.py       certificate transparency: onion/clearnet associations, and their caveat
   telegram.py    public previews: backward history walks, message ledger, cursor safety
   transport.py   the fetch protocol, plus the fixture transport every test runs against
-  live.py        the live transport: off by default, gated five ways, unverified
+  live.py        the live transport: off by default, gated five ways, exercised by the
+                 controlled eight-service lab over real Tor
   schedule.py    host delays, run budgets, revisit backoff, the sleeper
   checkpoints.py resume cursors and the proposal queue, both inside the case directory
   warc.py        WARC 1.0 records for the raw exchanges, referenced from snapshots
@@ -937,18 +981,19 @@ oniontrace/
   cli.py         `run`, `show` and `env`; exit code 1 when any stage failed or the preflight failed
 tests/
   test_pipeline.py 13 tests; pins stage failure recording, reproducibility, per-case run dirs
-  test_graph.py  28 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
-  test_dashboard.py 26 tests; pins route refusals, traversal rejection, evidence-pack limits,
-                   injection through collected values, and the origin/CSP boundary
+  test_graph.py  38 tests; each pins a refusal (merge, reversal, vendor default, contradiction)
+  test_dashboard.py 54 tests; pins route refusals, traversal rejection, evidence-pack limits,
+                   injection through collected values, case creation from the browser,
+                   the timeline filter, CSV escaping, and the origin/CSP boundary
   test_demo_accuracy.py 6 tests; scores the built demo case against the farm it came from --
                   per-link precision and recall, hard negatives, singletons, findings
-  test_farm.py   65 tests; each locks in a property a reported metric depends on
+  test_farm.py   73 tests; each locks in a property a reported metric depends on
   test_eval.py   69 tests; each pins what a number in the report is allowed to mean
   test_gates.py 105 tests; each asserts a refusal, or that the refusal is on the record
   test_docs.py    8 tests; README counts, layout paths and documented commands vs reality
   test_deck.py    7 tests; the deck carries notes on every slide, stays 16:9, keeps its
                   figures above 200 dpi, and refuses to build without diagrams or capture
-  test_collect.py 81 tests; each asserts what a run stores, skips, proposes or refuses
+  test_collect.py 85 tests; each asserts what a run stores, skips, proposes or refuses
   test_collect_cli.py 16 tests; each asserts what the operator-facing path will not do
   test_environment.py 26 tests; each pins one check, one refusal, or that the shipped
                   launcher really isolates -- two of them start a real bwrap jail
@@ -956,6 +1001,8 @@ tests/
                   interpret -- including the two real files that started this
   test_onionlocation.py 14 tests; the two published forms, and every malformed value a
                   hostile page could put in either of them
+  test_live_lab.py 30 tests; the lab is deterministic, every rule has one planted
+                  positive, and the live path is scored against truth fixed first
   test_ctlog_direct.py 13 tests; each builds its own key and bytes, so a tree head
                   either verifies offline or it does not -- none of them opens a socket
   test_full_check.py 28 tests; the harness contract -- exit 0 without a verdict is
@@ -1134,9 +1181,9 @@ Implemented:
   certificate transparency, Telegram previews) behind signed permits, one run-wide budget,
   resumable cursors that advance only after an ingest, a seed-proposal queue an analyst
   decides on, WARC records for the raw exchanges, and an operator CLI with no default
-  transport. Fixture-verified: every test runs against in-memory pages, and the live
-  transport is dark. 97-test suite across `tests/test_collect.py` and
-  `tests/test_collect_cli.py`.
+  transport. Fixture-verified invariants plus a controlled eight-service live lab over Tor
+  (112 of 112 responses, `CASE-LAB-LIVE-5`). 85-test suite in `tests/test_collect.py`, 16 in
+  `tests/test_collect_cli.py`, and 30 offline lab tests in `tests/test_live_lab.py`.
 - **Evaluation harness** (Part G item 4) — by-cluster splits, threshold freezing with a
   safe-abstain fallback, six modules scored (M1 collection integrity on the fixture seam,
   M2 rules, M2 correlation, M3 entity resolution, M5 attribution, E4 provenance),
@@ -1147,7 +1194,7 @@ Implemented:
   hash-chained audit, role-based access with case scoping, identity-assertion lint,
   watermarked exports, acceptable-use acknowledgement, CLI with a refusal demo,
   105-test suite (nine of them pinning audit-trail truncation and damage reporting).
-  **284 tests pass in total.** (695 today, after `graph/`, `dashboard/`, the code-mix
+  **284 tests pass in total.** (838 today, after `graph/`, `dashboard/`, the code-mix
   block, the end-to-end pipeline and the deck build landed.)
 
 Not yet implemented: **M4** blockchain attribution (stretch, explicitly out of scope) and
@@ -1213,9 +1260,33 @@ exactly. Vendor defaults and published placeholders are excluded from every link
 reported separately as *cohorts*, so an absent link is explainable rather than mysterious.
 
 Measured against the shipped farm, the graph proposes **12 links that recover all 12 true
-cluster pairs with no false positive** (precision 1.000, recall 1.000). Six of those score
-above the candidate threshold and six fall below it; the six below are still shown, labelled
+cluster pairs with no false positive** (precision 1.000, recall 1.000). Ten of those score
+above the candidate threshold and two fall below it; the two below are still shown, labelled
 `possible`, with their scores visible.
+
+**Identifiers and relationships are separate claims.** PGP fingerprints and wallet addresses
+are parsed from the served pages, not copied from the farm manifest, and a value is recorded
+only if its format validates: grouped hex or a labelled/armoured fingerprint for PGP, and the
+chain checksum for Bitcoin (Base58Check or Bech32/Bech32m), Monero (Keccak-256) and Ethereum
+(EIP-55). A 40-hex favicon digest is not a fingerprint, because the extractor requires context.
+Multiple keys or wallets per service are kept, since collapsing to the first would hide the
+link the extractor exists to find.
+
+A vouch is stored as a `trust` edge with score `0.0`, next to any identity edge on the same
+pair. `merge()` refuses a trust edge outright: knowing two operators vouch for each other is
+not knowing they are the same operator. Negated vouches ("we do not vouch for ...") are
+ignored, and every clustered service on the farm carries one as a hard negative. Entities
+also carry `category`, `last_scan` and `source`, shown on the entity card and exported in the
+CSV, so freshness and provenance do not require opening SQLite.
+
+**Validation without labels.** `eval/labelfree.py` measures what can be measured when nobody
+publishes a `cluster_id`: operator declarations as ground truth, recurrence across crawls,
+audit sampling with a Wilson interval, and corroboration by artefact class. A hard class (SSH
+host key, TLS key, application bundle) is sufficient evidence on its own; two independent soft
+classes are required otherwise. On the farm that keeps 12/12 true links, where a blunt
+two-class rule keeps 6/12. `eval/realdata.py` turns advertisements, certificate associations
+and mirror lists into declarations and scores the correlator against them; it is tested end to
+end but has not been run against a third-party crawl, so no field precision number is claimed.
 
 **`dashboard/` — M6-lite console.** FastAPI, bound to `127.0.0.1` with the host not
 configurable, serving one case at a time: entity graph, per-link evidence including
@@ -1226,8 +1297,28 @@ single-analyst tool, not an oversight.
 
 ```bash
 python -m graph --db ./casework/CASE-1/graph.db --case CASE-1 build --farm ./out/farm.json
-python -m dashboard        # http://127.0.0.1:8420
+./run/oniontrace-gui       # the console in a Chromium app window, service stopped on close
+python -m dashboard        # or: http://127.0.0.1:8420
 ```
+
+### Running a case from the browser
+
+The console is the operated interface, not a viewer bolted onto a command-line tool. From an
+empty index a person can build a case, read it, annotate it, decide on links, and export it
+without opening a terminal:
+
+| Route | What it does |
+|---|---|
+| `/new` | Runs the same `run_pipeline` entry point as the CLI, so the gate, permit and audit are unchanged. Refusals (missing owner, missing authorisation, duplicate id, mistyped seed, retention out of range) come back as sentences in the form, never as a JSON body rendered as the page. |
+| `/case/{id}/timeline` | Artefacts, findings, links and notes on one axis, filterable by day. Artefacts carry `observed_at`; the other records carry when they were written, and the page says which clock each row is on. |
+| `/case/{id}/report` | The stage manifest as a table and the generated `REPORT.md`, with `manifest.json` and `REPORT.md` downloadable. The console used to show the result of a run but not the run. |
+| `/case/{id}/export.csv` | The whole case as one table, next to the JSON API and the evidence PDF. |
+
+The CSV route is the one with a security decision in it. Every string in a case was read off an
+onion service, so a cell beginning `=`, `+`, `-` or `@` is a formula to Excel and to most
+importers. The export prefixes such a cell with an apostrophe, and a test posts a note beginning
+`=HYPERLINK(...)` and asserts it arrives inert. A tool that exports text written by the people it
+investigates has to assume the spreadsheet is the next place it will be opened.
 
 ### A note on what none of this claims
 
@@ -1249,6 +1340,9 @@ python3 scripts/full_check.py --live --html out/full-check.html   # page that fi
 Ten stages in order: the test suite, the paper verifier, the diagrams, the deck, the pipeline
 end to end, the base-rate sensitivity check, the certificate-transparency ground truth, the
 gates' refusals, the execution environment, and certificate transparency against real logs.
+*The manuscript is not distributed with this repository.* `paper/` is a local artefact, so the
+paper stage runs only on a machine that has that build; the project code, tests and data drop
+stand on their own.
 (The count is checked against the report by `tests/test_docs.py`, so this list and the run
 have to agree.) Exit code is 0 only when every stage passed, and a stage whose precondition is
 absent reports SKIP rather than PASS, because an unrun check that reports success is the
@@ -1385,13 +1479,15 @@ nobody has labelled.
 
 ## Rebuilding the deck
 
-The deck is twelve slides, one idea each, built around a drawn figure rather than a block of
-text. Three scripts produce it, and each one refuses to guess:
+The deck is thirteen slides, one idea each, built around a drawn figure rather than a block of
+text. The console slide now shows a case created through the browser form, and a Module 3 slide
+covers checksum-validated identifiers, trust edges and the label-free corroboration rule. Three
+scripts produce it, and each one refuses to guess:
 
 ```bash
 python scripts/build_diagrams.py                          # five diagrams -> out/fig/*.png
 python -m dashboard &                                     # the console slide needs it
-python scripts/capture_dashboard.py --selector .graph-panel --width 900 --height 1200
+python scripts/capture_dashboard.py --case CASE-DECK --selector '#graph' --width 1500 --height 1400
 python scripts/build_presentation.py --out deck.pptx      # assemble and audit the text
 python scripts/verify_deck.py deck.pptx                   # bounds and text fit
 python scripts/analyse_slides.py out/preview/slides     # measure the rendered pixels
