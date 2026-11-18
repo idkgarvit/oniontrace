@@ -9,6 +9,11 @@ out/*
 # Gate working directory -- case data, audit trail, permits. Never commit casework.
 casework/
 
+# The manuscript and its build are local only. The published repository is the project
+# itself: the paper, its PDF and the demo video are not distributed here. `paper/` is
+# ignored so a local build cannot be added back by accident.
+paper/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software, cite it as below."
+title: "ONIONTRACE"
+abstract: >-
+  A passive-only OSINT pipeline that proposes links between Tor onion services
+  and records how strongly the evidence supports each link. Correlation is
+  measured on a synthetic farm with known operator clusters, flaws, personas,
+  decoys and hard negatives, because no public ground truth for operator
+  identity exists.
+type: software
+authors:
+  - family-names: Kanojia
+    given-names: Garvit
+  - family-names: Chauhan
+    given-names: Niketa
+license: MIT
+version: 0.1.0
+date-released: "2026-11-18"
+repository-code: "https://github.com/idkgarvit/oniontrace"
+keywords:
+  - tor
+  - onion services
+  - osint
+  - correlation
+  - privacy
