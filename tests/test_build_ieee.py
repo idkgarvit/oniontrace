@@ -17,6 +17,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The manuscript is a local artefact: `paper/` is gitignored and does not travel with the
+# repository. Where it is absent these tests skip, so a clone still collects and runs clean.
+HAS_BUILD = (ROOT / "paper" / "build_ieee.py").exists()
+pytestmark = pytest.mark.skipif(
+    not HAS_BUILD,
+    reason="paper/ is a local build and is not distributed with the repository",
+)
+
 
 def _module():
     spec = importlib.util.spec_from_file_location("build_ieee", ROOT / "paper" / "build_ieee.py")
@@ -27,7 +35,7 @@ def _module():
     return module
 
 
-build = _module()
+build = _module() if HAS_BUILD else None
 
 V3 = "wgbn2pibrxhgddhktgq5jdhw77w6t45gz72ho4inlvabpykexyvwe7id.onion"
 

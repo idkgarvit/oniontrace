@@ -14,6 +14,15 @@ paper/
 docs/
 HANDOFF.md
 
+# Title-slide names and IDs are read from this file at build time; the example is what a
+# clone uses to learn the shape, not a licence to publish somebody's identifiers.
+deck_identity.json
+
+# A raw certificate-transparency scrape: 432 third-party onion addresses that the repo does
+# not need to ship. The aggregates beside it are the citable artefacts; this file is a cache
+# the scripts rebuild on demand.
+data/evidence/real_world/_ct_cache.json
+
 # Python
 __pycache__/
 *.py[cod]

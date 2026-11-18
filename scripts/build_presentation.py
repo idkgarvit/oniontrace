@@ -1,6 +1,6 @@
 """Build the presentation.
 
-Twelve slides, one idea each, built around a drawn diagram rather than a block of text. The
+Thirteen slides, one idea each, built around a drawn diagram rather than a block of text. The
 reason is not decoration: a reader looking at a chart has understood the slide before the
 sentence under it finishes, and a reader looking at eight bullets is reading instead of
 listening.
@@ -15,6 +15,7 @@ typed in by hand, so a slide cannot disagree with the file it came from.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -29,6 +30,14 @@ FIG = ROOT / "out" / "fig"
 # The console capture the deck shows. capture_dashboard.py writes exactly this path,
 # so the slide and the script cannot drift apart.
 SCREEN = ROOT / "out" / "screen" / "console.png"
+
+# The title slide carries real names, student IDs and a supervisor only on the author's
+# machine. `deck_identity.json` is gitignored; a clone without it gets neutral placeholders,
+# so the published repository never ships anybody's identifiers.
+IDENTITY_FILE = ROOT / "deck_identity.json"
+IDENTITY = (
+    json.loads(IDENTITY_FILE.read_text(encoding="utf-8")) if IDENTITY_FILE.exists() else {}
+)
 
 BG = RGBColor(0x0E, 0x13, 0x18)
 FG = RGBColor(0xE8, 0xED, 0xF3)
@@ -133,7 +142,7 @@ def notes(slide, text):
 # ------------------------------------------------------------------ slides
 def s_title(prs):
     s = blank(prs)
-    kicker(s, "Capstone project 1  ·  2025CSET703", y=1.55)
+    kicker(s, IDENTITY.get("course", "Capstone project"), y=1.55)
     tf = tb(s, 0.85, 2.0, 11.6, 1.5)
     para(tf, "ONIONTRACE", size=74, color=FG, bold=True, first=True)
 
@@ -145,10 +154,13 @@ def s_title(prs):
     rule(s, 0.85, 5.15, 2.2)
 
     tf3 = tb(s, 0.85, 5.5, 11.6, 1.5)
-    para(tf3, "Garvit Kanojia  ·  S25MCAG0002", size=18, color=FG, first=True, space_after=6)
-    para(tf3, "Niketa Chauhan  ·  S25MCAG0015", size=18, color=FG, space_after=12)
-    para(tf3, "Group 32  ·  Bennett University  ·  Guide: Prof. (Dr.) Ajay Kumar",
-         size=15, color=MUTED)
+    authors = IDENTITY.get("authors") or ["Author One", "Author Two"]
+    for index, author in enumerate(authors):
+        para(tf3, author, size=18, color=FG, first=index == 0,
+             space_after=12 if index == len(authors) - 1 else 6)
+    affiliation = IDENTITY.get("affiliation")
+    if affiliation:
+        para(tf3, affiliation, size=15, color=MUTED)
 
     notes(s, "Open with the question the project answers, not the acronym. Two onion sites "
              "can look completely unrelated and still be run by the same person. We built a "
