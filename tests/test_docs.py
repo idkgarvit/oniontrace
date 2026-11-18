@@ -25,7 +25,7 @@ README = ROOT / "README.md"
 # `python -m pytest -q   # 838 tests` in a fenced block, or the `tests-838 passing` badge.
 _TOTAL_RES = (
     re.compile(r"#\s*(\d+)\s+tests\b"),
-    re.compile(r"tests-(\d+)(?:%20|\s)passing"),
+    re.compile(r"tests-(\d+)(?:%20|\s)(?:passing|collected)"),
 )
 
 

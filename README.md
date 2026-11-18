@@ -2,7 +2,7 @@
   <img src="assets/banner.svg" alt="ONIONTRACE — passive OSINT for Tor onion services" width="100%">
   <br><br>
   <a href="requirements.txt"><img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
-  <a href="tests"><img alt="Tests" src="https://img.shields.io/badge/tests-838%20passing-4FB3A5?style=flat-square"></a>
+  <a href="tests"><img alt="Tests" src="https://img.shields.io/badge/tests-838%20collected-4FB3A5?style=flat-square"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-E0A256?style=flat-square"></a>
   <img alt="Passive only" src="https://img.shields.io/badge/collection-passive-8B9AAB?style=flat-square">
 </div>
