@@ -24,3 +24,4 @@ websockets>=12                 # CDP client: diagram measurement and console QA
 python-pptx>=1.0               # deck build, and the verifier that reads it back
 pillow>=10.0                   # rasterise slides to measure where the text actually lands
 numpy>=1.26                    # slide analysis statistics
+matplotlib>=3.8                # paper figures (paper/make_figures.py)

@@ -132,6 +132,16 @@ python -m pytest -q
 
 The suite covers the farm, collection fixtures, gates, graph, evaluation and the console.
 
+## Contributors
+
+| Author | GitHub |
+|---|---|
+| Garvit Kanojia | [@idkgarvit](https://github.com/idkgarvit) |
+| Niketa Chauhan | [@niketa67](https://github.com/niketa67) |
+
+Both authors designed and tested the pipeline. The research manuscript that reports it is
+not distributed in this repository.
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
