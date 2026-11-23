@@ -5,4 +5,4 @@
 
 Both are authors of the research manuscript that reports this work. The manuscript, its
 LaTeX source and its PDF are kept out of the public repository; see `paper/README.md` for
-the local build.
+the local builds.
